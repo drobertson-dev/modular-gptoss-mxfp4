@@ -24,8 +24,12 @@ from utils.index import Index, IndexList
 fn _make_layout_tensor[
     dtype: DType,
     layout: Layout,
-](ptr: UnsafePointer[Scalar[dtype], MutAnyOrigin]) -> LayoutTensor[dtype, layout, MutAnyOrigin]:
-    alias rt = RuntimeLayout[layout].row_major(IndexList[layout.rank()](layout.shape()))
+](ptr: UnsafePointer[Scalar[dtype], MutAnyOrigin]) -> LayoutTensor[
+    dtype, layout, MutAnyOrigin
+]:
+    alias rt = RuntimeLayout[layout].row_major(
+        IndexList[layout.rank()](layout.shape())
+    )
     return LayoutTensor[dtype, layout, MutAnyOrigin](ptr, rt)
 
 
@@ -36,7 +40,7 @@ def _quantize_weights(
 ):
     alias kernel = MXFP4QuantizeEXQ
     kernel.execute[
-        in_dtype=DType.float32,
+        in_dtype = DType.float32,
         rank=2,
         target="cpu",
     ](q, e, w, DeviceContext())
@@ -58,26 +62,33 @@ fn _reference_matmul(
         for n in range(out_dim):
             var acc: Float32 = 0.0
             for kk in range(k):
-                acc += hidden[t, kk].cast[DType.float32]()[0] * weight[e, n, kk].cast[DType.float32]()[0]
+                acc += (
+                    hidden[t, kk].cast[DType.float32]()[0]
+                    * weight[e, n, kk].cast[DType.float32]()[0]
+                )
             out[t, n] = acc.cast[out.dtype]()
 
 
-fn _build_hidden(tokens: Int, k: Int) -> LayoutTensor[DType.bfloat16, Layout.row_major(2)()]:
+fn _build_hidden(
+    tokens: Int, k: Int
+) -> LayoutTensor[DType.bfloat16, Layout.row_major(2)()]:
     var buf = InlineArray[BFloat16, tokens * k](uninitialized=True)
     for i in range(tokens * k):
         buf[i] = BFloat16(Float32(i % 13) - 6.5)
-    return LayoutTensor[DType.bfloat16, Layout.row_major(tokens, k)()(MutAnyOrigin)](
-        buf.unsafe_ptr()
-    )
+    return LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, k)()(MutAnyOrigin)
+    ](buf.unsafe_ptr())
 
 
-fn _build_assignments(assigns: List[Int32]) -> LayoutTensor[DType.int32, Layout.row_major(2)()]:
+fn _build_assignments(
+    assigns: List[Int32],
+) -> LayoutTensor[DType.int32, Layout.row_major(2)()]:
     var buf = InlineArray[Int32, len(assigns)](uninitialized=True)
     for i in range(len(assigns)):
         buf[i] = assigns[i]
-    return LayoutTensor[DType.int32, Layout.row_major(len(assigns), 1)()(MutAnyOrigin)](
-        buf.unsafe_ptr()
-    )
+    return LayoutTensor[
+        DType.int32, Layout.row_major(len(assigns), 1)()(MutAnyOrigin)
+    ](buf.unsafe_ptr())
 
 
 fn test_mxfp4_grouped_matmul_cpu_matches_reference() raises:
@@ -92,28 +103,180 @@ fn test_mxfp4_grouped_matmul_cpu_matches_reference() raises:
     var w_buf = InlineArray[Float32, experts * out_dim * k](uninitialized=True)
     for i in range(len(w_buf)):
         w_buf[i] = Float32((i % 7) - 3)
-    var w = LayoutTensor[DType.float32, Layout.row_major(experts, out_dim, k)()(MutAnyOrigin)](w_buf.unsafe_ptr())
+    var w = LayoutTensor[
+        DType.float32, Layout.row_major(experts, out_dim, k)()(MutAnyOrigin)
+    ](w_buf.unsafe_ptr())
 
     # Allocate packed Q/E
-    var q_buf = InlineArray[UInt8, experts * out_dim * (k // 2)](uninitialized=True)
-    var e_buf = InlineArray[UInt8, experts * out_dim * (k // 32)](uninitialized=True)
-    var q = LayoutTensor[DType.uint8, Layout.row_major(experts, out_dim, k // 2)()(MutAnyOrigin)](q_buf.unsafe_ptr())
-    var e = LayoutTensor[DType.uint8, Layout.row_major(experts, out_dim, k // 32)()(MutAnyOrigin)](e_buf.unsafe_ptr())
+    var q_buf = InlineArray[UInt8, experts * out_dim * (k // 2)](
+        uninitialized=True
+    )
+    var e_buf = InlineArray[UInt8, experts * out_dim * (k // 32)](
+        uninitialized=True
+    )
+    var q = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 2)()(MutAnyOrigin)
+    ](q_buf.unsafe_ptr())
+    var e = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 32)()(MutAnyOrigin)
+    ](e_buf.unsafe_ptr())
 
     _quantize_weights(w, q, e)
 
     # Assignments: first two tokens -> expert 0, next two -> expert 1
     var assignments = _build_assignments(List[Int32](0, 0, 1, 1))
 
-    var out_mxfp4_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
-    var out_mxfp4 = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_mxfp4_buf.unsafe_ptr())
+    var out_mxfp4_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_mxfp4 = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_mxfp4_buf.unsafe_ptr())
     _mxfp4_grouped_matmul_cpu(hidden, q, e, assignments, out_mxfp4)
 
-    var out_ref_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
-    var out_ref = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_ref_buf.unsafe_ptr())
+    var out_ref_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_ref = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_ref_buf.unsafe_ptr())
     _reference_matmul(hidden, w, assignments, out_ref)
 
     assert_almost_equal(out_mxfp4, out_ref, atol=1e-2, rtol=1e-3)
+
+
+fn test_mxfp4_grouped_matmul_cpu_matches_reference_multi_block_k() raises:
+    # Wider K to exercise more exponent blocks and packing boundaries.
+    alias tokens = 3
+    alias k = 96  # three 32-wide blocks
+    alias out_dim = 6
+    alias experts = 2
+
+    var hidden = _build_hidden(tokens, k)
+
+    var w_buf = InlineArray[Float32, experts * out_dim * k](uninitialized=True)
+    for i in range(len(w_buf)):
+        w_buf[i] = Float32((i % 9) - 4)
+    var w = LayoutTensor[
+        DType.float32, Layout.row_major(experts, out_dim, k)()(MutAnyOrigin)
+    ](w_buf.unsafe_ptr())
+
+    var q_buf = InlineArray[UInt8, experts * out_dim * (k // 2)](
+        uninitialized=True
+    )
+    var e_buf = InlineArray[UInt8, experts * out_dim * (k // 32)](
+        uninitialized=True
+    )
+    var q = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 2)()(MutAnyOrigin)
+    ](q_buf.unsafe_ptr())
+    var e = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 32)()(MutAnyOrigin)
+    ](e_buf.unsafe_ptr())
+
+    _quantize_weights(w, q, e)
+
+    var assignments = _build_assignments(List[Int32](0, 1, 0))
+
+    var out_mxfp4_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_mxfp4 = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_mxfp4_buf.unsafe_ptr())
+    _mxfp4_grouped_matmul_cpu(hidden, q, e, assignments, out_mxfp4)
+
+    var out_ref_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_ref = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_ref_buf.unsafe_ptr())
+    _reference_matmul(hidden, w, assignments, out_ref)
+
+    assert_almost_equal(out_mxfp4, out_ref, atol=1e-2, rtol=1e-3)
+
+
+fn test_mxfp4_quantize_and_matmul_handles_sparse_and_large_values() raises:
+    # Stress quantization with zeros and large magnitudes to exercise exponent edge cases.
+    alias tokens = 2
+    alias k = 32
+    alias out_dim = 4
+    alias experts = 1
+
+    # Hidden mixes small, zero, and moderately large values.
+    var hidden_buf = InlineArray[BFloat16, tokens * k](uninitialized=True)
+    for i in range(tokens * k):
+        var val = Float32(0.0)
+        if i % 7 == 0:
+            val = 0.0
+        elif i % 7 == 1:
+            val = 1e-3
+        elif i % 7 == 2:
+            val = -1e-3
+        elif i % 7 == 3:
+            val = 5.5
+        elif i % 7 == 4:
+            val = -5.5
+        elif i % 7 == 5:
+            val = 0.25
+        else:
+            val = -0.75
+        hidden_buf[i] = BFloat16(val)
+    var hidden = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, k)()(MutAnyOrigin)
+    ](hidden_buf.unsafe_ptr())
+
+    # Weights include zeros and large values to drive exponent selection.
+    var w_buf = InlineArray[Float32, experts * out_dim * k](uninitialized=True)
+    for i in range(len(w_buf)):
+        var val = Float32(0.0)
+        if i % 5 == 0:
+            val = 0.0
+        elif i % 5 == 1:
+            val = 0.125
+        elif i % 5 == 2:
+            val = -0.125
+        elif i % 5 == 3:
+            val = 8.0
+        else:
+            val = -8.0
+        w_buf[i] = val
+    var w = LayoutTensor[
+        DType.float32, Layout.row_major(experts, out_dim, k)()(MutAnyOrigin)
+    ](w_buf.unsafe_ptr())
+
+    var q_buf = InlineArray[UInt8, experts * out_dim * (k // 2)](
+        uninitialized=True
+    )
+    var e_buf = InlineArray[UInt8, experts * out_dim * (k // 32)](
+        uninitialized=True
+    )
+    var q = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 2)()(MutAnyOrigin)
+    ](q_buf.unsafe_ptr())
+    var e = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 32)()(MutAnyOrigin)
+    ](e_buf.unsafe_ptr())
+    _quantize_weights(w, q, e)
+
+    var assignments = _build_assignments(List[Int32](0, 0))
+
+    var out_q_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
+    var out_q = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_q_buf.unsafe_ptr())
+    _mxfp4_grouped_matmul_cpu(hidden, q, e, assignments, out_q)
+
+    var out_ref_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_ref = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_ref_buf.unsafe_ptr())
+    _reference_matmul(hidden, w, assignments, out_ref)
+
+    assert_almost_equal(out_q, out_ref, atol=1e-2, rtol=1e-3)
 
 
 fn test_mxfp4_grouped_matmul_ragged_matches_assignments() raises:
@@ -130,16 +293,28 @@ fn test_mxfp4_grouped_matmul_ragged_matches_assignments() raises:
     var w_buf = InlineArray[Float32, experts * out_dim * k](uninitialized=True)
     for i in range(len(w_buf)):
         w_buf[i] = Float32((i % 5) - 2)
-    var w = LayoutTensor[DType.float32, Layout.row_major(experts, out_dim, k)()(MutAnyOrigin)](w_buf.unsafe_ptr())
+    var w = LayoutTensor[
+        DType.float32, Layout.row_major(experts, out_dim, k)()(MutAnyOrigin)
+    ](w_buf.unsafe_ptr())
 
-    var q_buf = InlineArray[UInt8, experts * out_dim * (k // 2)](uninitialized=True)
-    var e_buf = InlineArray[UInt8, experts * out_dim * (k // 32)](uninitialized=True)
-    var q = LayoutTensor[DType.uint8, Layout.row_major(experts, out_dim, k // 2)()(MutAnyOrigin)](q_buf.unsafe_ptr())
-    var e = LayoutTensor[DType.uint8, Layout.row_major(experts, out_dim, k // 32)()(MutAnyOrigin)](e_buf.unsafe_ptr())
+    var q_buf = InlineArray[UInt8, experts * out_dim * (k // 2)](
+        uninitialized=True
+    )
+    var e_buf = InlineArray[UInt8, experts * out_dim * (k // 32)](
+        uninitialized=True
+    )
+    var q = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 2)()(MutAnyOrigin)
+    ](q_buf.unsafe_ptr())
+    var e = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 32)()(MutAnyOrigin)
+    ](e_buf.unsafe_ptr())
     _quantize_weights(w, q, e)
 
     # Ragged packing: expert 0 gets tokens 0,1; expert 1 gets 2,3; expert 2 gets 4; slot 5 unused (-1)
-    var expert_start = InlineArray[UInt32, num_active_experts + 1](uninitialized=True)
+    var expert_start = InlineArray[UInt32, num_active_experts + 1](
+        uninitialized=True
+    )
     expert_start[0] = 0
     expert_start[1] = 2
     expert_start[2] = 4
@@ -151,18 +326,200 @@ fn test_mxfp4_grouped_matmul_ragged_matches_assignments() raises:
 
     alias start_layout = Layout.row_major(num_active_experts + 1)
     alias id_layout = Layout.row_major(num_active_experts)
-    var start_lt = _make_layout_tensor[DType.uint32, start_layout](expert_start.unsafe_ptr())
-    var ids_lt = _make_layout_tensor[DType.int32, id_layout](expert_ids.unsafe_ptr())
+    var start_lt = _make_layout_tensor[DType.uint32, start_layout](
+        expert_start.unsafe_ptr()
+    )
+    var ids_lt = _make_layout_tensor[DType.int32, id_layout](
+        expert_ids.unsafe_ptr()
+    )
 
     # Reference assignments for comparison
     var assignments = _build_assignments(List[Int32](0, 0, 1, 1, 2, 2))
 
-    var out_direct_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
-    var out_direct = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_direct_buf.unsafe_ptr())
+    var out_direct_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_direct = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_direct_buf.unsafe_ptr())
     _mxfp4_grouped_matmul_cpu(hidden, q, e, assignments, out_direct)
 
-    var out_ragged_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
-    var out_ragged = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_ragged_buf.unsafe_ptr())
+    var out_ragged_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_ragged = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_ragged_buf.unsafe_ptr())
+
+    var ctx = DeviceContext()
+    _mxfp4_grouped_matmul_ragged_gpu(
+        ctx,
+        hidden,
+        q,
+        e,
+        start_lt,
+        ids_lt,
+        max_tokens_per_expert,
+        num_active_experts,
+        out_ragged,
+    )
+
+    assert_almost_equal(out_ragged, out_direct, atol=1e-2, rtol=1e-3)
+
+
+fn test_mxfp4_grouped_matmul_ragged_handles_multi_tile_outputs() raises:
+    # Covers out_dim > BLOCK_OUT (32) so multiple tiles are written; catches
+    # overlap bugs in the GPU kernel.
+    alias tokens = 3
+    alias k = 64
+    alias out_dim = 40  # spans across two 32-wide tiles
+    alias experts = 1
+    alias max_tokens_per_expert = tokens
+    alias num_active_experts = 1
+
+    var hidden = _build_hidden(tokens, k)
+
+    # Distinct weights to avoid accidental symmetry across tiles
+    var w_buf = InlineArray[Float32, experts * out_dim * k](uninitialized=True)
+    for i in range(len(w_buf)):
+        w_buf[i] = Float32((i % 11) - 5)
+    var w = LayoutTensor[
+        DType.float32, Layout.row_major(experts, out_dim, k)()(MutAnyOrigin)
+    ](w_buf.unsafe_ptr())
+
+    var q_buf = InlineArray[UInt8, experts * out_dim * (k // 2)](
+        uninitialized=True
+    )
+    var e_buf = InlineArray[UInt8, experts * out_dim * (k // 32)](
+        uninitialized=True
+    )
+    var q = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 2)()(MutAnyOrigin)
+    ](q_buf.unsafe_ptr())
+    var e = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 32)()(MutAnyOrigin)
+    ](e_buf.unsafe_ptr())
+    _quantize_weights(w, q, e)
+
+    # All tokens mapped to the single expert
+    var expert_start = InlineArray[UInt32, num_active_experts + 1](
+        uninitialized=True
+    )
+    expert_start[0] = 0
+    expert_start[1] = tokens
+    var expert_ids = InlineArray[Int32, num_active_experts](uninitialized=True)
+    expert_ids[0] = 0
+
+    alias start_layout = Layout.row_major(num_active_experts + 1)
+    alias id_layout = Layout.row_major(num_active_experts)
+    var start_lt = _make_layout_tensor[DType.uint32, start_layout](
+        expert_start.unsafe_ptr()
+    )
+    var ids_lt = _make_layout_tensor[DType.int32, id_layout](
+        expert_ids.unsafe_ptr()
+    )
+
+    var assignments = _build_assignments(List[Int32](0, 0, 0))
+
+    var out_direct_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_direct = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_direct_buf.unsafe_ptr())
+    _mxfp4_grouped_matmul_cpu(hidden, q, e, assignments, out_direct)
+
+    var out_ragged_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_ragged = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_ragged_buf.unsafe_ptr())
+
+    var ctx = DeviceContext()
+    _mxfp4_grouped_matmul_ragged_gpu(
+        ctx,
+        hidden,
+        q,
+        e,
+        start_lt,
+        ids_lt,
+        max_tokens_per_expert,
+        num_active_experts,
+        out_ragged,
+    )
+
+    assert_almost_equal(out_ragged, out_direct, atol=1e-2, rtol=1e-3)
+
+
+fn test_mxfp4_grouped_matmul_ragged_handles_long_k_multiple_blocks() raises:
+    # Exercises ragged GPU path when K spans three 32-wide blocks.
+    alias tokens = 4
+    alias k = 96
+    alias out_dim = 10
+    alias experts = 2
+    alias max_tokens_per_expert = 3
+    alias num_active_experts = 2
+
+    var hidden = _build_hidden(tokens, k)
+
+    var w_buf = InlineArray[Float32, experts * out_dim * k](uninitialized=True)
+    for i in range(len(w_buf)):
+        w_buf[i] = Float32((i % 13) - 6)
+    var w = LayoutTensor[
+        DType.float32, Layout.row_major(experts, out_dim, k)()(MutAnyOrigin)
+    ](w_buf.unsafe_ptr())
+
+    var q_buf = InlineArray[UInt8, experts * out_dim * (k // 2)](
+        uninitialized=True
+    )
+    var e_buf = InlineArray[UInt8, experts * out_dim * (k // 32)](
+        uninitialized=True
+    )
+    var q = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 2)()(MutAnyOrigin)
+    ](q_buf.unsafe_ptr())
+    var e = LayoutTensor[
+        DType.uint8, Layout.row_major(experts, out_dim, k // 32)()(MutAnyOrigin)
+    ](e_buf.unsafe_ptr())
+    _quantize_weights(w, q, e)
+
+    # expert 0 gets tokens 0,1; expert 1 gets 2,3
+    var expert_start = InlineArray[UInt32, num_active_experts + 1](
+        uninitialized=True
+    )
+    expert_start[0] = 0
+    expert_start[1] = 2
+    expert_start[2] = 4
+    var expert_ids = InlineArray[Int32, num_active_experts](uninitialized=True)
+    expert_ids[0] = 0
+    expert_ids[1] = 1
+
+    alias start_layout = Layout.row_major(num_active_experts + 1)
+    alias id_layout = Layout.row_major(num_active_experts)
+    var start_lt = _make_layout_tensor[DType.uint32, start_layout](
+        expert_start.unsafe_ptr()
+    )
+    var ids_lt = _make_layout_tensor[DType.int32, id_layout](
+        expert_ids.unsafe_ptr()
+    )
+
+    var assignments = _build_assignments(List[Int32](0, 0, 1, 1))
+
+    var out_direct_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_direct = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_direct_buf.unsafe_ptr())
+    _mxfp4_grouped_matmul_cpu(hidden, q, e, assignments, out_direct)
+
+    var out_ragged_buf = InlineArray[BFloat16, tokens * out_dim](
+        uninitialized=True
+    )
+    var out_ragged = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_ragged_buf.unsafe_ptr())
 
     var ctx = DeviceContext()
     _mxfp4_grouped_matmul_ragged_gpu(
@@ -188,11 +545,17 @@ fn test_mxfp4_grouped_matmul_raises_on_bad_width() raises:
     var hidden = _build_hidden(tokens, k)
     var q_buf = InlineArray[UInt8, out_dim * (k // 2 + 1)](uninitialized=True)
     var e_buf = InlineArray[UInt8, out_dim * (k // 32 + 1)](uninitialized=True)
-    var q = LayoutTensor[DType.uint8, Layout.row_major(1, out_dim, k // 2 + 1)()(MutAnyOrigin)](q_buf.unsafe_ptr())
-    var e = LayoutTensor[DType.uint8, Layout.row_major(1, out_dim, k // 32 + 1)()(MutAnyOrigin)](e_buf.unsafe_ptr())
+    var q = LayoutTensor[
+        DType.uint8, Layout.row_major(1, out_dim, k // 2 + 1)()(MutAnyOrigin)
+    ](q_buf.unsafe_ptr())
+    var e = LayoutTensor[
+        DType.uint8, Layout.row_major(1, out_dim, k // 32 + 1)()(MutAnyOrigin)
+    ](e_buf.unsafe_ptr())
     var assignments = _build_assignments(List[Int32](0))
     var out_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
-    var out = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_buf.unsafe_ptr())
+    var out = LayoutTensor[
+        DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)
+    ](out_buf.unsafe_ptr())
 
     var raised: Bool = False
     try:

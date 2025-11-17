@@ -1934,7 +1934,10 @@ def mxfp4_grouped_matmul_ragged(
             f"got hidden dim {hidden_states.shape[1]} and q {q_weight.shape}"
         )
 
-    if q_weight.shape[0] != e_weight.shape[0] or q_weight.shape[1] != e_weight.shape[1]:
+    if (
+        q_weight.shape[0] != e_weight.shape[0]
+        or q_weight.shape[1] != e_weight.shape[1]
+    ):
         raise ValueError(
             "q_weight and e_weight must share expert/out dims; "
             f"got {q_weight.shape} vs {e_weight.shape}"

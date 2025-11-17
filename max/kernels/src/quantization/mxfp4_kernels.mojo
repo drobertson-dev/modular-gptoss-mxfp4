@@ -36,9 +36,11 @@ alias MXFP4_LUT = SIMD[DType.float32, 16,](
     -6.0,
 )
 
+
 @always_inline
 fn ceil_div(a: Int, b: Int) -> Int:
     return (a + b - 1) // b
+
 
 @always_inline
 fn fp32_to_e8m0_from_block_max(max_val: Float32) -> UInt8:
@@ -56,11 +58,13 @@ fn fp32_to_e8m0_from_block_max(max_val: Float32) -> UInt8:
         return 254
     return UInt8(e_est)
 
+
 @always_inline
 fn e8m0_to_fp32(e: UInt8) -> Float32:
     if e == 0:
         return 0.0
     return ldexp(Float32(1.0), Int(e) - 127)
+
 
 @always_inline
 fn encode_mxfp4(val: Float32, d: Float32) -> UInt8:
@@ -88,6 +92,7 @@ fn encode_mxfp4(val: Float32, d: Float32) -> UInt8:
         k = 7
     return sign | k
 
+
 @always_inline
 fn decode_byte_pair(byte_val: UInt8, scale: Float32) -> SIMD[DType.float32, 2]:
     var lo = byte_val & 0x0F
@@ -95,6 +100,7 @@ fn decode_byte_pair(byte_val: UInt8, scale: Float32) -> SIMD[DType.float32, 2]:
     return SIMD[DType.float32, 2](
         MXFP4_LUT[Int(lo)] * scale, MXFP4_LUT[Int(hi)] * scale
     )
+
 
 fn _mxfp4_quantize_cpu(
     X: LayoutTensor, mut Q: LayoutTensor, mut E: LayoutTensor
@@ -126,6 +132,7 @@ fn _mxfp4_quantize_cpu(
                 var packed: UInt8 = (UInt8(i1) << 4) | (i0 & 0x0F)
                 Q[r, q_base + j] = packed.cast[Q.dtype]()
 
+
 @compiler.register("modular_ops::mxfp4_quantize_exq")
 struct MXFP4QuantizeEXQ:
     @staticmethod
@@ -138,15 +145,19 @@ struct MXFP4QuantizeEXQ:
         ctx: DeviceContextPtr,
     ) raises:
         constrained[rank == 2, "rank must be 2"]()
-        constrained[in_dtype == DType.float32, "quantize expects float32 input"]()
+        constrained[
+            in_dtype == DType.float32, "quantize expects float32 input"
+        ]()
         var X = x.to_layout_tensor()
         var Q = out_q.to_layout_tensor()
         var E = out_e.to_layout_tensor()
+
         @parameter
         if target == "cpu":
             _mxfp4_quantize_cpu(X, Q, E)
         else:
             raise Error("mxfp4_quantize: GPU target not implemented")
+
 
 fn _mxfp4_grouped_matmul_cpu(
     hidden: LayoutTensor,
@@ -200,6 +211,7 @@ fn _mxfp4_grouped_matmul_cpu(
                     acc += pair[0] * x0 + pair[1] * x1
             Y[t, m] = acc.cast[Y.dtype]()
 
+
 # GPU kernel with flat indexing into LayoutTensors.
 fn _mxfp4_grouped_matmul_kernel[
     y_layout: Layout,
@@ -213,7 +225,9 @@ fn _mxfp4_grouped_matmul_kernel[
     hidden: LayoutTensor[TILE_DTYPE, hidden_layout, MutAnyOrigin],
     Q: LayoutTensor[DType.uint8, q_layout, MutAnyOrigin],
     E: LayoutTensor[DType.uint8, e_layout, MutAnyOrigin],
-    expert_start_indices: LayoutTensor[DType.uint32, start_layout, MutAnyOrigin],
+    expert_start_indices: LayoutTensor[
+        DType.uint32, start_layout, MutAnyOrigin
+    ],
     expert_ids: LayoutTensor[DType.int32, ids_layout, MutAnyOrigin],
     max_tokens_per_expert: Int,
 ):
@@ -245,21 +259,32 @@ fn _mxfp4_grouped_matmul_kernel[
     var hidden_stride = Int(hidden.shape[1]())
     var y_stride = Int(Y.shape[1]())
 
-    var out_idx = Int(block_idx.y) * BLOCK_OUT + Int(thread_idx.y)
-    while out_idx < y_stride:
+    # Keep writes inside the current BLOCK_OUT tile so adjacent blocks don't overlap.
+    var block_base = Int(block_idx.y) * BLOCK_OUT
+    var out_idx = block_base + Int(thread_idx.y)
+    while out_idx < y_stride and out_idx < block_base + BLOCK_OUT:
         var acc: Float32 = 0.0
 
         var block = 0
         while block < num_blocks:
             # flat index into E: [expert_idx, out_idx, block]
-            var e_idx = expert_idx * e_expert_stride + out_idx * e_blocks + block
-            var scale: Float32 = e8m0_to_fp32(E.ptr[e_idx].cast[DType.uint8]()[0])
+            var e_idx = (
+                expert_idx * e_expert_stride + out_idx * e_blocks + block
+            )
+            var scale: Float32 = e8m0_to_fp32(
+                E.ptr[e_idx].cast[DType.uint8]()[0]
+            )
 
             var q_base = block * entries_per_block
             var hidden_base = block * QK_MXFP4
             var j = 0
             while j < entries_per_block:
-                var q_idx = expert_idx * q_expert_stride + out_idx * q_blocks + q_base + j
+                var q_idx = (
+                    expert_idx * q_expert_stride
+                    + out_idx * q_blocks
+                    + q_base
+                    + j
+                )
                 var byte0: UInt8 = Q.ptr[q_idx].cast[DType.uint8]()[0]
                 var idx0 = hidden_base + j
                 var idx1 = idx0 + entries_per_block
@@ -276,6 +301,7 @@ fn _mxfp4_grouped_matmul_kernel[
         var y_idx = token_idx * y_stride + out_idx
         Y.ptr[y_idx] = acc.cast[Y.dtype]()
         out_idx += Int(block_dim.y)
+
 
 fn _mxfp4_grouped_matmul_gpu(
     ctx: DeviceContext,
@@ -319,6 +345,7 @@ fn _mxfp4_grouped_matmul_gpu(
         block_dim=(THREADS_TOKENS, THREADS_OUT, 1),
     )
 
+
 fn _mxfp4_grouped_matmul_ragged_gpu(
     ctx: DeviceContext,
     hidden: LayoutTensor,
@@ -356,6 +383,7 @@ fn _mxfp4_grouped_matmul_ragged_gpu(
         block_dim=(THREADS_TOKENS, THREADS_OUT, 1),
     )
 
+
 @compiler.register("modular_ops::mxfp4_grouped_matmul_exq")
 struct MXFP4GroupedMatMulRaggedEXQ:
     @staticmethod
@@ -379,7 +407,9 @@ struct MXFP4GroupedMatMulRaggedEXQ:
 
         @parameter
         if target == "cpu":
-            raise Error("modular_ops::mxfp4_grouped_matmul_exq only supports GPU")
+            raise Error(
+                "modular_ops::mxfp4_grouped_matmul_exq only supports GPU"
+            )
         else:
             var dev = ctx.get_device_context()
             _mxfp4_grouped_matmul_gpu(

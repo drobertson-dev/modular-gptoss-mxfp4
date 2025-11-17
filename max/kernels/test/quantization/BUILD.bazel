@@ -19,6 +19,20 @@ load("//bazel:api.bzl", "mojo_test")
     )
 ]
 
+# MXFP4 grouped matmul tests are GPU-only; keep them manual to avoid accidental CI runs.
+mojo_test(
+    name = "test_mxfp4_grouped_matmul.mojo.test",
+    srcs = ["test_mxfp4_grouped_matmul.mojo"],
+    tags = [
+        "manual",
+        "skip-external-ci-macos-15",
+    ],
+    deps = [
+        "@mojo//:quantization",
+        "@mojo//:stdlib",
+    ],
+)
+
 # TODO(KERN-1880): Re-enable this.
 mojo_test(
     name = "test_per_channel_grouped_4bit.mojo.test",

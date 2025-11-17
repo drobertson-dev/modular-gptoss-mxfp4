@@ -33,7 +33,6 @@ from max.nn.moe import MoE, MoEGate
 
 from ..model_config import GptOssConfig
 
-
 QK_MXFP4 = 32
 
 
@@ -344,7 +343,9 @@ class GptOssMoE(MoE, Shardable):
                 self._experts_down_proj_q is None
                 or self._experts_down_proj_e is None
             ):
-                raise ValueError("MXFP4 down projection weights are not initialized")
+                raise ValueError(
+                    "MXFP4 down projection weights are not initialized"
+                )
             down_output = mxfp4_grouped_matmul_ragged(
                 gated_output,
                 self._experts_down_proj_q,
