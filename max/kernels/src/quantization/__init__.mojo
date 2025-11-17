@@ -19,3 +19,4 @@ tensors take less memory and computations are faster.
 """
 
 from .per_channel_grouped_4bit import *
+from .mxfp4_kernels import *

@@ -478,10 +478,45 @@ class HuggingFaceRepo:
                                 supported_encodings.add(
                                     SupportedEncoding.float8_e4m3fn
                                 )
+                            elif weight_dtype == "U8":
+                                # Safetensors files that contain packed Q/E blocks
+                                # store uint8; mark MXFP4 as supported.
+                                supported_encodings.add(
+                                    SupportedEncoding.mxfp4
+                                )
                             else:
                                 logger.warning(
                                     f"unknown dtype found in safetensors file: {weight_dtype}"
                                 )
+
+                # Some MXFP4 repos use multiple safetensor shards with uint8
+                # blocks/scales; when metadata is ambiguous, fall back to checking
+                # the index file for *_blocks/_scales keys.
+                if (
+                    SupportedEncoding.mxfp4
+                    not in supported_encodings
+                    and self.repo_type == RepoType.local
+                ):
+                    index_path = os.path.join(
+                        self.repo_id, "model.safetensors.index.json"
+                    )
+                    if os.path.exists(index_path):
+                        try:
+                            with open(index_path, "r") as f:
+                                index_json = json.load(f)
+                            weight_map = index_json.get("weight_map", {})
+                            for key in weight_map.keys():
+                                if key.endswith("_blocks") or key.endswith(
+                                    "_scales"
+                                ):
+                                    supported_encodings.add(
+                                        SupportedEncoding.mxfp4
+                                    )
+                                    break
+                        except Exception as e:  # pragma: no cover - best effort
+                            logger.warning(
+                                f"failed to parse safetensors index for encoding detection: {e}"
+                            )
 
             elif self.repo_type == RepoType.online:
                 safetensors_info = self.info.safetensors
@@ -561,10 +596,12 @@ class HuggingFaceRepo:
     def _get_safetensor_files_for_encoding(
         self, encoding: SupportedEncoding
     ) -> dict[WeightsFormat, list[Path]]:
-        if (
-            WeightsFormat.safetensors in self.weight_files
-            and encoding in self.supported_encodings
-        ):
+        if WeightsFormat.safetensors not in self.weight_files:
+            return {}
+
+        # Heuristic: allow MXFP4 to reuse safetensor files even if the metadata
+        # header doesn't explicitly advertise MXFP4.
+        if encoding == SupportedEncoding.mxfp4 or encoding in self.supported_encodings:
             return {
                 WeightsFormat.safetensors: [
                     Path(f)

@@ -12,7 +12,10 @@ load("//bazel:api.bzl", "mojo_test")
     )
     for src in glob(
         ["**/*.mojo"],
-        exclude = ["test_per_channel_grouped_4bit.mojo"],
+        exclude = [
+            "test_per_channel_grouped_4bit.mojo",
+            "test_mxfp4_grouped_matmul.mojo",
+        ],
     )
 ]
 

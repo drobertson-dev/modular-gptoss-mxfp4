@@ -7,10 +7,9 @@
 
 from math import ceildiv
 
-from buffer import NDBuffer
-from buffer.dimlist import DimList
 from layout import Layout, LayoutTensor, RuntimeLayout
-from memory import InlineArray, LegacyUnsafePointer as UnsafePointer
+from collections import InlineArray
+from memory import LegacyUnsafePointer as UnsafePointer
 from runtime.asyncrt import DeviceContext
 from testing import assert_almost_equal, assert_true
 
@@ -25,10 +24,9 @@ from utils.index import Index, IndexList
 fn _make_layout_tensor[
     dtype: DType,
     layout: Layout,
-    origin: Inferred = MutAnyOrigin,
-](ptr: UnsafePointer[Scalar[dtype], **origin]) -> LayoutTensor[dtype, layout, origin]:
+](ptr: UnsafePointer[Scalar[dtype], MutAnyOrigin]) -> LayoutTensor[dtype, layout, MutAnyOrigin]:
     alias rt = RuntimeLayout[layout].row_major(IndexList[layout.rank()](layout.shape()))
-    return LayoutTensor[dtype, layout, origin](ptr, rt)
+    return LayoutTensor[dtype, layout, MutAnyOrigin](ptr, rt)
 
 
 def _quantize_weights(
@@ -45,10 +43,10 @@ def _quantize_weights(
 
 
 fn _reference_matmul(
-    hidden: LayoutTensor[DType.float32, Layout.row_major(2)()],
+    hidden: LayoutTensor[DType.bfloat16, Layout.row_major(2)()],
     weight: LayoutTensor[DType.float32, Layout.row_major(3)()],
     assignments: LayoutTensor[DType.int32, Layout.row_major(2)()],
-    mut out: LayoutTensor[DType.float32, Layout.row_major(2)()],
+    mut out: LayoutTensor[DType.bfloat16, Layout.row_major(2)()],
 ):
     alias tokens = hidden.shape[0]()
     alias out_dim = out.shape[1]()
@@ -61,14 +59,14 @@ fn _reference_matmul(
             var acc: Float32 = 0.0
             for kk in range(k):
                 acc += hidden[t, kk].cast[DType.float32]()[0] * weight[e, n, kk].cast[DType.float32]()[0]
-            out[t, n] = acc
+            out[t, n] = acc.cast[out.dtype]()
 
 
-fn _build_hidden(tokens: Int, k: Int) -> LayoutTensor[DType.float32, Layout.row_major(2)()]:
-    var buf = InlineArray[Float32, tokens * k](uninitialized=True)
+fn _build_hidden(tokens: Int, k: Int) -> LayoutTensor[DType.bfloat16, Layout.row_major(2)()]:
+    var buf = InlineArray[BFloat16, tokens * k](uninitialized=True)
     for i in range(tokens * k):
-        buf[i] = Float32(i % 13) - 6.5
-    return LayoutTensor[DType.float32, Layout.row_major(tokens, k)()(MutAnyOrigin)](
+        buf[i] = BFloat16(Float32(i % 13) - 6.5)
+    return LayoutTensor[DType.bfloat16, Layout.row_major(tokens, k)()(MutAnyOrigin)](
         buf.unsafe_ptr()
     )
 
@@ -107,12 +105,12 @@ fn test_mxfp4_grouped_matmul_cpu_matches_reference() raises:
     # Assignments: first two tokens -> expert 0, next two -> expert 1
     var assignments = _build_assignments(List[Int32](0, 0, 1, 1))
 
-    var out_mxfp4_buf = InlineArray[Float32, tokens * out_dim](uninitialized=True)
-    var out_mxfp4 = LayoutTensor[DType.float32, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_mxfp4_buf.unsafe_ptr())
+    var out_mxfp4_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
+    var out_mxfp4 = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_mxfp4_buf.unsafe_ptr())
     _mxfp4_grouped_matmul_cpu(hidden, q, e, assignments, out_mxfp4)
 
-    var out_ref_buf = InlineArray[Float32, tokens * out_dim](uninitialized=True)
-    var out_ref = LayoutTensor[DType.float32, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_ref_buf.unsafe_ptr())
+    var out_ref_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
+    var out_ref = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_ref_buf.unsafe_ptr())
     _reference_matmul(hidden, w, assignments, out_ref)
 
     assert_almost_equal(out_mxfp4, out_ref, atol=1e-2, rtol=1e-3)
@@ -159,12 +157,12 @@ fn test_mxfp4_grouped_matmul_ragged_matches_assignments() raises:
     # Reference assignments for comparison
     var assignments = _build_assignments(List[Int32](0, 0, 1, 1, 2, 2))
 
-    var out_direct_buf = InlineArray[Float32, tokens * out_dim](uninitialized=True)
-    var out_direct = LayoutTensor[DType.float32, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_direct_buf.unsafe_ptr())
+    var out_direct_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
+    var out_direct = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_direct_buf.unsafe_ptr())
     _mxfp4_grouped_matmul_cpu(hidden, q, e, assignments, out_direct)
 
-    var out_ragged_buf = InlineArray[Float32, tokens * out_dim](uninitialized=True)
-    var out_ragged = LayoutTensor[DType.float32, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_ragged_buf.unsafe_ptr())
+    var out_ragged_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
+    var out_ragged = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_ragged_buf.unsafe_ptr())
 
     var ctx = DeviceContext()
     _mxfp4_grouped_matmul_ragged_gpu(
@@ -193,8 +191,8 @@ fn test_mxfp4_grouped_matmul_raises_on_bad_width() raises:
     var q = LayoutTensor[DType.uint8, Layout.row_major(1, out_dim, k // 2 + 1)()(MutAnyOrigin)](q_buf.unsafe_ptr())
     var e = LayoutTensor[DType.uint8, Layout.row_major(1, out_dim, k // 32 + 1)()(MutAnyOrigin)](e_buf.unsafe_ptr())
     var assignments = _build_assignments(List[Int32](0))
-    var out_buf = InlineArray[Float32, tokens * out_dim](uninitialized=True)
-    var out = LayoutTensor[DType.float32, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_buf.unsafe_ptr())
+    var out_buf = InlineArray[BFloat16, tokens * out_dim](uninitialized=True)
+    var out = LayoutTensor[DType.bfloat16, Layout.row_major(tokens, out_dim)()(MutAnyOrigin)](out_buf.unsafe_ptr())
 
     var raised: Bool = False
     try:

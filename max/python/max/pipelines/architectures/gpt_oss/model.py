@@ -384,7 +384,12 @@ class GptOssModel(AlwaysSignalBuffersMixin, PipelineModel[TextContext], KVCacheM
             weight_alignment=1,
             strict=self._strict_state_dict_loading and not has_mxfp4_weights,
         )
-        self.state_dict = nn_model.state_dict(auto_initialize=False)
+        # When MXFP4 weights are present, some bf16 weights (e.g., gate_up_proj)
+        # remain intentionally unused. Allow them to zero-initialize to avoid
+        # failing graph building on missing values.
+        self.state_dict = nn_model.state_dict(
+            auto_initialize=has_mxfp4_weights is True
+        )
 
         # Create signal types for distributed communication
         signals = Signals(devices=(DeviceRef(d.label, d.id) for d in self.devices))
