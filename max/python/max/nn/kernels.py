@@ -1898,6 +1898,72 @@ def grouped_matmul_ragged(
     return output
 
 
+def mxfp4_grouped_matmul_ragged(
+    hidden_states: TensorValue,
+    q_weight: TensorValue,
+    e_weight: TensorValue,
+    expert_start_indices: TensorValue,
+    expert_ids: TensorValue,
+    expert_usage_stats_host: TensorValue,
+) -> TensorValue:
+    """MXFP4 grouped matmul with ragged expert packing.
+
+    Args:
+        hidden_states: Packed hidden states [T*k, K] in bf16.
+        q_weight: MXFP4 packed weights [E, N, K/2] (uint8 codes).
+        e_weight: MXFP4 scales [E, N, K/32] (uint8).
+        expert_start_indices: Inclusive start offsets for each active expert.
+        expert_ids: Expert id for each active block (-1 for inactive).
+        expert_usage_stats_host: `[max_tokens_per_expert, num_active_experts]`
+            on host.
+    """
+    if q_weight.rank != 3 or e_weight.rank != 3:
+        raise ValueError(
+            f"expected MXFP4 weights of rank 3 but got "
+            f"{q_weight.rank} and {e_weight.rank}"
+        )
+
+    if hidden_states.rank != 2:
+        raise ValueError(
+            f"expected hidden_states of rank 2 but got {hidden_states.rank}"
+        )
+
+    if q_weight.shape[2] * 2 != hidden_states.shape[1]:
+        raise ValueError(
+            "expected q_weight K dimension (packed/2) to match hidden width; "
+            f"got hidden dim {hidden_states.shape[1]} and q {q_weight.shape}"
+        )
+
+    if q_weight.shape[0] != e_weight.shape[0] or q_weight.shape[1] != e_weight.shape[1]:
+        raise ValueError(
+            "q_weight and e_weight must share expert/out dims; "
+            f"got {q_weight.shape} vs {e_weight.shape}"
+        )
+
+    output = ops.custom(
+        "modular_ops::mxfp4_grouped_matmul_exq",
+        device=hidden_states.device,
+        values=[
+            hidden_states,
+            q_weight,
+            e_weight,
+            expert_start_indices,
+            expert_ids,
+            expert_usage_stats_host[0],
+            expert_usage_stats_host[1],
+        ],
+        out_types=[
+            TensorType(
+                dtype=hidden_states.dtype,
+                shape=[hidden_states.shape[0], q_weight.shape[1]],
+                device=hidden_states.device,
+            ),
+        ],
+    )[0].tensor
+
+    return output
+
+
 def grouped_dynamic_scaled_fp8_matmul(
     hidden_states: TensorValue,
     weight: TensorValue,

@@ -15,18 +15,26 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 from copy import copy
 
 from max.dtype import DType
 from max.graph import DeviceRef, ShardingStrategy, TensorValue, Weight, ops
 from max.nn.clamp import clamp
-from max.nn.kernels import grouped_matmul_ragged, moe_create_indices
+from max.nn.kernels import (
+    grouped_matmul_ragged,
+    moe_create_indices,
+    mxfp4_grouped_matmul_ragged,
+)
 from max.nn.layer import LayerList, Shardable
 from max.nn.linear import Linear
 from max.nn.moe import MoE, MoEGate
 
 from ..model_config import GptOssConfig
+
+
+QK_MXFP4 = 32
 
 
 class GptOssMoEGate(MoEGate):
@@ -119,6 +127,9 @@ class GptOssMoE(MoE, Shardable):
             apply_router_weight_first=False,
         )
 
+        if os.getenv("GPTOSS_ENABLE_MXFP4") == "1":
+            self.enable_mxfp4()
+
     def _init_experts(self) -> None:
         # Instead of creating individual MLP experts, we'll use combined weight tensors
         # This matches how the weights are stored in the checkpoint
@@ -157,6 +168,13 @@ class GptOssMoE(MoE, Shardable):
             device=self.devices[0],
         )
 
+        # MXFP4 weights are optional; initialized when `enable_mxfp4` is called.
+        self._mxfp4_active = False
+        self._experts_gate_up_proj_q: Weight | None = None
+        self._experts_gate_up_proj_e: Weight | None = None
+        self._experts_down_proj_q: Weight | None = None
+        self._experts_down_proj_e: Weight | None = None
+
     @property
     def gate_up_proj(self) -> TensorValue:
         # Return the combined gate_up projection weights, transposed for grouped_matmul_ragged
@@ -178,6 +196,61 @@ class GptOssMoE(MoE, Shardable):
     def down_proj_bias_stacked(self) -> TensorValue:
         # Return the combined down projection biases
         return self._experts_down_proj_bias
+
+    def enable_mxfp4(self) -> None:
+        """Allocate MXFP4 weight buffers and mark the layer active."""
+        if self._mxfp4_active:
+            return
+        self._experts_gate_up_proj_q = Weight(
+            "experts.gate_up_proj.weight.q",
+            shape=[
+                self.num_experts,
+                2 * self.moe_dim,
+                self.hidden_dim // 2,
+            ],
+            dtype=DType.uint8,
+            device=self.devices[0],
+        )
+        self._experts_gate_up_proj_e = Weight(
+            "experts.gate_up_proj.weight.e",
+            shape=[
+                self.num_experts,
+                2 * self.moe_dim,
+                self.hidden_dim // QK_MXFP4,
+            ],
+            dtype=DType.uint8,
+            device=self.devices[0],
+        )
+        self._experts_down_proj_q = Weight(
+            "experts.down_proj.weight.q",
+            shape=[
+                self.num_experts,
+                self.hidden_dim,
+                self.moe_dim // 2,
+            ],
+            dtype=DType.uint8,
+            device=self.devices[0],
+        )
+        self._experts_down_proj_e = Weight(
+            "experts.down_proj.weight.e",
+            shape=[
+                self.num_experts,
+                self.hidden_dim,
+                self.moe_dim // QK_MXFP4,
+            ],
+            dtype=DType.uint8,
+            device=self.devices[0],
+        )
+        self._mxfp4_active = True
+
+    def _has_mxfp4_weights(self) -> bool:
+        return bool(
+            self._mxfp4_active
+            and self._experts_gate_up_proj_q is not None
+            and self._experts_gate_up_proj_e is not None
+            and self._experts_down_proj_q is not None
+            and self._experts_down_proj_e is not None
+        )
 
     def __call__(self, x: TensorValue) -> TensorValue:
         """
@@ -218,14 +291,31 @@ class GptOssMoE(MoE, Shardable):
                 router_weight.reshape([-1, 1]), token_expert_order, axis=0
             ).cast(x.dtype)
 
+        use_mxfp4 = self._has_mxfp4_weights()
+
         # Apply gate_up projection with bias
-        gate_up_output = grouped_matmul_ragged(
-            permutated_states,
-            self.gate_up_proj,
-            expert_start_indices,
-            expert_ids,
-            expert_usage_stats.to(DeviceRef.CPU()),
-        )
+        if use_mxfp4:
+            if (
+                self._experts_gate_up_proj_q is None
+                or self._experts_gate_up_proj_e is None
+            ):
+                raise ValueError("MXFP4 gate-up weights are not initialized")
+            gate_up_output = mxfp4_grouped_matmul_ragged(
+                permutated_states,
+                self._experts_gate_up_proj_q,
+                self._experts_gate_up_proj_e,
+                expert_start_indices,
+                expert_ids,
+                expert_usage_stats.to(DeviceRef.CPU()),
+            )
+        else:
+            gate_up_output = grouped_matmul_ragged(
+                permutated_states,
+                self.gate_up_proj,
+                expert_start_indices,
+                expert_ids,
+                expert_usage_stats.to(DeviceRef.CPU()),
+            )
 
         # Apply bias based on expert assignment
         # We need to gather the bias for each token based on which expert it was routed to
@@ -249,13 +339,28 @@ class GptOssMoE(MoE, Shardable):
         gated_output = (up + 1.0) * glu
 
         # Apply down projection
-        down_output = grouped_matmul_ragged(
-            gated_output,
-            self.down_proj,
-            expert_start_indices,
-            expert_ids,
-            expert_usage_stats.to(DeviceRef.CPU()),
-        )
+        if use_mxfp4:
+            if (
+                self._experts_down_proj_q is None
+                or self._experts_down_proj_e is None
+            ):
+                raise ValueError("MXFP4 down projection weights are not initialized")
+            down_output = mxfp4_grouped_matmul_ragged(
+                gated_output,
+                self._experts_down_proj_q,
+                self._experts_down_proj_e,
+                expert_start_indices,
+                expert_ids,
+                expert_usage_stats.to(DeviceRef.CPU()),
+            )
+        else:
+            down_output = grouped_matmul_ragged(
+                gated_output,
+                self.down_proj,
+                expert_start_indices,
+                expert_ids,
+                expert_usage_stats.to(DeviceRef.CPU()),
+            )
 
         # Apply bias based on expert assignment
         # Use the same expert assignments we calculated earlier
