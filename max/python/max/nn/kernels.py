@@ -1900,6 +1900,78 @@ def grouped_matmul_ragged(
     return output
 
 
+def grouped_mxfp4_matmul(
+    hidden_states: TensorValue,
+    packed_weight: TensorValue,
+    packed_scales: TensorValue,
+    expert_start_indices: TensorValue,
+    expert_ids: TensorValue,
+    expert_usage_stats_host: TensorValue,
+) -> TensorValue:
+    """MXFP4 grouped matmul variant used in quantized MoE layers."""
+
+    if hidden_states.rank != 2:
+        raise ValueError(
+            f"expected hidden_states of rank 2 but got {hidden_states.rank}"
+        )
+
+    if packed_weight.rank != 3 or packed_scales.rank != 3:
+        raise ValueError(
+            "packed weights and scales must be rank-3 tensors "
+            f"(got {packed_weight.rank} and {packed_scales.rank})"
+        )
+
+    if packed_weight.shape[0] != expert_ids.shape[0]:
+        raise ValueError(
+            "packed weight expert dimension must match expert_ids "
+            f"(got {packed_weight.shape[0]} vs {expert_ids.shape[0]})"
+        )
+
+    expected_packed_width = hidden_states.shape[1] // 2
+    if packed_weight.shape[2] != expected_packed_width:
+        raise ValueError(
+            "packed weights must store two FP4 values per byte along the "
+            f"input dimension; expected {expected_packed_width} columns but "
+            f"received {packed_weight.shape[2]}"
+        )
+
+    scale_width = hidden_states.shape[1] // 32
+    if packed_scales.shape[2] != scale_width:
+        raise ValueError(
+            "scales tensor must provide one byte per 32 input values; "
+            f"expected width {scale_width} but received {packed_scales.shape[2]}"
+        )
+
+    if packed_weight.dtype != DType.uint8 or packed_scales.dtype != DType.uint8:
+        raise TypeError(
+            "MXFP4 weights and scales must use uint8 dtype "
+            f"(got {packed_weight.dtype} and {packed_scales.dtype})"
+        )
+
+    output = ops.custom(
+        "mo.moe.mx4.matmul",
+        device=hidden_states.device,
+        values=[
+            hidden_states,
+            packed_weight,
+            packed_scales,
+            expert_start_indices,
+            expert_ids,
+            expert_usage_stats_host[0],
+            expert_usage_stats_host[1],
+        ],
+        out_types=[
+            TensorType(
+                dtype=hidden_states.dtype,
+                shape=[hidden_states.shape[0], packed_weight.shape[1]],
+                device=hidden_states.device,
+            ),
+        ],
+    )[0].tensor
+
+    return output
+
+
 def grouped_dynamic_scaled_fp8_matmul(
     hidden_states: TensorValue,
     weight: TensorValue,
