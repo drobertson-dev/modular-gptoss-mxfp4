@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import MutableSequence
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -32,6 +34,7 @@ from max.graph import (
     Value,
     ops,
 )
+from max.graph.graph import Graph
 from max.graph.ops.quantized import repack_gguf_quantized_weights
 from max.graph.quantization import QuantizationConfig, QuantizationEncoding
 from max.nn.float8_config import (
@@ -1948,28 +1951,47 @@ def grouped_mxfp4_matmul(
             f"(got {packed_weight.dtype} and {packed_scales.dtype})"
         )
 
-    output = ops.custom(
-        "mo.moe.mx4.matmul",
-        device=hidden_states.device,
-        values=[
-            hidden_states,
-            packed_weight,
-            packed_scales,
-            expert_start_indices,
-            expert_ids,
-            expert_usage_stats_host[0],
-            expert_usage_stats_host[1],
-        ],
-        out_types=[
-            TensorType(
-                dtype=hidden_states.dtype,
-                shape=[hidden_states.shape[0], packed_weight.shape[1]],
-                device=hidden_states.device,
-            ),
-        ],
-    )[0].tensor
+    _maybe_import_mxfp4_extensions()
 
-    return output
+    preferred_name = os.environ.get(
+        "MAX_MXFP4_KERNEL_OP", "mo.moe.mx4.matmul"
+    )
+    candidate_names = []
+    for name in (preferred_name, "custom.moe.mx4.matmul"):
+        if name not in candidate_names:
+            candidate_names.append(name)
+
+    last_exc: ValueError | None = None
+    for kernel_name in candidate_names:
+        try:
+            return ops.custom(
+                kernel_name,
+                device=hidden_states.device,
+                values=[
+                    hidden_states,
+                    packed_weight,
+                    packed_scales,
+                    expert_start_indices,
+                    expert_ids,
+                    expert_usage_stats_host[0],
+                    expert_usage_stats_host[1],
+                ],
+                out_types=[
+                    TensorType(
+                        dtype=hidden_states.dtype,
+                        shape=[hidden_states.shape[0], packed_weight.shape[1]],
+                        device=hidden_states.device,
+                    )
+                ],
+            )[0].tensor
+        except ValueError as exc:
+            message = str(exc)
+            if "mojo kernel" not in message:
+                raise
+            last_exc = exc
+
+    assert last_exc is not None
+    raise last_exc
 
 
 def grouped_dynamic_scaled_fp8_matmul(
@@ -3332,3 +3354,37 @@ def spatial_merge(
             )
         ],
     )[0].tensor
+
+
+_MXFP4_EXTENSION_PATHS: list[Path] | None = None
+
+
+def _maybe_import_mxfp4_extensions() -> None:
+    graph = Graph.current
+    if graph is None:
+        return
+
+    global _MXFP4_EXTENSION_PATHS
+    if _MXFP4_EXTENSION_PATHS is None:
+        raw_value = os.environ.get("MAX_CUSTOM_EXTENSIONS", "")
+        discovered: list[Path] = []
+        for entry in raw_value.split(os.pathsep):
+            entry = entry.strip()
+            if not entry:
+                continue
+            candidate = Path(entry).expanduser()
+            if candidate.is_dir():
+                discovered.extend(sorted(candidate.glob("*.mojopkg")))
+            elif candidate.exists():
+                discovered.append(candidate)
+        _MXFP4_EXTENSION_PATHS = discovered
+
+    if not _MXFP4_EXTENSION_PATHS:
+        return
+
+    loaded = set(graph.kernel_libraries_paths)
+    new_paths = [
+        path for path in _MXFP4_EXTENSION_PATHS if path not in loaded
+    ]
+    if new_paths:
+        graph._import_kernels(new_paths)

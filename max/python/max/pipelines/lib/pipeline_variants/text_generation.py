@@ -18,6 +18,7 @@ import copy
 import dataclasses
 import json
 import logging
+import os
 from os import environ
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
     from ..config import PipelineConfig
 
 from ..config_enums import RepoType
+from ..custom_extensions import collect_custom_extensions_from_env
 from ..hf_utils import download_weight_files
 from ..interfaces import PipelineModel
 from ..interfaces.generate import GenerateMixin
@@ -167,7 +169,19 @@ class TextGenerationPipeline(
         # Initialize Session.
         from max.engine import InferenceSession  # local import to avoid cycles
 
-        session = InferenceSession(devices=self._devices)
+        custom_extension_paths = collect_custom_extensions_from_env(
+            environ.get("MAX_CUSTOM_EXTENSIONS"),
+            logger=logger,
+        )
+        if custom_extension_paths:
+            logger.info(
+                "Loading %d custom Mojo extension(s)",
+                len(custom_extension_paths),
+            )
+        session = InferenceSession(
+            devices=self._devices,
+            custom_extensions=custom_extension_paths or None,
+        )
         self.session = session
 
         # Configure session with pipeline settings.

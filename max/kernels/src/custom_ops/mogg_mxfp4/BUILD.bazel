@@ -1,0 +1,14 @@
+load("//bazel:api.bzl", "mojo_library")
+
+package(default_visibility = ["//visibility:public"])
+
+mojo_library(
+    name = "mogg_mxfp4",
+    srcs = glob(["mogg/*.mojo"]),
+    deps = [
+        "@mojo//:compiler_internal",
+        "@mojo//:layout",
+        "@mojo//:stdlib",
+        "@mojo//:tensor",
+    ],
+)

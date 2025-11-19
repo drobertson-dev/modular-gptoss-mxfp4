@@ -13,11 +13,33 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
+import pytest
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import DeviceRef, Graph, TensorType
 from max.nn.kernels import grouped_mxfp4_matmul
+from max.pipelines.lib.custom_extensions import (
+    collect_custom_extensions_from_env,
+)
+
+_CUSTOM_EXTENSION_ENV = (
+    os.environ.get("MAX_CUSTOM_EXTENSIONS")
+    or os.environ.get("MXFP4_KERNEL_PACKAGE")
+)
+_CUSTOM_EXTENSIONS = collect_custom_extensions_from_env(
+    _CUSTOM_EXTENSION_ENV,
+    include_runtime_dependencies=True,
+)
+
+if not _CUSTOM_EXTENSIONS:
+    pytest.skip(
+        "MXFP4 kernel package unavailable. Set MAX_CUSTOM_EXTENSIONS or "
+        "MXFP4_KERNEL_PACKAGE to point at MOGGKernelAPI.mojopkg.",
+        allow_module_level=True,
+    )
 
 _FP4_VALUES = np.array(
     [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0],
@@ -123,6 +145,7 @@ def test_mxfp4_grouped_matmul_matches_dense(session: InferenceSession) -> None:
         output_types=[
             TensorType(DType.float32, (total_tokens, out_features), device=DeviceRef.CPU()),
         ],
+        custom_extensions=_CUSTOM_EXTENSIONS,
     )
 
     with graph:
@@ -136,7 +159,7 @@ def test_mxfp4_grouped_matmul_matches_dense(session: InferenceSession) -> None:
         )
         graph.output(out)
 
-    compiled = session.load(graph)
+    compiled = session.load(graph, custom_extensions=_CUSTOM_EXTENSIONS)
     (result,) = compiled.execute(hidden, blocks, scales, expert_offsets, expert_ids, stats)
     produced = result.to_numpy()
 
