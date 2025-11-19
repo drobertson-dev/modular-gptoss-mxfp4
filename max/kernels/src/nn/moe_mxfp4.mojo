@@ -19,7 +19,6 @@ from gpu import (
     block_idx,
     global_idx,
     grid_dim,
-    thread_idx,
 )
 from gpu.host import DeviceContext
 from gpu.host.info import is_cpu, is_gpu
@@ -69,55 +68,63 @@ fn mxfp4_grouped_matmul_kernel[
     expert_offsets: NDBuffer[DType.uint32, 1, MutAnyOrigin],
     expert_ids: NDBuffer[DType.int32, 1, MutAnyOrigin],
 ) raises:
-    var tokens_for_expert: UInt = UInt(
-        expert_offsets[Int(block_idx.z) + 1] - expert_offsets[Int(block_idx.z)]
-    )
-    var num_outputs = packed_b.dim[1]()
-    var packed_stride = packed_b.dim[2]()
-    var in_features = Int(packed_stride) * 2
-    var scale_stride = scales.dim[2]()
-
-    var a_start_row = expert_offsets[Int(block_idx.z)]
-    var a_data = a.data + a_start_row * UInt(in_features)
-
-    var expert = expert_ids[Int(block_idx.z)]
-    var packed_by_expert = packed_b.data + expert * num_outputs * packed_stride
-    var scales_by_expert = scales.data + expert * num_outputs * scale_stride
-
-    var n = global_idx.x
-    var m = global_idx.y
-
-    if n >= UInt(num_outputs) or m >= tokens_for_expert:
+    var expert_block = Int(block_idx.z)
+    var start_offset = Int(expert_offsets[expert_block])
+    var end_offset = Int(expert_offsets[expert_block + 1])
+    var tokens_for_expert = end_offset - start_offset
+    if tokens_for_expert <= 0:
         return
 
-    alias accum_type = Float32
-    var accum = Scalar[accum_type](0.0)
+    var num_outputs = packed_b.dim[1]()
+    var packed_stride = packed_b.dim[2]()
+    var in_features = packed_stride * 2
+    var scale_stride = scales.dim[2]()
 
-    if expert != -1:
-        for k in range(in_features):
-            var packed_index = k >> 1
-            var packed_byte = packed_by_expert[
-                n * packed_stride + packed_index
-            ]
-            var nibble: UInt8
-            if (k & 1) == 0:
-                nibble = packed_byte & UInt8(0x0F)
-            else:
-                nibble = packed_byte >> 4
+    var a_data = a.data + UInt(start_offset * in_features)
+    var expert = Int(expert_ids[expert_block])
 
-            var weight = _FP4_VALUES[Int(nibble)]
-            var scale_block = k // 32
-            var scale_byte = scales_by_expert[
-                n * scale_stride + scale_block
-            ]
-            var scaled_weight = weight * _scale_multiplier(scale_byte)
-            var a_val = a_data[m * UInt(in_features) + UInt(k)].cast[accum_type]()
-            accum += a_val * scaled_weight
-        endfor
-    endif
+    if expert == -1:
+        return
 
-    var c_data = c.data + a_start_row * num_outputs
-    c_data[m * UInt(num_outputs) + n] = accum.cast[c_type]()
+    var packed_by_expert = (
+        packed_b.data + expert * num_outputs * packed_stride
+    )
+    var scales_by_expert = (
+        scales.data + expert * num_outputs * scale_stride
+    )
+
+    var n = Int(global_idx.x)
+    var m = Int(global_idx.y)
+
+    if n >= num_outputs or m >= tokens_for_expert:
+        return
+
+    var accum = Float32(0.0)
+
+    for k in range(in_features):
+        var packed_index = k >> 1
+        var packed_byte = packed_by_expert[
+            n * packed_stride + packed_index
+        ]
+        var nibble: UInt8
+        if (k & 1) == 0:
+            nibble = packed_byte & UInt8(0x0F)
+        else:
+            nibble = packed_byte >> 4
+
+        var weight = _FP4_VALUES[Int(nibble)]
+        var scale_block = k // 32
+        var scale_byte = scales_by_expert[
+            n * scale_stride + scale_block
+        ]
+        var scaled_weight = weight * _scale_multiplier(scale_byte)
+        var a_val = a_data[
+            UInt(m * in_features + k)
+        ].cast[Float32]()
+        accum += a_val * scaled_weight
+
+    var c_data = c.data + UInt(start_offset * num_outputs)
+    c_data[UInt(m * num_outputs + n)] = Scalar[c_type](accum)
 
 
 fn _mxfp4_grouped_matmul_gpu[
@@ -187,24 +194,24 @@ fn _mxfp4_grouped_matmul_cpu[
 ) raises:
     var num_outputs = packed_b.dim[1]()
     var packed_stride = packed_b.dim[2]()
-    var in_features = Int(packed_stride) * 2
+    var in_features = packed_stride * 2
     var scale_stride = scales.dim[2]()
 
     for expert_idx in range(num_active_experts):
-        var expert = expert_ids[expert_idx]
-        var token_start = expert_offsets[expert_idx]
-        var token_end = expert_offsets[expert_idx + 1]
+        var expert = Int(expert_ids[expert_idx])
+        var token_start = Int(expert_offsets[expert_idx])
+        var token_end = Int(expert_offsets[expert_idx + 1])
         var tokens = token_end - token_start
 
         if expert == -1 or tokens <= 0:
             continue
 
-        var a_slice = a.data + token_start * UInt(in_features)
-        var out_slice = c.data + token_start * num_outputs
+        var a_slice = a.data + UInt(token_start * in_features)
+        var out_slice = c.data + UInt(token_start * num_outputs)
         var packed_row = packed_b.data + expert * num_outputs * packed_stride
         var scale_row = scales.data + expert * num_outputs * scale_stride
 
-        for m in range(Int(tokens)):
+        for m in range(tokens):
             for n in range(num_outputs):
                 var accum = Float32(0.0)
                 for k in range(in_features):
@@ -216,15 +223,11 @@ fn _mxfp4_grouped_matmul_cpu[
                         n,
                         k,
                     )
-                    var a_val = a_slice[m * UInt(in_features) + UInt(k)].cast[
-                        Float32
-                    ]()
+                    var a_val = a_slice[
+                        UInt(m * in_features + k)
+                    ].cast[Float32]()
                     accum += a_val * weight
-                endfor
-                out_slice[m * num_outputs + n] = Scalar[c_type](accum)
-            endfor
-        endfor
-    endfor
+                out_slice[UInt(m * num_outputs + n)] = Scalar[c_type](accum)
 
 
 fn mxfp4_grouped_matmul[
