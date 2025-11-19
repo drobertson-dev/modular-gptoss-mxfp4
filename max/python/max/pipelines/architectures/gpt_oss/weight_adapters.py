@@ -28,6 +28,13 @@ GPT_OSS_SAFETENSOR_MAP: dict[str, str] = {
     ".mlp.router": ".mlp.gate.gate_score",
 }
 
+_EXPERT_RENAMES: dict[str, str] = {
+    ".mlp.mlp1_weight": ".mlp.experts.gate_up_proj",
+    ".mlp.mlp1_bias": ".mlp.experts.gate_up_proj_bias",
+    ".mlp.mlp2_weight": ".mlp.experts.down_proj",
+    ".mlp.mlp2_bias": ".mlp.experts.down_proj_bias",
+}
+
 _MXFP4_REQUIRED_SUFFIXES = {"blocks", "scales"}
 
 
@@ -74,6 +81,13 @@ def convert_safetensor_state_dict(
         max_name: str = weight_name
         for before, after in GPT_OSS_SAFETENSOR_MAP.items():
             max_name = max_name.replace(before, after)
+        for before, after in _EXPERT_RENAMES.items():
+            max_name = max_name.replace(before, after)
+        # Normalize MXFP4 suffix naming to use dotted separators.
+        if max_name.endswith("_blocks"):
+            max_name = max_name[: -len("_blocks")] + ".blocks"
+        elif max_name.endswith("_scales"):
+            max_name = max_name[: -len("_scales")] + ".scales"
         weight_data = value.data()
         weight_data.name = max_name
         weight_data = _maybe_mark_mxfp4_weight(

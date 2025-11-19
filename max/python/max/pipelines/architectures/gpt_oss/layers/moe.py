@@ -197,7 +197,8 @@ class GptOssMoE(MoE, Shardable):
             shape=[
                 self.num_experts,
                 out_features,
-                in_features // 2,
+                in_features // 32,
+                16,
             ],
             dtype=DType.uint8,
             device=self.devices[0],
@@ -214,6 +215,9 @@ class GptOssMoE(MoE, Shardable):
             device=self.devices[0],
             quantization_encoding=QuantizationEncoding.MXFP4,
         )
+        attr_base = base_name.replace(".", "_")
+        setattr(self, f"_{attr_base}_blocks", blocks)
+        setattr(self, f"_{attr_base}_scales", scales)
         return Mxfp4ExpertWeights(blocks=blocks, scales=scales)
 
     @property
@@ -286,10 +290,26 @@ class GptOssMoE(MoE, Shardable):
         # Apply gate_up projection with bias
         if self._use_mxfp4:
             assert self._mxfp4_gate_up_proj is not None
+            gate_blocks = ops.reshape(
+                self._mxfp4_gate_up_proj.blocks,
+                [
+                    self.num_experts,
+                    2 * self.moe_dim,
+                    self.hidden_dim // 2,
+                ],
+            )
+            gate_scales = ops.reshape(
+                self._mxfp4_gate_up_proj.scales,
+                [
+                    self.num_experts,
+                    2 * self.moe_dim,
+                    self.hidden_dim // 32,
+                ],
+            )
             gate_up_output = grouped_mxfp4_matmul(
                 permutated_states,
-                self._mxfp4_gate_up_proj.blocks,
-                self._mxfp4_gate_up_proj.scales,
+                gate_blocks,
+                gate_scales,
                 expert_start_indices,
                 expert_ids,
                 expert_usage_stats_host,
@@ -327,10 +347,26 @@ class GptOssMoE(MoE, Shardable):
         # Apply down projection
         if self._use_mxfp4:
             assert self._mxfp4_down_proj is not None
+            down_blocks = ops.reshape(
+                self._mxfp4_down_proj.blocks,
+                [
+                    self.num_experts,
+                    self.hidden_dim,
+                    self.moe_dim // 2,
+                ],
+            )
+            down_scales = ops.reshape(
+                self._mxfp4_down_proj.scales,
+                [
+                    self.num_experts,
+                    self.hidden_dim,
+                    self.moe_dim // 32,
+                ],
+            )
             down_output = grouped_mxfp4_matmul(
                 gated_output,
-                self._mxfp4_down_proj.blocks,
-                self._mxfp4_down_proj.scales,
+                down_blocks,
+                down_scales,
                 expert_start_indices,
                 expert_ids,
                 expert_usage_stats_host,

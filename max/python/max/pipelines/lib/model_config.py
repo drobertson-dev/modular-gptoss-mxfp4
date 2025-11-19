@@ -557,6 +557,10 @@ class MAXModelConfig(MAXModelConfigBase):
             "quantization_encoding must be set (given by user)."
         )
 
+        allow_unsupported_encoding = bool(
+            os.getenv("MAX_ALLOW_UNSUPPORTED_ENCODING")
+        )
+
         if self.weight_path:
             # Get the encoding of the first weight path file.
             if os.path.exists(self.weight_path[0]):
@@ -576,9 +580,18 @@ class MAXModelConfig(MAXModelConfigBase):
                     )
                 # For cases where they do not match but with allow_safetensors_weights_fp32_bf6_bidirectional_cast set to False, we raise an error.
                 elif file_encoding != self.quantization_encoding:
-                    raise ValueError(
-                        f"weight_path provided '{self.weight_path[0]}' has an inconsistent encoding '{file_encoding}' than quantization_encoding provided '{self.quantization_encoding}'. Please update one."
-                    )
+                    if allow_unsupported_encoding:
+                        logger.warning(
+                            "weight_path '%s' encoding '%s' does not match requested quantization '%s', "
+                            "but MAX_ALLOW_UNSUPPORTED_ENCODING is set; continuing anyway.",
+                            self.weight_path[0],
+                            file_encoding,
+                            self.quantization_encoding,
+                        )
+                    else:
+                        raise ValueError(
+                            f"weight_path provided '{self.weight_path[0]}' has an inconsistent encoding '{file_encoding}' than quantization_encoding provided '{self.quantization_encoding}'. Please update one."
+                        )
         else:
             if self.allow_safetensors_weights_fp32_bf6_bidirectional_cast:
                 # Check if the repo only has one quantization_encoding.
@@ -611,6 +624,14 @@ class MAXModelConfig(MAXModelConfigBase):
                     encoding=self.quantization_encoding
                 )
                 if not weight_files:
+                    if allow_unsupported_encoding:
+                        logger.warning(
+                            "quantization_encoding '%s' is not advertised by repo '%s', "
+                            "but MAX_ALLOW_UNSUPPORTED_ENCODING is set; continuing anyway.",
+                            self.quantization_encoding,
+                            self.huggingface_weight_repo.repo_id,
+                        )
+                        return
                     raise ValueError(
                         f"quantization_encoding '{self.quantization_encoding}' is not supported by the repo '{self.huggingface_weight_repo.repo_id}'"
                     )
@@ -749,6 +770,38 @@ class MAXModelConfig(MAXModelConfigBase):
             elif weight_files:
                 # Load any available weight file.
                 self.weight_path = next(iter(weight_files.values()))
+
+        if not self.weight_path:
+            if os.getenv("MAX_ALLOW_UNSUPPORTED_ENCODING"):
+                fallback_weight_files: list[Path] = []
+                fallback_encoding = None
+                supported_repo_encodings = (
+                    self.huggingface_weight_repo.supported_encodings
+                )
+                if supported_repo_encodings:
+                    fallback_encoding = supported_repo_encodings[0]
+
+                if fallback_encoding:
+                    fallback_files_map = self.huggingface_weight_repo.files_for_encoding(
+                        encoding=fallback_encoding
+                    )
+                    fallback_weight_files = fallback_files_map.get(
+                        default_weights_format, []
+                    )
+                    if not fallback_weight_files and fallback_files_map:
+                        fallback_weight_files = next(
+                            iter(fallback_files_map.values()), []
+                        )
+                if fallback_weight_files:
+                    logger.warning(
+                        "Falling back to available weight files for encoding '%s' because "
+                        "'%s' is not advertised by repo '%s' and "
+                        "MAX_ALLOW_UNSUPPORTED_ENCODING is set.",
+                        self.quantization_encoding,
+                        self.quantization_encoding,
+                        self.huggingface_weight_repo.repo_id,
+                    )
+                    self.weight_path = fallback_weight_files
 
         if not self.weight_path:
             raise ValueError(
