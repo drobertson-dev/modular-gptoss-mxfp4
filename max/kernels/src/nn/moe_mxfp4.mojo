@@ -22,6 +22,8 @@ from gpu import (
 )
 from gpu.host import DeviceContext
 from gpu.host.info import is_cpu, is_gpu
+from layout import Layout, LayoutTensor
+from layout._ndbuffer_stub import from_ndbuffer_row_major
 from memory import LegacyUnsafePointer as UnsafePointer
 from utils.static_tuple import StaticTuple
 
@@ -60,37 +62,45 @@ fn _scale_multiplier(scale_byte: UInt8) -> Float32:
 fn mxfp4_grouped_matmul_kernel[
     c_type: DType,
     a_type: DType,
+    c_layout: Layout,
+    a_layout: Layout,
+    packed_layout: Layout,
+    scale_layout: Layout,
+    offsets_layout: Layout,
+    ids_layout: Layout,
 ](
-    c: NDBuffer[mut=True, c_type, 2, MutAnyOrigin],
-    a: NDBuffer[a_type, 2, MutAnyOrigin],
-    packed_b: NDBuffer[DType.uint8, 3, MutAnyOrigin],
-    scales: NDBuffer[DType.uint8, 3, MutAnyOrigin],
-    expert_offsets: NDBuffer[DType.uint32, 1, MutAnyOrigin],
-    expert_ids: NDBuffer[DType.int32, 1, MutAnyOrigin],
+    c: LayoutTensor[mut=True, c_type, c_layout, MutAnyOrigin],
+    a: LayoutTensor[a_type, a_layout, MutAnyOrigin],
+    packed_b: LayoutTensor[DType.uint8, packed_layout, MutAnyOrigin],
+    scales: LayoutTensor[DType.uint8, scale_layout, MutAnyOrigin],
+    expert_offsets: LayoutTensor[DType.uint32, offsets_layout, MutAnyOrigin],
+    expert_ids: LayoutTensor[DType.int32, ids_layout, MutAnyOrigin],
 ) raises:
     var expert_block = Int(block_idx.z)
-    var start_offset = Int(expert_offsets[expert_block])
-    var end_offset = Int(expert_offsets[expert_block + 1])
+    var offsets_ptr = expert_offsets.data
+    var ids_ptr = expert_ids.data
+    var start_offset = Int(offsets_ptr[expert_block].value)
+    var end_offset = Int(offsets_ptr[expert_block + 1].value)
     var tokens_for_expert = end_offset - start_offset
     if tokens_for_expert <= 0:
         return
 
-    var num_outputs = packed_b.dim[1]()
-    var packed_stride = packed_b.dim[2]()
+    var num_outputs = packed_b.dim(1)
+    var packed_stride = packed_b.dim(2)
     var in_features = packed_stride * 2
-    var scale_stride = scales.dim[2]()
+    var scale_stride = scales.dim(2)
 
     var a_data = a.data + UInt(start_offset * in_features)
-    var expert = Int(expert_ids[expert_block])
+    var expert = Int(ids_ptr[expert_block].value)
 
     if expert == -1:
         return
 
     var packed_by_expert = (
-        packed_b.data + expert * num_outputs * packed_stride
+        packed_b.data + UInt(expert * num_outputs * packed_stride)
     )
     var scales_by_expert = (
-        scales.data + expert * num_outputs * scale_stride
+        scales.data + UInt(expert * num_outputs * scale_stride)
     )
 
     var n = Int(global_idx.x)
@@ -120,7 +130,7 @@ fn mxfp4_grouped_matmul_kernel[
         var scaled_weight = weight * _scale_multiplier(scale_byte)
         var a_val = a_data[
             UInt(m * in_features + k)
-        ].cast[Float32]()
+        ].cast[DType.float32]()
         accum += a_val * scaled_weight
 
     var c_data = c.data + UInt(start_offset * num_outputs)
@@ -141,19 +151,32 @@ fn _mxfp4_grouped_matmul_gpu[
     num_active_experts: Int,
     ctx: DeviceContext,
 ) raises:
+    var c_tensor = from_ndbuffer_row_major(c)
+    var a_tensor = from_ndbuffer_row_major(a)
+    var packed_tensor = from_ndbuffer_row_major(packed_b)
+    var scale_tensor = from_ndbuffer_row_major(scales)
+    var offsets_tensor = from_ndbuffer_row_major(expert_offsets)
+    var ids_tensor = from_ndbuffer_row_major(expert_ids)
+
     alias kernel = mxfp4_grouped_matmul_kernel[
         c_type,
         a_type,
+        c_tensor.layout,
+        a_tensor.layout,
+        packed_tensor.layout,
+        scale_tensor.layout,
+        offsets_tensor.layout,
+        ids_tensor.layout,
     ]
     ctx.enqueue_function_checked[kernel, kernel](
-        c,
-        a,
-        packed_b,
-        scales,
-        expert_offsets,
-        expert_ids,
+        c_tensor,
+        a_tensor,
+        packed_tensor,
+        scale_tensor,
+        offsets_tensor,
+        ids_tensor,
         grid_dim=(
-            ceildiv(c.dim[1](), 32),
+            ceildiv(c_tensor.dim(1), 32),
             ceildiv(max_num_tokens_per_expert, 16),
             num_active_experts,
         ),
@@ -225,7 +248,7 @@ fn _mxfp4_grouped_matmul_cpu[
                     )
                     var a_val = a_slice[
                         UInt(m * in_features + k)
-                    ].cast[Float32]()
+                    ].cast[DType.float32]()
                     accum += a_val * weight
                 out_slice[UInt(m * num_outputs + n)] = Scalar[c_type](accum)
 
