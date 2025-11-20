@@ -131,8 +131,6 @@ def test_mxfp4_grouped_matmul_matches_dense(session: InferenceSession) -> None:
 
     expert_ids = np.arange(num_experts, dtype=np.int32)
     stats = np.array([max(tokens_per_expert), num_experts], dtype=np.uint32)
-    max_tokens = np.array(max(tokens_per_expert), dtype=np.uint32)
-    num_active = np.array(num_experts, dtype=np.uint32)
 
     graph = Graph(
         "mxfp4_grouped_matmul",
@@ -142,8 +140,7 @@ def test_mxfp4_grouped_matmul_matches_dense(session: InferenceSession) -> None:
             TensorType(DType.uint8, scales.shape, device=DeviceRef.CPU()),
             TensorType(DType.uint32, expert_offsets.shape, device=DeviceRef.CPU()),
             TensorType(DType.int32, expert_ids.shape, device=DeviceRef.CPU()),
-            TensorType(DType.uint32, (), device=DeviceRef.CPU()),
-            TensorType(DType.uint32, (), device=DeviceRef.CPU()),
+            TensorType(DType.uint32, stats.shape, device=DeviceRef.CPU()),
         ],
         output_types=[
             TensorType(DType.float32, (total_tokens, out_features), device=DeviceRef.CPU()),
@@ -159,14 +156,11 @@ def test_mxfp4_grouped_matmul_matches_dense(session: InferenceSession) -> None:
             graph.inputs[3].tensor,
             graph.inputs[4].tensor,
             graph.inputs[5].tensor,
-            graph.inputs[6].tensor,
         )
         graph.output(out)
 
     compiled = session.load(graph, custom_extensions=_CUSTOM_EXTENSIONS)
-    (result,) = compiled.execute(
-        hidden, blocks, scales, expert_offsets, expert_ids, max_tokens, num_active
-    )
+    (result,) = compiled.execute(hidden, blocks, scales, expert_offsets, expert_ids, stats)
     produced = result.to_numpy()
 
     reference = _build_reference_outputs(hidden, decoded, expert_offsets)

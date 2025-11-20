@@ -285,6 +285,8 @@ class GptOssMoE(MoE, Shardable):
                 router_weight.reshape([-1, 1]), token_expert_order, axis=0
             ).cast(x.dtype)
 
+        expert_usage_stats_host = expert_usage_stats.to(DeviceRef.CPU())
+
         # Apply gate_up projection with bias
         if self._use_mxfp4:
             assert self._mxfp4_gate_up_proj is not None
@@ -310,8 +312,7 @@ class GptOssMoE(MoE, Shardable):
                 gate_scales,
                 expert_start_indices,
                 expert_ids,
-                expert_usage_stats[0],
-                expert_usage_stats[1],
+                expert_usage_stats_host,
             )
         else:
             gate_up_output = grouped_matmul_ragged(
@@ -319,7 +320,7 @@ class GptOssMoE(MoE, Shardable):
                 self.gate_up_proj,
                 expert_start_indices,
                 expert_ids,
-                expert_usage_stats,
+                expert_usage_stats_host,
             )
 
         # Apply bias based on expert assignment
@@ -368,8 +369,7 @@ class GptOssMoE(MoE, Shardable):
                 down_scales,
                 expert_start_indices,
                 expert_ids,
-                expert_usage_stats[0],
-                expert_usage_stats[1],
+                expert_usage_stats_host,
             )
         else:
             down_output = grouped_matmul_ragged(
@@ -377,7 +377,7 @@ class GptOssMoE(MoE, Shardable):
                 self.down_proj,
                 expert_start_indices,
                 expert_ids,
-                expert_usage_stats,
+                expert_usage_stats_host,
             )
 
         # Apply bias based on expert assignment
