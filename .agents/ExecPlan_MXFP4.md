@@ -38,6 +38,7 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
 - [x] (2025-11-20 17:50Z) Expanded K tiles to four FP4 blocks (K_TILE=128) with strided activation loads so all K values are staged in shared; GPU/CPU parity tests still pass.
 - [x] (2025-11-20 18:10Z) Fused per-expert bias into the MXFP4 kernel (GPU+CPU), updated Python bindings/call sites to pass bias, and adjusted tests/bench harness; parity tests with bias now pass on CPU+GPU.
 - [x] (2025-11-20 18:40Z) Reduced block_dim to a warpgroup-friendly 128 threads by setting TOKEN_TILE=2 (block_dim=64x2) to prep for WGMMA mapping; rebuilt mojopkg and re-ran bias-inclusive parity tests (pass).
+- [x] (2025-11-20 19:20Z) Added fused MXFP4 gate/up + SwiGLU kernel/op (mo/custom.moe.mx4.matmul_swiglu), Python wrapper, and MXFP4 MoE callsite; added CPU/GPU regression tests with bias and fused activation and restored passing state.
 
 ## Surprises & Discoveries
 
@@ -73,6 +74,9 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
   Date/Author: 2025-11-20 / Codex
 - Decision: Drop TOKEN_TILE to 2 (block_dim 64x2 = 128 threads) to align each block with a warpgroup for future WGMMA integration while keeping output tile 64.  
   Rationale: Matches Hopper warpgroup size, simplifies mapping to tensor cores, and keeps current numerics unchanged.  
+  Date/Author: 2025-11-20 / Codex
+- Decision: Add a fused MXFP4 gate/up + SwiGLU kernel and route MXFP4 MoE through it while keeping BF16 path untouched; reuse a single shared weight tile to stay under shared memory limits.  
+  Rationale: Removes the Python-side activation for MXFP4, reduces memory traffic, and keeps GPU kernels within shared memory limits.  
   Date/Author: 2025-11-20 / Codex
 
 ## Outcomes & Retrospective

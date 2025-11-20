@@ -26,6 +26,7 @@ from max.nn.clamp import clamp
 from max.nn.kernels import (
     grouped_matmul_ragged,
     grouped_mxfp4_matmul,
+    grouped_mxfp4_matmul_swiglu,
     moe_create_indices,
 )
 from max.nn.layer import LayerList, Shardable
@@ -306,7 +307,7 @@ class GptOssMoE(MoE, Shardable):
                     self.hidden_dim // 32,
                 ],
             )
-            gate_up_output = grouped_mxfp4_matmul(
+            gate_up_output = grouped_mxfp4_matmul_swiglu(
                 permutated_states,
                 gate_blocks,
                 gate_scales,
@@ -314,6 +315,8 @@ class GptOssMoE(MoE, Shardable):
                 expert_start_indices,
                 expert_ids,
                 expert_usage_stats_host,
+                alpha=float(self.alpha),
+                limit=float(self.limit),
             )
         else:
             gate_up_output = grouped_matmul_ragged(
@@ -334,17 +337,20 @@ class GptOssMoE(MoE, Shardable):
             )
             gate_up_output = gate_up_output + bias_per_token
 
-        # Split gate and up projections (interleaved: [gate, up, gate, up, ...])
-        gate = gate_up_output[:, 0::2]
-        up = gate_up_output[:, 1::2]
+            # Split gate and up projections (interleaved: [gate, up, gate, up, ...])
+            gate = gate_up_output[:, 0::2]
+            up = gate_up_output[:, 1::2]
 
-        # Apply clamping (NOTE: This is specific to GptOss and matches the Triton reference)
-        gate = ops.min(gate, self.limit)
-        up = clamp(up, min=-self.limit, max=self.limit)
+            # Apply clamping (NOTE: This is specific to GptOss and matches the Triton reference)
+            gate = ops.min(gate, self.limit)
+            up = clamp(up, min=-self.limit, max=self.limit)
 
-        # GptOss-style activation: gate * sigmoid(gate * alpha) * (up + 1)
-        glu = gate * ops.sigmoid(gate * self.alpha)
-        gated_output = (up + 1.0) * glu
+            # GptOss-style activation: gate * sigmoid(gate * alpha) * (up + 1)
+            glu = gate * ops.sigmoid(gate * self.alpha)
+            gated_output = (up + 1.0) * glu
+        else:
+            # MXFP4 path already returns fused SwiGLU output of shape [tokens, moe_dim]
+            gated_output = gate_up_output
 
         # Apply down projection
         if self._use_mxfp4:

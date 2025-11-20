@@ -11,7 +11,7 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-from math import ceildiv, ldexp
+from math import ceildiv, ldexp, exp
 
 from buffer.buffer import NDBuffer
 from gpu import (
@@ -55,7 +55,7 @@ alias _FP4_VALUES = StaticTuple[
 alias _FP4_PER_BLOCK = 32
 alias _PACKED_BYTES_PER_BLOCK = 16
 alias _OUTPUT_TILE = 64
-alias _TOKEN_TILE = 2
+alias _TOKEN_TILE = 4
 alias _K_BLOCKS_PER_TILE = 4
 alias _K_TILE = _K_BLOCKS_PER_TILE * _FP4_PER_BLOCK
 alias _WEIGHT_TILE_SIZE = _OUTPUT_TILE * _K_TILE
@@ -69,7 +69,7 @@ fn _scale_multiplier(scale_byte: UInt8) -> Float32:
 
 
 @__llvm_metadata(
-    MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](512)
+    MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](256)
 )
 fn mxfp4_grouped_matmul_kernel[
     c_type: DType,
@@ -203,6 +203,211 @@ fn mxfp4_grouped_matmul_kernel[
         c_data[UInt(m * num_outputs + n)] = Scalar[c_type](accum)
 
 
+@__llvm_metadata(
+    MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](256)
+)
+fn mxfp4_grouped_matmul_swiglu_kernel[
+    c_type: DType,
+    a_type: DType,
+    c_layout: Layout,
+    a_layout: Layout,
+    packed_layout: Layout,
+    scale_layout: Layout,
+    bias_layout: Layout,
+    offsets_layout: Layout,
+    ids_layout: Layout,
+](
+    c: LayoutTensor[mut=True, c_type, c_layout, MutAnyOrigin],
+    a: LayoutTensor[a_type, a_layout, MutAnyOrigin],
+    packed_b: LayoutTensor[DType.uint8, packed_layout, MutAnyOrigin],
+    scales: LayoutTensor[DType.uint8, scale_layout, MutAnyOrigin],
+    bias: LayoutTensor[c_type, bias_layout, MutAnyOrigin],
+    expert_offsets: LayoutTensor[DType.uint32, offsets_layout, MutAnyOrigin],
+    expert_ids: LayoutTensor[DType.int32, ids_layout, MutAnyOrigin],
+    alpha: Float32,
+    limit: Float32,
+):
+    var expert_block = Int(block_idx.z)
+    var offsets_ptr = expert_offsets.ptr
+    var ids_ptr = expert_ids.ptr
+    var start_offset = Int(offsets_ptr[expert_block])
+    var end_offset = Int(offsets_ptr[expert_block + 1])
+    var tokens_for_expert = end_offset - start_offset
+    if tokens_for_expert <= 0:
+        return
+
+    var num_pairs = c.dim(1)
+    var packed_stride = packed_b.dim(2)
+    var in_features = packed_stride * 2
+    var scale_stride = scales.dim(2)
+    var bias_stride = bias.dim(1)
+
+    var a_data = a.ptr + UInt(start_offset * in_features)
+    var expert = Int(ids_ptr[expert_block])
+
+    if expert == -1:
+        return
+
+    var gate_row_base = UInt(expert * num_pairs * 2 * packed_stride)
+    var scale_row_base = UInt(expert * num_pairs * 2 * scale_stride)
+    var bias_row_base = UInt(expert * bias_stride)
+
+    var n_pair = Int(global_idx.x)
+    var m = Int(global_idx.y)
+    var local_n = Int(thread_idx.x)
+    var active = n_pair < num_pairs and m < tokens_for_expert
+
+    var accum_gate = Float32(0.0)
+    var accum_up = Float32(0.0)
+
+    var shared_weights = stack_allocation[_WEIGHT_TILE_SIZE, Float32, address_space = AddressSpace.SHARED]()
+    var shared_act = stack_allocation[_ACT_TILE_SIZE, Float32, address_space = AddressSpace.SHARED]()
+
+    var num_blocks = in_features // _FP4_PER_BLOCK
+    var k_block_start = 0
+    while k_block_start < num_blocks:
+        var blocks_this_tile = num_blocks - k_block_start
+        if blocks_this_tile > _K_BLOCKS_PER_TILE:
+            blocks_this_tile = _K_BLOCKS_PER_TILE
+        var k_tile = blocks_this_tile * _FP4_PER_BLOCK
+
+        if thread_idx.y == 0 and n_pair < num_pairs:
+            var gate_idx = n_pair * 2
+            var up_idx = gate_idx + 1
+
+            var gate_packed_row = packed_b.ptr + gate_row_base + UInt(gate_idx * packed_stride)
+            var up_packed_row = packed_b.ptr + gate_row_base + UInt(up_idx * packed_stride)
+            var gate_scale_row = scales.ptr + scale_row_base + UInt(gate_idx * scale_stride)
+            var up_scale_row = scales.ptr + scale_row_base + UInt(up_idx * scale_stride)
+
+            var shared_base = local_n * _K_TILE
+
+            for block_inner in range(blocks_this_tile):
+                var scale_block = k_block_start + block_inner
+                var gate_scale_mul = _scale_multiplier(gate_scale_row[scale_block])
+                var gate_packed_block = gate_packed_row + UInt(scale_block * _PACKED_BYTES_PER_BLOCK)
+                var block_offset = shared_base + block_inner * _FP4_PER_BLOCK
+
+                for byte_base in range(0, _PACKED_BYTES_PER_BLOCK, 4):
+                    var gb0 = gate_packed_block[byte_base]
+                    var gb1 = gate_packed_block[byte_base + 1]
+                    var gb2 = gate_packed_block[byte_base + 2]
+                    var gb3 = gate_packed_block[byte_base + 3]
+
+                    var base_idx = block_offset + byte_base * 2
+                    shared_weights[base_idx] = _FP4_VALUES[Int(gb0 & UInt8(0x0F))] * gate_scale_mul
+                    shared_weights[base_idx + 1] = _FP4_VALUES[Int(gb0 >> 4)] * gate_scale_mul
+                    shared_weights[base_idx + 2] = _FP4_VALUES[Int(gb1 & UInt8(0x0F))] * gate_scale_mul
+                    shared_weights[base_idx + 3] = _FP4_VALUES[Int(gb1 >> 4)] * gate_scale_mul
+                    shared_weights[base_idx + 4] = _FP4_VALUES[Int(gb2 & UInt8(0x0F))] * gate_scale_mul
+                    shared_weights[base_idx + 5] = _FP4_VALUES[Int(gb2 >> 4)] * gate_scale_mul
+                    shared_weights[base_idx + 6] = _FP4_VALUES[Int(gb3 & UInt8(0x0F))] * gate_scale_mul
+                    shared_weights[base_idx + 7] = _FP4_VALUES[Int(gb3 >> 4)] * gate_scale_mul
+
+        if m < tokens_for_expert:
+            var a_row = a_data + UInt(m * in_features)
+            var k_index = Int(thread_idx.x)
+            while k_index < k_tile:
+                shared_act[
+                    Int(thread_idx.y) * _K_TILE + k_index
+                ] = a_row[
+                    UInt(k_block_start * _FP4_PER_BLOCK + k_index)
+                ].cast[DType.float32]()
+                k_index += _OUTPUT_TILE
+
+        barrier()
+
+        if active:
+            var shared_base = local_n * _K_TILE
+            var act_base = Int(thread_idx.y) * _K_TILE
+            for k_offset in range(0, k_tile, 4):
+                var a0 = shared_act[act_base + k_offset]
+                var a1 = shared_act[act_base + k_offset + 1]
+                var a2 = shared_act[act_base + k_offset + 2]
+                var a3 = shared_act[act_base + k_offset + 3]
+
+                var wg0 = shared_weights[shared_base + k_offset]
+                var wg1 = shared_weights[shared_base + k_offset + 1]
+                var wg2 = shared_weights[shared_base + k_offset + 2]
+                var wg3 = shared_weights[shared_base + k_offset + 3]
+
+                accum_gate += a0 * wg0 + a1 * wg1 + a2 * wg2 + a3 * wg3
+
+        barrier()
+
+        if thread_idx.y == 0 and n_pair < num_pairs:
+            var gate_idx = n_pair * 2
+            var up_idx = gate_idx + 1
+
+            var up_packed_row = packed_b.ptr + gate_row_base + UInt(up_idx * packed_stride)
+            var up_scale_row = scales.ptr + scale_row_base + UInt(up_idx * scale_stride)
+
+            var shared_base_up = local_n * _K_TILE
+
+            for block_inner in range(blocks_this_tile):
+                var scale_block = k_block_start + block_inner
+                var up_scale_mul = _scale_multiplier(up_scale_row[scale_block])
+                var up_packed_block = up_packed_row + UInt(scale_block * _PACKED_BYTES_PER_BLOCK)
+                var block_offset = shared_base_up + block_inner * _FP4_PER_BLOCK
+
+                for byte_base in range(0, _PACKED_BYTES_PER_BLOCK, 4):
+                    var gu0 = up_packed_block[byte_base]
+                    var gu1 = up_packed_block[byte_base + 1]
+                    var gu2 = up_packed_block[byte_base + 2]
+                    var gu3 = up_packed_block[byte_base + 3]
+
+                    var base_idx = block_offset + byte_base * 2
+                    shared_weights[base_idx] = _FP4_VALUES[Int(gu0 & UInt8(0x0F))] * up_scale_mul
+                    shared_weights[base_idx + 1] = _FP4_VALUES[Int(gu0 >> 4)] * up_scale_mul
+                    shared_weights[base_idx + 2] = _FP4_VALUES[Int(gu1 & UInt8(0x0F))] * up_scale_mul
+                    shared_weights[base_idx + 3] = _FP4_VALUES[Int(gu1 >> 4)] * up_scale_mul
+                    shared_weights[base_idx + 4] = _FP4_VALUES[Int(gu2 & UInt8(0x0F))] * up_scale_mul
+                    shared_weights[base_idx + 5] = _FP4_VALUES[Int(gu2 >> 4)] * up_scale_mul
+                    shared_weights[base_idx + 6] = _FP4_VALUES[Int(gu3 & UInt8(0x0F))] * up_scale_mul
+                    shared_weights[base_idx + 7] = _FP4_VALUES[Int(gu3 >> 4)] * up_scale_mul
+
+        barrier()
+
+        if active:
+            var shared_base_up = local_n * _K_TILE
+            var act_base_up = Int(thread_idx.y) * _K_TILE
+            for k_offset in range(0, k_tile, 4):
+                var a0 = shared_act[act_base_up + k_offset]
+                var a1 = shared_act[act_base_up + k_offset + 1]
+                var a2 = shared_act[act_base_up + k_offset + 2]
+                var a3 = shared_act[act_base_up + k_offset + 3]
+
+                var wu0 = shared_weights[shared_base_up + k_offset]
+                var wu1 = shared_weights[shared_base_up + k_offset + 1]
+                var wu2 = shared_weights[shared_base_up + k_offset + 2]
+                var wu3 = shared_weights[shared_base_up + k_offset + 3]
+
+                accum_up += a0 * wu0 + a1 * wu1 + a2 * wu2 + a3 * wu3
+
+        k_block_start += _K_BLOCKS_PER_TILE
+        barrier()
+
+    var c_data = c.ptr + UInt(start_offset * num_pairs)
+    if active:
+        var gate_bias = bias.ptr[bias_row_base + UInt(n_pair * 2)].cast[DType.float32]()
+        var up_bias = bias.ptr[bias_row_base + UInt(n_pair * 2 + 1)].cast[DType.float32]()
+
+        var gate_val = accum_gate + gate_bias
+        var up_val = accum_up + up_bias
+
+        if gate_val > limit:
+            gate_val = limit
+        if up_val > limit:
+            up_val = limit
+        if up_val < -limit:
+            up_val = -limit
+
+        var sig = Float32(1.0) / (Float32(1.0) + exp(-gate_val * alpha))
+        var glu = gate_val * sig
+        var out = glu * (up_val + Float32(1.0))
+        c_data[UInt(m * num_pairs + n_pair)] = Scalar[c_type](out)
+
+
 fn _mxfp4_grouped_matmul_gpu[
     c_type: DType,
     a_type: DType,
@@ -245,6 +450,61 @@ fn _mxfp4_grouped_matmul_gpu[
         bias_tensor,
         offsets_tensor,
         ids_tensor,
+        grid_dim=(
+            ceildiv(c_tensor.dim(1), _OUTPUT_TILE),
+            ceildiv(max_num_tokens_per_expert, _TOKEN_TILE),
+            num_active_experts,
+        ),
+        block_dim=(_OUTPUT_TILE, _TOKEN_TILE, 1),
+    )
+
+
+fn _mxfp4_grouped_matmul_swiglu_gpu[
+    c_type: DType,
+    a_type: DType,
+](
+    c: NDBuffer[mut=True, c_type, 2, MutAnyOrigin],
+    a: NDBuffer[a_type, 2, MutAnyOrigin],
+    packed_b: NDBuffer[DType.uint8, 3, MutAnyOrigin],
+    scales: NDBuffer[DType.uint8, 3, MutAnyOrigin],
+    bias: NDBuffer[c_type, 2, MutAnyOrigin],
+    expert_offsets: NDBuffer[DType.uint32, 1, MutAnyOrigin],
+    expert_ids: NDBuffer[DType.int32, 1, MutAnyOrigin],
+    max_num_tokens_per_expert: Int,
+    num_active_experts: Int,
+    alpha: Float32,
+    limit: Float32,
+    ctx: DeviceContext,
+) raises:
+    var c_tensor = from_ndbuffer_row_major(c)
+    var a_tensor = from_ndbuffer_row_major(a)
+    var packed_tensor = from_ndbuffer_row_major(packed_b)
+    var scale_tensor = from_ndbuffer_row_major(scales)
+    var bias_tensor = from_ndbuffer_row_major(bias)
+    var offsets_tensor = from_ndbuffer_row_major(expert_offsets)
+    var ids_tensor = from_ndbuffer_row_major(expert_ids)
+
+    alias kernel = mxfp4_grouped_matmul_swiglu_kernel[
+        c_type,
+        a_type,
+        c_tensor.layout,
+        a_tensor.layout,
+        packed_tensor.layout,
+        scale_tensor.layout,
+        bias_tensor.layout,
+        offsets_tensor.layout,
+        ids_tensor.layout,
+    ]
+    ctx.enqueue_function_checked[kernel, kernel](
+        c_tensor,
+        a_tensor,
+        packed_tensor,
+        scale_tensor,
+        bias_tensor,
+        offsets_tensor,
+        ids_tensor,
+        alpha,
+        limit,
         grid_dim=(
             ceildiv(c_tensor.dim(1), _OUTPUT_TILE),
             ceildiv(max_num_tokens_per_expert, _TOKEN_TILE),
@@ -338,6 +598,105 @@ fn _mxfp4_grouped_matmul_cpu[
                 out_slice[UInt(m * num_outputs + n)] = Scalar[c_type](accum)
 
 
+fn _mxfp4_grouped_matmul_swiglu_cpu[
+    c_type: DType,
+    a_type: DType,
+](
+    c: NDBuffer[mut=True, c_type, 2, MutAnyOrigin],
+    a: NDBuffer[a_type, 2, MutAnyOrigin],
+    packed_b: NDBuffer[DType.uint8, 3, MutAnyOrigin],
+    scales: NDBuffer[DType.uint8, 3, MutAnyOrigin],
+    bias: NDBuffer[c_type, 2, MutAnyOrigin],
+    expert_offsets: NDBuffer[DType.uint32, 1, MutAnyOrigin],
+    expert_ids: NDBuffer[DType.int32, 1, MutAnyOrigin],
+    num_active_experts: Int,
+    alpha: Float32,
+    limit: Float32,
+) raises:
+    var num_pairs = c.dim[1]()
+    var packed_stride = packed_b.dim[2]()
+    var in_features = packed_stride * 2
+    var scale_stride = scales.dim[2]()
+    var bias_stride = bias.dim[1]()
+
+    for expert_idx in range(num_active_experts):
+        var expert = Int(expert_ids[expert_idx])
+        var token_start = Int(expert_offsets[expert_idx])
+        var token_end = Int(expert_offsets[expert_idx + 1])
+        var tokens = token_end - token_start
+
+        if expert == -1 or tokens <= 0:
+            continue
+
+        var a_slice = a.data + UInt(token_start * in_features)
+        var out_slice = c.data + UInt(token_start * num_pairs)
+        var packed_row = packed_b.data + expert * num_pairs * 2 * packed_stride
+        var scale_row = scales.data + expert * num_pairs * 2 * scale_stride
+        var bias_row = bias.data + expert * bias_stride
+
+        for m in range(tokens):
+            var a_row = a_slice + UInt(m * in_features)
+            for pair in range(num_pairs):
+                var gate_accum = Float32(0.0)
+                var up_accum = Float32(0.0)
+                var gate_idx = pair * 2
+                var up_idx = gate_idx + 1
+                var gate_packed_row = packed_row + gate_idx * packed_stride
+                var up_packed_row = packed_row + up_idx * packed_stride
+                var gate_scale_row = scale_row + gate_idx * scale_stride
+                var up_scale_row = scale_row + up_idx * scale_stride
+                var num_blocks = in_features // _FP4_PER_BLOCK
+                for scale_block in range(num_blocks):
+                    var gate_scale_mul = _scale_multiplier(
+                        gate_scale_row[scale_block]
+                    )
+                    var up_scale_mul = _scale_multiplier(
+                        up_scale_row[scale_block]
+                    )
+                    var k_base = scale_block * _FP4_PER_BLOCK
+                    var gate_packed_block = (
+                        gate_packed_row
+                        + scale_block * _PACKED_BYTES_PER_BLOCK
+                    )
+                    var up_packed_block = (
+                        up_packed_row
+                        + scale_block * _PACKED_BYTES_PER_BLOCK
+                    )
+                    for byte_idx in range(_PACKED_BYTES_PER_BLOCK):
+                        var packed_gate = gate_packed_block[byte_idx]
+                        var packed_up = up_packed_block[byte_idx]
+                        var w0_gate = _FP4_VALUES[
+                            Int(packed_gate & UInt8(0x0F))
+                        ] * gate_scale_mul
+                        var w1_gate = _FP4_VALUES[
+                            Int(packed_gate >> 4)
+                        ] * gate_scale_mul
+                        var w0_up = _FP4_VALUES[
+                            Int(packed_up & UInt8(0x0F))
+                        ] * up_scale_mul
+                        var w1_up = _FP4_VALUES[Int(packed_up >> 4)] * up_scale_mul
+
+                        var k0 = k_base + byte_idx * 2
+                        var a0 = a_row[UInt(k0)].cast[DType.float32]()
+                        var a1 = a_row[UInt(k0 + 1)].cast[DType.float32]()
+                        gate_accum += a0 * w0_gate + a1 * w1_gate
+                        up_accum += a0 * w0_up + a1 * w1_up
+                gate_accum += bias_row[UInt(gate_idx)].cast[DType.float32]()
+                up_accum += bias_row[UInt(up_idx)].cast[DType.float32]()
+
+                if gate_accum > limit:
+                    gate_accum = limit
+                if up_accum > limit:
+                    up_accum = limit
+                if up_accum < -limit:
+                    up_accum = -limit
+
+                var sig = Float32(1.0) / (Float32(1.0) + exp(-gate_accum * alpha))
+                var glu = gate_accum * sig
+                var out = glu * (up_accum + Float32(1.0))
+                out_slice[UInt(m * num_pairs + pair)] = Scalar[c_type](out)
+
+
 fn mxfp4_grouped_matmul[
     c_type: DType,
     a_type: DType,
@@ -380,4 +739,52 @@ fn mxfp4_grouped_matmul[
             expert_offsets,
             expert_ids,
             num_active_experts,
+        )
+
+
+fn mxfp4_grouped_matmul_swiglu[
+    c_type: DType,
+    a_type: DType,
+    target: StaticString,
+](
+    c: NDBuffer[mut=True, c_type, 2, MutAnyOrigin],
+    a: NDBuffer[a_type, 2, MutAnyOrigin],
+    packed_b: NDBuffer[DType.uint8, 3, MutAnyOrigin],
+    scales: NDBuffer[DType.uint8, 3, MutAnyOrigin],
+    bias: NDBuffer[c_type, 2, MutAnyOrigin],
+    expert_offsets: NDBuffer[DType.uint32, 1, MutAnyOrigin],
+    expert_ids: NDBuffer[DType.int32, 1, MutAnyOrigin],
+    max_num_tokens_per_expert: Int,
+    num_active_experts: Int,
+    alpha: Float32,
+    limit: Float32,
+    ctx: DeviceContext,
+) raises:
+    if is_gpu[target]():
+        _mxfp4_grouped_matmul_swiglu_gpu[c_type, a_type](
+            c,
+            a,
+            packed_b,
+            scales,
+            bias,
+            expert_offsets,
+            expert_ids,
+            max_num_tokens_per_expert,
+            num_active_experts,
+            alpha,
+            limit,
+            ctx,
+        )
+    else:
+        _mxfp4_grouped_matmul_swiglu_cpu[c_type, a_type](
+            c,
+            a,
+            packed_b,
+            scales,
+            bias,
+            expert_offsets,
+            expert_ids,
+            num_active_experts,
+            alpha,
+            limit,
         )

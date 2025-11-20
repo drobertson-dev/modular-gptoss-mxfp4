@@ -2010,6 +2010,121 @@ def grouped_mxfp4_matmul(
     raise last_exc
 
 
+def grouped_mxfp4_matmul_swiglu(
+    hidden_states: TensorValue,
+    packed_weight: TensorValue,
+    packed_scales: TensorValue,
+    bias: TensorValue,
+    expert_start_indices: TensorValue,
+    expert_ids: TensorValue,
+    expert_usage_stats_host: TensorValue,
+    alpha: float,
+    limit: float,
+) -> TensorValue:
+    """MXFP4 grouped matmul with fused SwiGLU for gate/up."""
+
+    if hidden_states.rank != 2:
+        raise ValueError(
+            f"expected hidden_states of rank 2 but got {hidden_states.rank}"
+        )
+
+    if packed_weight.rank != 3 or packed_scales.rank != 3:
+        raise ValueError(
+            "packed weights and scales must be rank-3 tensors "
+            f"(got {packed_weight.rank} and {packed_scales.rank})"
+        )
+
+    if packed_weight.shape[0] != expert_ids.shape[0]:
+        raise ValueError(
+            "packed weight expert dimension must match expert_ids "
+            f"(got {packed_weight.shape[0]} vs {expert_ids.shape[0]})"
+        )
+
+    expected_packed_width = hidden_states.shape[1] // 2
+    if packed_weight.shape[2] != expected_packed_width:
+        raise ValueError(
+            "packed weights must store two FP4 values per byte along the "
+            f"input dimension; expected {expected_packed_width} columns but "
+            f"received {packed_weight.shape[2]}"
+        )
+
+    scale_width = hidden_states.shape[1] // 32
+    if packed_scales.shape[2] != scale_width:
+        raise ValueError(
+            "scales tensor must provide one byte per 32 input values; "
+            f"expected width {scale_width} but received {packed_scales.shape[2]}"
+        )
+
+    if packed_weight.dtype != DType.uint8 or packed_scales.dtype != DType.uint8:
+        raise TypeError(
+            "MXFP4 weights and scales must use uint8 dtype "
+            f"(got {packed_weight.dtype} and {packed_scales.dtype})"
+        )
+
+    if bias.rank != 2:
+        raise ValueError(f"bias must have rank 2 but got {bias.rank}")
+    if bias.shape[0] != packed_weight.shape[0] or bias.shape[1] != packed_weight.shape[1]:
+        raise ValueError(
+            "bias shape must match packed_weight expert/out dims "
+            f"(got {bias.shape} vs {(packed_weight.shape[0], packed_weight.shape[1])})"
+        )
+    if bias.dtype != hidden_states.dtype:
+        raise TypeError(
+            f"bias dtype must match hidden_states ({hidden_states.dtype}), got {bias.dtype}"
+        )
+
+    out_features = int(packed_weight.shape[1])
+    if out_features % 2 != 0:
+        raise ValueError(
+            f"expected packed_weight out_features to be even, got {packed_weight.shape[1]}"
+        )
+
+    _maybe_import_mxfp4_extensions()
+
+    candidate_names = [
+        "mo.moe.mx4.matmul_swiglu",
+        "custom.moe.mx4.matmul_swiglu",
+    ]
+
+    last_exc: ValueError | None = None
+    alpha_const = ops.constant(alpha, dtype=DType.float32, device=DeviceRef.CPU())
+    limit_const = ops.constant(limit, dtype=DType.float32, device=DeviceRef.CPU())
+
+    for kernel_name in candidate_names:
+        try:
+            return ops.custom(
+                kernel_name,
+                device=hidden_states.device,
+                values=[
+                    hidden_states,
+                    packed_weight,
+                    packed_scales,
+                    bias,
+                    expert_start_indices,
+                    expert_ids,
+                    expert_usage_stats_host[0],
+                    expert_usage_stats_host[1],
+                    alpha_const,
+                    limit_const,
+                ],
+                out_types=[
+                    TensorType(
+                        dtype=hidden_states.dtype,
+                        shape=[hidden_states.shape[0], out_features // 2],
+                        device=hidden_states.device,
+                    )
+                ],
+            )[0].tensor
+        except ValueError as exc:
+            message = str(exc)
+            if "mojo kernel" not in message:
+                raise
+            last_exc = exc
+
+    assert last_exc is not None
+    raise last_exc
+
+
 def grouped_dynamic_scaled_fp8_matmul(
     hidden_states: TensorValue,
     weight: TensorValue,
