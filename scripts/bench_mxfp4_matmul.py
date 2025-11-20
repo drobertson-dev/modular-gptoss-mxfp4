@@ -90,6 +90,7 @@ def run_bench(args: argparse.Namespace) -> None:
     hidden = rng.standard_normal((total_tokens, in_features), dtype=np.float32).astype(np.float32)
     dense_weights = rng.standard_normal((args.num_experts, out_features, in_features), dtype=np.float32)
     blocks, scales = quantize_mxfp4(dense_weights)
+    bias = np.zeros((args.num_experts, out_features), dtype=np.float32)
 
     expert_ids = np.arange(args.num_experts, dtype=np.int32)
     max_tokens = np.uint32(max_tokens_per_expert)
@@ -117,6 +118,7 @@ def run_bench(args: argparse.Namespace) -> None:
             TensorType(DType.float32, hidden.shape, device=device_ref),
             TensorType(DType.uint8, blocks.shape, device=device_ref),
             TensorType(DType.uint8, scales.shape, device=device_ref),
+            TensorType(DType.float32, bias.shape, device=device_ref),
             TensorType(DType.uint32, expert_offsets.shape, device=device_ref),
             TensorType(DType.int32, expert_ids.shape, device=device_ref),
             TensorType(DType.uint32, (), device=DeviceRef.CPU()),
@@ -150,6 +152,7 @@ def run_bench(args: argparse.Namespace) -> None:
                         graph.inputs[4].tensor,
                         graph.inputs[5].tensor,
                         graph.inputs[6].tensor,
+                        graph.inputs[7].tensor,
                     ],
                     out_types=[
                         TensorType(
@@ -175,6 +178,7 @@ def run_bench(args: argparse.Namespace) -> None:
     hidden_t = Tensor.from_numpy(hidden).to(device)
     blocks_t = Tensor.from_numpy(blocks).to(device)
     scales_t = Tensor.from_numpy(scales).to(device)
+    bias_t = Tensor.from_numpy(bias).to(device)
     offsets_t = Tensor.from_numpy(expert_offsets).to(device)
     expert_ids_t = Tensor.from_numpy(expert_ids).to(device)
     max_tokens_t = Tensor.scalar(max_tokens, DType.uint32, device=CPU())
@@ -186,6 +190,7 @@ def run_bench(args: argparse.Namespace) -> None:
             hidden_t,
             blocks_t,
             scales_t,
+            bias_t,
             offsets_t,
             expert_ids_t,
             max_tokens_t,
@@ -201,6 +206,7 @@ def run_bench(args: argparse.Namespace) -> None:
                     hidden_t,
                     blocks_t,
                     scales_t,
+                    bias_t,
                     offsets_t,
                     expert_ids_t,
                     max_tokens_t,
@@ -211,6 +217,7 @@ def run_bench(args: argparse.Namespace) -> None:
                 hidden_t,
                 blocks_t,
                 scales_t,
+                bias_t,
                 offsets_t,
                 expert_ids_t,
                 max_tokens_t,

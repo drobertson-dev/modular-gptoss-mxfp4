@@ -18,6 +18,8 @@ import os
 import numpy as np
 import pytest
 from max.dtype import DType
+from max.driver import Tensor
+from max.driver import accelerator_count
 from max.engine import InferenceSession
 from max.graph import DeviceRef, Graph, TensorType
 from max.nn.kernels import grouped_mxfp4_matmul
@@ -96,6 +98,7 @@ def _quantize_mxfp4(weights: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.nda
 def _build_reference_outputs(
     hidden_states: np.ndarray,
     dense_weights: np.ndarray,
+    bias: np.ndarray,
     expert_starts: np.ndarray,
 ) -> np.ndarray:
     outputs: list[np.ndarray] = []
@@ -104,7 +107,7 @@ def _build_reference_outputs(
             continue
         act = hidden_states[start:end]
         weight = dense_weights[expert]
-        outputs.append(act @ weight.T)
+        outputs.append(act @ weight.T + bias[expert])
     return np.vstack(outputs)
 
 
@@ -122,6 +125,7 @@ def test_mxfp4_grouped_matmul_matches_dense(session: InferenceSession) -> None:
         (num_experts, out_features, in_features), dtype=np.float32
     ).astype(np.float32)
     blocks, scales, decoded = _quantize_mxfp4(dense_weights)
+    biases = rng.standard_normal((num_experts, out_features), dtype=np.float32)
 
     expert_offsets = np.zeros(num_experts + 1, dtype=np.uint32)
     cursor = 0
@@ -138,6 +142,7 @@ def test_mxfp4_grouped_matmul_matches_dense(session: InferenceSession) -> None:
             TensorType(DType.float32, hidden.shape, device=DeviceRef.CPU()),
             TensorType(DType.uint8, blocks.shape, device=DeviceRef.CPU()),
             TensorType(DType.uint8, scales.shape, device=DeviceRef.CPU()),
+            TensorType(DType.float32, biases.shape, device=DeviceRef.CPU()),
             TensorType(DType.uint32, expert_offsets.shape, device=DeviceRef.CPU()),
             TensorType(DType.int32, expert_ids.shape, device=DeviceRef.CPU()),
             TensorType(DType.uint32, stats.shape, device=DeviceRef.CPU()),
@@ -156,12 +161,98 @@ def test_mxfp4_grouped_matmul_matches_dense(session: InferenceSession) -> None:
             graph.inputs[3].tensor,
             graph.inputs[4].tensor,
             graph.inputs[5].tensor,
+            graph.inputs[6].tensor,
         )
         graph.output(out)
 
     compiled = session.load(graph, custom_extensions=_CUSTOM_EXTENSIONS)
-    (result,) = compiled.execute(hidden, blocks, scales, expert_offsets, expert_ids, stats)
+    (result,) = compiled.execute(hidden, blocks, scales, biases, expert_offsets, expert_ids, stats)
     produced = result.to_numpy()
 
-    reference = _build_reference_outputs(hidden, decoded, expert_offsets)
+    reference = _build_reference_outputs(hidden, decoded, biases, expert_offsets)
+    np.testing.assert_allclose(produced, reference, rtol=2e-2, atol=2e-2)
+
+
+@pytest.mark.skipif(
+    accelerator_count() == 0, reason="GPU required for MXFP4 kernel test"
+)
+def test_mxfp4_grouped_matmul_matches_dense_gpu(
+    session: InferenceSession,
+) -> None:
+    rng = np.random.default_rng(1)
+    num_experts = 2
+    tokens_per_expert = [4, 1]
+    in_features = 64
+    out_features = 16
+
+    total_tokens = sum(tokens_per_expert)
+    hidden = rng.standard_normal((total_tokens, in_features), dtype=np.float32)
+
+    dense_weights = rng.standard_normal(
+        (num_experts, out_features, in_features), dtype=np.float32
+    ).astype(np.float32)
+    blocks, scales, decoded = _quantize_mxfp4(dense_weights)
+    biases = rng.standard_normal((num_experts, out_features), dtype=np.float32)
+
+    expert_offsets = np.zeros(num_experts + 1, dtype=np.uint32)
+    cursor = 0
+    for idx, count in enumerate(tokens_per_expert, start=1):
+        cursor += count
+        expert_offsets[idx] = cursor
+
+    expert_ids = np.arange(num_experts, dtype=np.int32)
+    stats = np.array([max(tokens_per_expert), num_experts], dtype=np.uint32)
+
+    graph = Graph(
+        "mxfp4_grouped_matmul_gpu",
+        input_types=[
+            TensorType(DType.float32, hidden.shape, device=DeviceRef.GPU()),
+            TensorType(DType.uint8, blocks.shape, device=DeviceRef.GPU()),
+            TensorType(DType.uint8, scales.shape, device=DeviceRef.GPU()),
+            TensorType(DType.float32, biases.shape, device=DeviceRef.GPU()),
+            TensorType(DType.uint32, expert_offsets.shape, device=DeviceRef.GPU()),
+            TensorType(DType.int32, expert_ids.shape, device=DeviceRef.GPU()),
+            TensorType(DType.uint32, stats.shape, device=DeviceRef.CPU()),
+        ],
+        output_types=[
+            TensorType(
+                DType.float32,
+                (total_tokens, out_features),
+                device=DeviceRef.GPU(),
+            ),
+        ],
+        custom_extensions=_CUSTOM_EXTENSIONS,
+    )
+
+    with graph:
+        out = grouped_mxfp4_matmul(
+            graph.inputs[0].tensor,
+            graph.inputs[1].tensor,
+            graph.inputs[2].tensor,
+            graph.inputs[3].tensor,
+            graph.inputs[4].tensor,
+            graph.inputs[5].tensor,
+            graph.inputs[6].tensor,
+        )
+        graph.output(out)
+
+    compiled = session.load(graph, custom_extensions=_CUSTOM_EXTENSIONS)
+
+    numpy_inputs = [
+        hidden,
+        blocks,
+        scales,
+        biases,
+        expert_offsets,
+        expert_ids,
+        stats,
+    ]
+    tensor_inputs: list[Tensor] = []
+    for arr, device in zip(numpy_inputs, compiled.input_devices, strict=True):
+        tensor_inputs.append(Tensor.from_dlpack(arr).to(device))
+
+    (result,) = compiled.execute(*tensor_inputs)
+    produced = result.to_numpy()
+
+    reference = _build_reference_outputs(hidden, decoded, biases, expert_offsets)
     np.testing.assert_allclose(produced, reference, rtol=2e-2, atol=2e-2)

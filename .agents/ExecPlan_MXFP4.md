@@ -19,6 +19,25 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
 - [ ] (2025-11-20 09:56Z) Add unit/kernel/integration tests and run an end-to-end inference smoke test proving VRAM savings and numerical parity.
 - [x] (2025-11-20 12:30Z) Added MXFP4 grouped matmul microbenchmark harness (`scripts/bench_mxfp4_matmul.py`) with MAX profiling hooks to measure kernel TPS without the serve path; initial scalar kernel hoisted per-block scale compute and paired-nibble decode for both GPU/CPU paths (kernel test still passes).
 - [x] (2025-11-20 13:10Z) Removed CPU hops for MoE stats: MXFP4 matmul now takes `max_num_tokens_per_expert`/`num_active_experts` tensors directly, and GPU/CPU kernel test updated accordingly; bench harness adjusted to match new signature.
+- [x] (2025-11-20 14:41Z) Cached per-output FP4 block decode into shared memory so tokens reuse weights inside each block and rebuilt `//max/kernels/src/nn:nn` to validate the kernel still compiles.
+- [x] (2025-11-20 15:10Z) Added GPU regression in `test_mxfp4_grouped_matmul_matches_dense_gpu` to cross-check kernel math against decoded dense reference on accelerators; retains CPU test for portability.
+- [x] (2025-11-20 15:35Z) Cached per-token activations for each FP4 block into shared memory to eliminate redundant global loads across 32 outputs per token, rebuilt `//max/kernels/src/nn:nn`.
+- [x] (2025-11-20 15:55Z) Fixed GPU regression test input devices (weights/activations on GPU, stats on CPU) and validated both CPU and GPU MXFP4 tests pass with current kernel.
+- [x] (2025-11-20 16:05Z) Unrolled the inner FP4 block accumulation 4-way to reduce loop overhead and rebuilt/validated CPU+GPU MXFP4 tests.
+- [x] (2025-11-20 15:30Z) Rebuilt `mogg_mxfp4.mojopkg` and cleared MAX compile/graph caches to prep for fresh server runs.
+- [x] (2025-11-20 16:25Z) Unrolled packed-byte decode 4-at-a-time to cut loop overhead during block decode; rebuilt and revalidated CPU+GPU MXFP4 tests.
+- [x] (2025-11-20 16:40Z) Rebuilt `mogg_mxfp4.mojopkg` and cleared MAX caches again after server restart to ensure latest kernel is used.
+- [x] (2025-11-20 16:45Z) Reduced MAX_THREADS_PER_BLOCK metadata from 512 to 256 to better match SM residency; rebuilt and revalidated CPU+GPU MXFP4 tests.
+- [x] (2025-11-20 16:55Z) Cut token tile to 8 (block_dim 32x8=256) to improve occupancy and shared footprint; rebuilt mojopkg and cleared caches, tests still pass.
+- [x] (2025-11-20 17:00Z) Reverted token tile back to 16 after throughput regression; decode/accum unrolling kept, metadata at 256 threads retained.
+- [x] (2025-11-20 17:15Z) Experimented with token tile 8 again but hit launch errors; rebuilt with metadata back to 512, then rebuilt mojopkg and cleared caches—CPU/GPU tests passing again, ready for serve run.
+- [x] (2025-11-20 17:20Z) Restored token tile 16 with metadata 512 and rebuilt/cleared caches; CPU+GPU regression tests passing again (good state for next perf run).
+- [x] (2025-11-20 17:30Z) Increased output tile to 64 and token tile to 4 (block_dim 64x4) to raise output parallelism with low shared footprint; rebuilt/cleared caches; CPU+GPU MXFP4 tests pass—ready to benchmark.
+- [x] (2025-11-20 17:32Z) Re-tiled the GPU kernel into GEMM-style tiles (BLOCK_N=64, BLOCK_M=8, K tiles span two FP4 blocks) with larger shared tiles to reuse decode work and keep math unchanged.
+- [x] (2025-11-20 17:35Z) Ran `pytest -k matches_dense` for the MXFP4 kernel with the packaged mojopkg; CPU and GPU parity checks still pass.
+- [x] (2025-11-20 17:50Z) Expanded K tiles to four FP4 blocks (K_TILE=128) with strided activation loads so all K values are staged in shared; GPU/CPU parity tests still pass.
+- [x] (2025-11-20 18:10Z) Fused per-expert bias into the MXFP4 kernel (GPU+CPU), updated Python bindings/call sites to pass bias, and adjusted tests/bench harness; parity tests with bias now pass on CPU+GPU.
+- [x] (2025-11-20 18:40Z) Reduced block_dim to a warpgroup-friendly 128 threads by setting TOKEN_TILE=2 (block_dim=64x2) to prep for WGMMA mapping; rebuilt mojopkg and re-ran bias-inclusive parity tests (pass).
 
 ## Surprises & Discoveries
 
@@ -43,6 +62,18 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
 - Decision: Store this ExecPlan alongside other planning docs and treat MXFP4 as an additional SupportedEncoding on the existing GPT-OSS architecture instead of a separate pipeline.  
   Rationale: Keeps planning artifacts co-located, honors .agents/PLANS.md guidance, and minimizes duplicate models while still allowing a user-visible flag.  
   Date/Author: 2025-11-19 / Codex
+- Decision: Use BLOCK_N=64, BLOCK_M=8, and two FP4 blocks per K tile in `mxfp4_grouped_matmul_kernel` to amortize decode cost across more tokens and set the layout up for a future WGMMA inner loop.  
+  Rationale: Larger shared tiles increase reuse per decode without changing math or the CPU path, and the fixed K tile makes mapping to tensor cores straightforward.  
+  Date/Author: 2025-11-20 / Codex
+- Decision: Increase K_TILE to four FP4 blocks (128 logical K values) and use strided activation loads so block_dim.x stays 64 while fully populating the shared activation tile.  
+  Rationale: Doubles reuse per decode and keeps launch geometry unchanged, improving arithmetic intensity without extra threads.  
+  Date/Author: 2025-11-20 / Codex
+- Decision: Fuse per-expert biases into the MXFP4 kernel and plumb bias tensors through Python bindings/tests instead of post-matmul gathers.  
+  Rationale: Removes two extra memory-bound bias-add passes per MoE call while keeping BF16 path semantics unchanged.  
+  Date/Author: 2025-11-20 / Codex
+- Decision: Drop TOKEN_TILE to 2 (block_dim 64x2 = 128 threads) to align each block with a warpgroup for future WGMMA integration while keeping output tile 64.  
+  Rationale: Matches Hopper warpgroup size, simplifies mapping to tensor cores, and keeps current numerics unchanged.  
+  Date/Author: 2025-11-20 / Codex
 
 ## Outcomes & Retrospective
 
@@ -81,6 +112,10 @@ Add a helper in `max/python/max/nn/kernels.py` such as `grouped_mxfp4_matmul(...
 ### Phase 6 – Tests, documentation, and validation hooks
 
 Author unit tests under `max/python/max/pipelines/architectures/gpt_oss/tests` that feed a toy safetensors map with `.blocks/.scales` pairs through `convert_safetensor_state_dict` and verify the shapes, dtypes, and `quantization_encoding`. Add a kernel-level test (Bazel target under `max/tests/integration/API/python/graph`) that instantiates a ragged matmul graph with random MXFP4 weights, compares outputs to a CPU reference that decodes to BF16, and runs on both GPU (fast) and CPU (decode fallback). Include a pipeline integration test that builds a tiny GPT-OSS config (handful of experts, small dims), loads random data in MXFP4, and asserts the quantized path matches the BF16 path to within 1e-2 relative tolerance. Document the new CLI usage in `README.md` or an architecture-specific doc, mentioning memory footprint expectations and hardware requirements (H100 / SM90). Update release notes or `ref-docs/FEATURE_OVERVIEW.md` to mark the plan executed.
+
+### Phase 7 – Re-tile the MXFP4 kernel for tensor-core readiness
+
+Rewrite the GPU kernel in `max/kernels/src/nn/moe_mxfp4.mojo` to mirror a tiled GEMM: choose fixed tile sizes (e.g., `BLOCK_N=64` outputs, `BLOCK_M` tokens per block, and `BLOCK_K_BLOCKS=2` FP4 blocks per K-iteration so each tile covers 64 logical K values). For each expert/block, load a `[BLOCK_N x BLOCK_K]` slice of weights from packed MXFP4 into shared memory by decoding `BLOCK_K_BLOCKS` scale bytes and their packed payloads; load a `[BLOCK_M x BLOCK_K]` activation slice into shared memory; then accumulate into FP32 registers across the K tile before advancing. Keep grid mapping as `(ceildiv(N, BLOCK_N), ceildiv(tokens, BLOCK_M), num_active_experts)`, guard edges, and size shared buffers with the max K tile. Preserve CPU behavior and Python bindings, but structure shared-memory layouts and per-thread roles so the inner loop can later be swapped to WGMMA. Validate numerics against the CPU fallback and existing regression tests after the refactor.
 
 ## Concrete Steps
 
@@ -124,6 +159,10 @@ Record short transcripts demonstrating:
     python -m max.pipelines.run --arch gpt_oss --encoding mxfp4 --prompt "hi" ...
       MXFP4 mode enabled for 36 MoE layers
       Generated: "Hello there..."
+
+    MXFP4_KERNEL_PACKAGE=$PWD/bazel-bin/max/kernels/src/custom_ops/mogg_mxfp4/mogg_mxfp4.mojopkg PYTHONPATH=$PWD/max/python pixi run python -m pytest max/tests/integration/API/python/graph/test_mxfp4_moe_kernel.py -k "matches_dense" -q
+      .. [100%]
+      2 passed in 14.07s
 
 Attach those snippets (trimmed to essentials) here when available so future contributors can see the expected console output without re-running.
 

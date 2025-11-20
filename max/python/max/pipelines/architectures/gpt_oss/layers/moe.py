@@ -310,6 +310,7 @@ class GptOssMoE(MoE, Shardable):
                 permutated_states,
                 gate_blocks,
                 gate_scales,
+                self.gate_up_proj_bias_stacked,
                 expert_start_indices,
                 expert_ids,
                 expert_usage_stats_host,
@@ -327,10 +328,11 @@ class GptOssMoE(MoE, Shardable):
         # We need to gather the bias for each token based on which expert it was routed to
         # router_idx contains the expert assignment for each token
         expert_assignments = ops.gather(router_idx, token_expert_order, axis=0)
-        bias_per_token = ops.gather(
-            self.gate_up_proj_bias_stacked, expert_assignments, axis=0
-        )
-        gate_up_output = gate_up_output + bias_per_token
+        if not self._use_mxfp4:
+            bias_per_token = ops.gather(
+                self.gate_up_proj_bias_stacked, expert_assignments, axis=0
+            )
+            gate_up_output = gate_up_output + bias_per_token
 
         # Split gate and up projections (interleaved: [gate, up, gate, up, ...])
         gate = gate_up_output[:, 0::2]
@@ -367,6 +369,7 @@ class GptOssMoE(MoE, Shardable):
                 gated_output,
                 down_blocks,
                 down_scales,
+                self.down_proj_bias_stacked,
                 expert_start_indices,
                 expert_ids,
                 expert_usage_stats_host,
@@ -382,11 +385,11 @@ class GptOssMoE(MoE, Shardable):
 
         # Apply bias based on expert assignment
         # Use the same expert assignments we calculated earlier
-        down_bias_per_token = ops.gather(
-            self.down_proj_bias_stacked, expert_assignments, axis=0
-        )
-        down_output = down_output + down_bias_per_token
-
+        if not self._use_mxfp4:
+            down_bias_per_token = ops.gather(
+                self.down_proj_bias_stacked, expert_assignments, axis=0
+            )
+            down_output = down_output + down_bias_per_token
         # Reshape and apply routing weights
         down_output = ops.gather(
             down_output, restore_token_order, axis=0

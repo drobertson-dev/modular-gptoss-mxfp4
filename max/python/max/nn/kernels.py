@@ -1907,6 +1907,7 @@ def grouped_mxfp4_matmul(
     hidden_states: TensorValue,
     packed_weight: TensorValue,
     packed_scales: TensorValue,
+    bias: TensorValue,
     expert_start_indices: TensorValue,
     expert_ids: TensorValue,
     expert_usage_stats_host: TensorValue,
@@ -1951,6 +1952,20 @@ def grouped_mxfp4_matmul(
             f"(got {packed_weight.dtype} and {packed_scales.dtype})"
         )
 
+    if bias.rank != 2:
+        raise ValueError(
+            f"bias must have rank 2 but got {bias.rank}"
+        )
+    if bias.shape[0] != packed_weight.shape[0] or bias.shape[1] != packed_weight.shape[1]:
+        raise ValueError(
+            "bias shape must match packed_weight expert/out dims "
+            f"(got {bias.shape} vs {(packed_weight.shape[0], packed_weight.shape[1])})"
+        )
+    if bias.dtype != hidden_states.dtype:
+        raise TypeError(
+            f"bias dtype must match hidden_states ({hidden_states.dtype}), got {bias.dtype}"
+        )
+
     _maybe_import_mxfp4_extensions()
 
     preferred_name = os.environ.get(
@@ -1971,6 +1986,7 @@ def grouped_mxfp4_matmul(
                     hidden_states,
                     packed_weight,
                     packed_scales,
+                    bias,
                     expert_start_indices,
                     expert_ids,
                     expert_usage_stats_host[0],
