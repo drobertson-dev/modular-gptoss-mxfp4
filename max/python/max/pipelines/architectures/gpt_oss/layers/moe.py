@@ -112,7 +112,7 @@ class GptOssMoE(MoE, Shardable):
         """
         # Store GptOss-specific parameters
         self.alpha = 1.702
-        self.limit = 7.0
+        self.limit = config.swiglu_limit
 
         self.config = config
         self._sharding_strategy = None
@@ -340,9 +340,9 @@ class GptOssMoE(MoE, Shardable):
         gate = ops.min(gate, self.limit)
         up = clamp(up, min=-self.limit, max=self.limit)
 
-        # GptOss-style activation: gate * sigmoid(gate * alpha) * (up + 1)
-        glu = gate * ops.sigmoid(gate * self.alpha)
-        gated_output = (up + 1.0) * glu
+        # GptOss-style activation: (gate + 1) * (up * sigmoid(up * alpha))
+        up = up * ops.sigmoid(up * self.alpha)
+        gated_output = (gate + 1.0) * up
 
         # Apply down projection
         if self._use_mxfp4:
