@@ -1909,7 +1909,8 @@ def grouped_mxfp4_matmul(
     packed_scales: TensorValue,
     expert_start_indices: TensorValue,
     expert_ids: TensorValue,
-    expert_usage_stats_host: TensorValue,
+    max_num_tokens_per_expert: TensorValue,
+    num_active_experts: TensorValue,
 ) -> TensorValue:
     """MXFP4 grouped matmul variant used in quantized MoE layers."""
 
@@ -1973,8 +1974,8 @@ def grouped_mxfp4_matmul(
                     packed_scales,
                     expert_start_indices,
                     expert_ids,
-                    expert_usage_stats_host[0],
-                    expert_usage_stats_host[1],
+                    max_num_tokens_per_expert,
+                    num_active_experts,
                 ],
                 out_types=[
                     TensorType(

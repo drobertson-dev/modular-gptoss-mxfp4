@@ -18,6 +18,7 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
 - [x] (2025-11-20 09:56Z) Deduplicated the MXFP4 kernel by reusing `nn.moe_mxfp4` inside the `mogg_mxfp4` custom package to keep one implementation.
 - [ ] (2025-11-20 09:56Z) Add unit/kernel/integration tests and run an end-to-end inference smoke test proving VRAM savings and numerical parity.
 - [x] (2025-11-20 12:30Z) Added MXFP4 grouped matmul microbenchmark harness (`scripts/bench_mxfp4_matmul.py`) with MAX profiling hooks to measure kernel TPS without the serve path; initial scalar kernel hoisted per-block scale compute and paired-nibble decode for both GPU/CPU paths (kernel test still passes).
+- [x] (2025-11-20 13:10Z) Removed CPU hops for MoE stats: MXFP4 matmul now takes `max_num_tokens_per_expert`/`num_active_experts` tensors directly, and GPU/CPU kernel test updated accordingly; bench harness adjusted to match new signature.
 
 ## Surprises & Discoveries
 
