@@ -263,7 +263,7 @@ fn mxfp4_grouped_matmul_sm90_kernel[
 
     var st_matrix_rt_layout = RuntimeLayout[
         st_matrix_n_layout[
-            accum_type, block_n, num_m_mmas, /*num_consumer*/ 1
+            accum_type, block_n, num_m_mmas, 1
         ](),
         element_type = DType.int32,
         linear_idx_type = DType.int32,
