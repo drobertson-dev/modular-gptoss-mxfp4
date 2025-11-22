@@ -32,7 +32,7 @@ from gpu.mma import st_matrix
 from gpu.memory import AddressSpace
 from layout import Layout, LayoutTensor
 from layout._ndbuffer_stub import from_ndbuffer_row_major
-from layout.runtime_layout import RuntimeLayout, UNKNOWN_VALUE
+from layout.runtime_layout import RuntimeLayout, RuntimeTuple, UNKNOWN_VALUE
 from layout.tensor_core_async import (
     TensorCoreAsync,
     st_matrix_n_layout,
