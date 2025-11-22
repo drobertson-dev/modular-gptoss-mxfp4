@@ -51,7 +51,7 @@ from transformers import PreTrainedTokenizerFast
 if TYPE_CHECKING:
     from ..config import PipelineConfig
 
-from ..config_enums import RepoType
+from ..config_enums import RepoType, SupportedEncoding
 from ..custom_extensions import collect_custom_extensions_from_env
 from ..hf_utils import download_weight_files
 from ..interfaces import PipelineModel
@@ -169,10 +169,35 @@ class TextGenerationPipeline(
         # Initialize Session.
         from max.engine import InferenceSession  # local import to avoid cycles
 
+        extensions_env = environ.get("MAX_CUSTOM_EXTENSIONS")
         custom_extension_paths = collect_custom_extensions_from_env(
-            environ.get("MAX_CUSTOM_EXTENSIONS"),
+            extensions_env,
             logger=logger,
         )
+        requested_encoding = (
+            self._pipeline_config.model_config.quantization_encoding
+        )
+        if (
+            requested_encoding == SupportedEncoding.mxfp4
+            and not custom_extension_paths
+        ):
+            hint = (
+                "Build the MXFP4 kernel (e.g. `pixi run mxfp4-build`) and "
+                "ensure `MAX_CUSTOM_EXTENSIONS` points at the resulting "
+                "`.mojopkg` (see `scripts/mxfp4_env.sh`)."
+            )
+            if extensions_env:
+                hint = (
+                    f"MAX_CUSTOM_EXTENSIONS={extensions_env!r} does not "
+                    "resolve to any Mojo packages. "
+                ) + hint
+            else:
+                hint = (
+                    "MAX_CUSTOM_EXTENSIONS is unset. "
+                ) + hint
+            raise RuntimeError(
+                "MXFP4 quantization requires a custom Mojo extension. " + hint
+            )
         if custom_extension_paths:
             logger.info(
                 "Loading %d custom Mojo extension(s)",

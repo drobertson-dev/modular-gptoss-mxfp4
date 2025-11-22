@@ -3,36 +3,92 @@
 Repo root: `/workspace/modular-gptoss-mxfp4`
 
 ## Building the custom Mojo package
+
+```bash
+pixi run mxfp4-build
 ```
-./bazelw build //max/kernels/src/custom_ops/mogg_mxfp4:mogg_mxfp4
-```
-Result: `bazel-bin/max/kernels/src/custom_ops/mogg_mxfp4/mogg_mxfp4.mojopkg`
+
+This wraps `scripts/mxfp4_build.sh`, which in turn runs `./bazelw build //max/kernels/src/custom_ops/mogg_mxfp4:mogg_mxfp4`, validates the artifact, and records its absolute path in `.mxfp4-package-path`. The environment hook reads that cache so every Pixi shell automatically exports `MXFP4_KERNEL_PACKAGE` and `MAX_CUSTOM_EXTENSIONS` without guessing paths.
 
 ## Running the integration test
-```
-MXFP4_KERNEL_PACKAGE=$PWD/bazel-bin/max/kernels/src/custom_ops/mogg_mxfp4/mogg_mxfp4.mojopkg \
-PYTHONPATH=$PWD/max/python \
-pixi run python -m pytest max/tests/integration/API/python/graph/test_mxfp4_moe_kernel.py \
-    -k test_mxfp4_grouped_matmul_matches_dense -q
+
+```bash
+pixi run mxfp4-test
 ```
 
+The task depends on `mxfp4-build`, sources `scripts/mxfp4_env.sh`, runs the Mojo unit test (`max/kernels/test/mxfp4_mojo/test_mxfp4.mojo`), and executes the Python integration check `test_mxfp4_grouped_matmul_matches_dense` for parity with the dense path.
+
 ## Serving GPT-OSS with MXFP4
+
+```bash
+pixi run mxfp4-serve
 ```
-export MAX_CUSTOM_EXTENSIONS=$PWD/bazel-bin/max/kernels/src/custom_ops/mogg_mxfp4/mogg_mxfp4.mojopkg
-export MAX_ALLOW_UNSUPPORTED_ENCODING=1
-PYTHONPATH=$PWD/max/python pixi run python -m max.entrypoints.pipelines serve \
-    --model openai/gpt-oss-120b \
-    --quantization-encoding mxfp4 \
-    --devices gpu \
-    --force
+
+Like the other tasks, this rebuilds the kernel if needed, sources the env helper, and then launches `max.entrypoints.pipelines serve --model openai/gpt-oss-20b --quantization-encoding mxfp4 --devices gpu --force`. Because the environment hook sets `MAX_ALLOW_UNSUPPORTED_ENCODING=1`, there is no need to export it manually.
+
+## Running the Mojo CLI tests
+
+Pixi sources `scripts/mxfp4_env.sh` on every `pixi run`/`pixi shell`. The helper reads `.mojo-import-paths`, prepends those entries plus the SDK defaults to `MODULAR_MOJO_MAX_IMPORT_PATH`, exports `PYTHONPATH`, and injects the freshly built `.mojopkg` into `MAX_CUSTOM_EXTENSIONS`. Inside a Pixi-managed shell (including VS Code when launched via `pixi run code`), invoking `mojo` anywhere inside the workspace will locate `nn.moe_mxfp4`.
+
+Outside Pixi, source the script manually:
+
+```bash
+source scripts/mxfp4_env.sh
 ```
+
+With the activation hook enabled, the standard MXFP4 Mojo tests work directly:
+
+```bash
+pixi run mojo run -I max/kernels/src max/kernels/test/mxfp4_mojo/test_mxfp4.mojo
+```
+
 During startup you should see `Loading 1 custom Mojo extension(s)` and the compile step should finish in ~10–12 seconds.
 
 ## Environment reminders
+
+- To avoid path drift, you can source `scripts/mxfp4_env.sh` to export the Mojo
+    search paths (`MODULAR_MOJO_MAX_IMPORT_PATH`) and `PYTHONPATH` before running
+    tests or launching the debugger. The script also keeps `MAX_CUSTOM_EXTENSIONS`
+    in sync with `.mxfp4-package-path` and clears the MAX cache for reproducible runs.
 - Pixi environment is pinned to Python 3.11.14 (see `pixi.toml`).
 - `MAX_CUSTOM_EXTENSIONS` can list multiple `.mojopkg` paths separated by `:`.
 - `grouped_mxfp4_matmul` first tries `mo.moe.mx4.matmul` then `custom.moe.mx4.matmul`. Override via `MAX_MXFP4_KERNEL_OP` if needed.
 
+## Runtime guard for MXFP4 quantization
+
+`max.pipelines.lib.pipeline_variants.TextGenerationPipeline` now refuses to start with `--quantization-encoding mxfp4` unless at least one `.mojopkg` is discoverable via `MAX_CUSTOM_EXTENSIONS`. The failure message points at `pixi run mxfp4-build` and `scripts/mxfp4_env.sh`. This keeps serve runs honest—if the custom op drops out of your environment, the pipeline exits immediately instead of silently falling back to unsupported kernels.
+
+## Debugging from VS Code
+
+The repo now ships with a ready-to-use Mojo launch configuration under `.vscode/launch.json` named **Debug MXFP4 Mojo tests**. It launches
+`max/kernels/test/mxfp4_mojo/test_mxfp4.mojo` via the Mojo LLDB adapter with the right environment so we can breakpoint the GPU/CPU kernels
+without reinventing the import plumbing each time.
+
+Prerequisites:
+
+- Install the Mojo VS Code extension (plus the Python extension it depends on).
+- Point the Python extension at the Pixi interpreter (Command Palette → *Python: Select Interpreter* → choose `.pixi/envs/default/bin/python`).
+- Make sure the Pixi environment already has the `modular` SDK installed (`pixi install` in the repo root covers this).
+
+What the launch config does:
+
+- Sets `PYTHONPATH=${workspaceFolder}/max/python` so the test suite can import MAX Python helpers.
+- Extends `MODULAR_MOJO_MAX_IMPORT_PATH` with `${workspaceFolder}/max/kernels/src` so Mojo resolves the local kernel sources before falling
+    back to the SDK copies.
+- Enables `MODULAR_DEVICE_CONTEXT_SYNC_MODE=true` to force synchronous device execution (handy for debugging the CUDA illegal address).
+- Runs inside `${workspaceFolder}` and spawns the debugger in a dedicated terminal so stdio is interactive.
+
+Using it:
+
+1. Open the Run and Debug view (`Ctrl+Shift+D`) and select **Debug MXFP4 Mojo tests**.
+2. (Optional) Set `MAX_MXFP4_FORCE_GENERIC_GPU=1` in your VS Code environment or the integrated terminal before launching if you want to
+    force the generic kernel path.
+3. Hit F5. Execution pauses on your first breakpoint; otherwise it will run until the CUDA error reproduces and the debugger halts.
+
+Because the configuration relies on VS Code's environment resolution, any extra tweaks (e.g. toggling kernel variants, DEBUG flags, etc.) can
+be layered on by editing `.vscode/launch.json` or exporting variables in the terminal that launches VS Code.
+
 ## Clean-up performed
+
 - Removed `serve.log` and generated `kvcache_agent_service_v1_pb2*.py` files.
 - All MXFP4-related changes live under `max/kernels/src/custom_ops/mogg_mxfp4` and the new helper `max/python/max/pipelines/lib/custom_extensions.py`.

@@ -30,11 +30,11 @@ mojo_library(
 
 mojo_library(
     name = "MOGGMxfp4Extension",
-    srcs = ["MXFP4Extension.mojo"],
+    srcs = ["MXFP4Extension.mojo", "__init__.mojo"],
     deps = [
-        "@mojo//:compiler_internal",
+        "//max:compiler_internal",
+        "//max:tensor",
         "@mojo//:stdlib",
-        "@mojo//:tensor",
         "//max/kernels/src/nn:nn",
     ],
 )

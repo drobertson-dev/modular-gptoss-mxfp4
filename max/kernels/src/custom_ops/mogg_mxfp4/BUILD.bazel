@@ -7,9 +7,8 @@ mojo_library(
     srcs = glob(["mogg/*.mojo"]),
     deps = [
         "//max/kernels/src/nn:nn",
-        "@mojo//:compiler_internal",
-        "@mojo//:layout",
+        "//max:compiler_internal",
+        "//max:tensor",
         "@mojo//:stdlib",
-        "@mojo//:tensor",
     ],
 )
