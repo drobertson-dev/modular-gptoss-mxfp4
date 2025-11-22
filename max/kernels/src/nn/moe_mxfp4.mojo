@@ -12,7 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from math import ceildiv, ldexp, exp
-from sys import align_of, env_get_bool
+from sys import env_get_bool
 
 from buffer.buffer import NDBuffer
 from buffer.dimlist import DimList
@@ -273,8 +273,7 @@ fn mxfp4_grouped_matmul_sm90_kernel[
     var c_smem_ptr = c_smem.ptr.offset(lane_offset)
 
     var c_reg_vec2 = c_reg.vectorize[1, 2]()
-    alias VecType = c_reg_vec2.element_type
-
+    # Scalarize stores to avoid over-promising alignment on shared destinations.
     @parameter
     for mma_id in range(tile_to_idx.size()):
         alias mma_idx = tile_to_idx(mma_id)
@@ -282,11 +281,15 @@ fn mxfp4_grouped_matmul_sm90_kernel[
         @parameter
         for frag_idx_v2 in range(c_reg_vec2.layout[1].size()):
             alias frag_idx = frag_idx_v2 * 2
-            alias v_idx = v_to_idx(frag_idx)
-            alias dst_idx = v_idx + mma_idx
-            c_smem_ptr.offset(dst_idx).store[alignment = align_of[VecType]()](
-                (c_reg_vec2[mma_id, frag_idx_v2])
-            )
+            var frag = c_reg_vec2[mma_id, frag_idx_v2]
+
+            alias v_idx_0 = v_to_idx(frag_idx)
+            alias dst_idx_0 = v_idx_0 + mma_idx
+            c_smem_ptr[dst_idx_0] = frag[0]
+
+            alias v_idx_1 = v_to_idx(frag_idx + 1)
+            alias dst_idx_1 = v_idx_1 + mma_idx
+            c_smem_ptr[dst_idx_1] = frag[1]
 
     barrier()
 

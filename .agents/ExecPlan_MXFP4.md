@@ -39,6 +39,7 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
 - [x] (2025-11-20 18:10Z) Fused per-expert bias into the MXFP4 kernel (GPU+CPU), updated Python bindings/call sites to pass bias, and adjusted tests/bench harness; parity tests with bias now pass on CPU+GPU.
 - [x] (2025-11-20 18:40Z) Reduced block_dim to a warpgroup-friendly 128 threads by setting TOKEN_TILE=2 (block_dim=64x2) to prep for WGMMA mapping; rebuilt mojopkg and re-ran bias-inclusive parity tests (pass).
 - [x] (2025-11-20 19:20Z) Added fused MXFP4 gate/up + SwiGLU kernel/op (mo/custom.moe.mx4.matmul_swiglu), Python wrapper, and MXFP4 MoE callsite; added CPU/GPU regression tests with bias and fused activation and restored passing state.
+- [x] (2025-11-22 18:00Z) Scalarized SM90 C write-back (registers → shared) to eliminate misaligned vector stores causing `CUDA_ERROR_MISALIGNED_ADDRESS`; GPU MXFP4 regression tests to be rerun.
 
 ## Surprises & Discoveries
 
@@ -78,6 +79,9 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
 - Decision: Add a fused MXFP4 gate/up + SwiGLU kernel and route MXFP4 MoE through it while keeping BF16 path untouched; reuse a single shared weight tile to stay under shared memory limits.  
   Rationale: Removes the Python-side activation for MXFP4, reduces memory traffic, and keeps GPU kernels within shared memory limits.  
   Date/Author: 2025-11-20 / Codex
+- Decision: Keep the SM90 WGMMA C tile in row-major shared memory but scalarize register write-back instead of `vector[accum_type, 2]` stores until a st.matrix-based epilogue is in place.  
+  Rationale: Prevents `CUDA_ERROR_MISALIGNED_ADDRESS` without changing tiling/layout choices, buying time to wire st_matrix_n_layout safely.  
+  Date/Author: 2025-11-22 / Codex
 
 ## Outcomes & Retrospective
 
