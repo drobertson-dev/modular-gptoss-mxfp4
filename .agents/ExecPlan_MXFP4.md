@@ -40,6 +40,7 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
 - [x] (2025-11-20 18:40Z) Reduced block_dim to a warpgroup-friendly 128 threads by setting TOKEN_TILE=2 (block_dim=64x2) to prep for WGMMA mapping; rebuilt mojopkg and re-ran bias-inclusive parity tests (pass).
 - [x] (2025-11-20 19:20Z) Added fused MXFP4 gate/up + SwiGLU kernel/op (mo/custom.moe.mx4.matmul_swiglu), Python wrapper, and MXFP4 MoE callsite; added CPU/GPU regression tests with bias and fused activation and restored passing state.
 - [x] (2025-11-22 18:00Z) Scalarized SM90 C write-back (registers → shared) to eliminate misaligned vector stores causing `CUDA_ERROR_MISALIGNED_ADDRESS`; GPU MXFP4 regression tests to be rerun.
+- [ ] (2025-11-22 18:45Z) Rewired SM90 epilogue to use tensor core layouts (row-major c_reg fragments + `st_matrix_n_layout` + `st.matrix` write-back) for aligned shared stores; pending rebuild/tests.
 
 ## Surprises & Discoveries
 
@@ -81,6 +82,9 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
   Date/Author: 2025-11-20 / Codex
 - Decision: Keep the SM90 WGMMA C tile in row-major shared memory but scalarize register write-back instead of `vector[accum_type, 2]` stores until a st.matrix-based epilogue is in place.  
   Rationale: Prevents `CUDA_ERROR_MISALIGNED_ADDRESS` without changing tiling/layout choices, buying time to wire st_matrix_n_layout safely.  
+  Date/Author: 2025-11-22 / Codex
+- Decision: Switch SM90 epilogue to tensor-core-friendly mapping (row-major fragment tiles, `st_matrix_n_layout`, and `st.matrix` stores) to regain alignment and performance headroom over the scalar checkpoint.  
+  Rationale: Uses the intended layout abstractions for WGMMA C write-back and restores 16B-aligned shared stores without manual offset math.  
   Date/Author: 2025-11-22 / Codex
 
 ## Outcomes & Retrospective

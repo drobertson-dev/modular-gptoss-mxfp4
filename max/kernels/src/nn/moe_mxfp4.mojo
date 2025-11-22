@@ -12,7 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from math import ceildiv, ldexp, exp
-from sys import env_get_bool
+from sys import env_get_bool, size_of
 
 from buffer.buffer import NDBuffer
 from buffer.dimlist import DimList
@@ -28,17 +28,19 @@ from gpu import (
 from gpu.host import DeviceContext
 from gpu.host.info import H100, is_cpu, is_gpu
 from gpu.host.nvidia.tma import TensorMapSwizzle
+from gpu.mma import st_matrix
 from gpu.memory import AddressSpace
 from layout import Layout, LayoutTensor
 from layout._ndbuffer_stub import from_ndbuffer_row_major
-from layout.runtime_layout import RuntimeLayout
+from layout.runtime_layout import RuntimeLayout, UNKNOWN_VALUE
 from layout.tensor_core_async import (
     TensorCoreAsync,
+    st_matrix_n_layout,
     tile_layout_k_major,
     warpgroup_fence,
-    wgmma_c_layout,
 )
 from memory import LegacyUnsafePointer as UnsafePointer, stack_allocation
+from memory import bitcast
 from utils.index import Index
 from utils.static_tuple import StaticTuple
 from utils.numerics import get_accum_type
@@ -169,20 +171,12 @@ fn mxfp4_grouped_matmul_sm90_kernel[
         address_space = AddressSpace.SHARED,
     ].stack_allocation()
 
-    # --- C layouts: registers + mapping to shared ---
-
-    alias c_layouts = wgmma_c_layout[
-        _WGMMA_M,  # mma_m
-        _WGMMA_N,  # mma_n
-        c_smem.layout,  # final layout in shared
-    ]()
-    alias c_reg_layout = c_layouts[0]
-    alias tv_tile_to_idx_const = c_layouts[2]
-    alias tv_to_idx_const = tv_tile_to_idx_const[0]
-    alias tile_to_idx = tv_to_idx_const[1]
-    alias t_to_idx_const = tv_to_idx_const[0]
-    alias v_to_idx = tv_to_idx_const[1]
-
+    alias num_m_mmas = block_m // _WGMMA_M
+    alias num_n_mmas = block_n // _WGMMA_N
+    alias c_frag_size = _WGMMA_M * _WGMMA_N // 128
+    alias c_reg_layout = Layout.row_major(
+        num_m_mmas * num_n_mmas, c_frag_size
+    )
     var c_reg = LayoutTensor[
         accum_type,
         c_reg_layout,
@@ -265,31 +259,52 @@ fn mxfp4_grouped_matmul_sm90_kernel[
 
         barrier()
 
-    # --- move C fragments from registers -> shared row-major ---
+    # --- move C fragments from registers -> shared using st.matrix layout ---
 
-    var t_to_idx = RuntimeLayout[t_to_idx_const]()
-    var linear_tid = Int(thread_idx.y) * Int(block_dim.x) + Int(thread_idx.x)
-    var lane_offset = t_to_idx(linear_tid)
-    var c_smem_ptr = c_smem.ptr.offset(lane_offset)
+    var st_matrix_rt_layout = RuntimeLayout[
+        st_matrix_n_layout[
+            accum_type, block_n, num_m_mmas, /*num_consumer*/ 1
+        ](),
+        element_type = DType.int32,
+        linear_idx_type = DType.int32,
+    ]()
+    alias ST_MATRIX_WIDTH_BYTES = 16
+    alias elements_per_store = ST_MATRIX_WIDTH_BYTES // size_of[accum_type]()
+    alias num_n_frags = c_frag_size // elements_per_store
+    var warp_group_thread_idx = (
+        Int(thread_idx.y) * Int(block_dim.x) + Int(thread_idx.x)
+    )
+    var c_reg_vec = c_reg.vectorize[1, elements_per_store]()
 
-    var c_reg_vec2 = c_reg.vectorize[1, 2]()
-    # Scalarize stores to avoid over-promising alignment on shared destinations.
     @parameter
-    for mma_id in range(tile_to_idx.size()):
-        alias mma_idx = tile_to_idx(mma_id)
+    for m_frag in range(num_m_mmas):
 
         @parameter
-        for frag_idx_v2 in range(c_reg_vec2.layout[1].size()):
-            alias frag_idx = frag_idx_v2 * 2
-            var frag = c_reg_vec2[mma_id, frag_idx_v2]
+        for n_frag in range(num_n_frags):
+            var st_args = RuntimeTuple[
+                IntTuple(UNKNOWN_VALUE, IntTuple(n_frag, m_frag, UNKNOWN_VALUE))
+            ](warp_group_thread_idx, n_frag, m_frag, 0)
+            var accum_smem_idx = st_matrix_rt_layout(st_args)
 
-            alias v_idx_0 = v_to_idx(frag_idx)
-            alias dst_idx_0 = v_idx_0 + mma_idx
-            c_smem_ptr[dst_idx_0] = frag[0]
+            var reg_fragment = c_reg_vec.tile[1, elements_per_store](
+                m_frag, n_frag
+            )
+            var frag = reg_fragment.load[elements_per_store](0, 0)
 
-            alias v_idx_1 = v_to_idx(frag_idx + 1)
-            alias dst_idx_1 = v_idx_1 + mma_idx
-            c_smem_ptr[dst_idx_1] = frag[1]
+            @parameter
+            if size_of[accum_type]() == 2:
+                alias packed_width = elements_per_store // 2
+                var packed = bitcast[DType.float32, packed_width](
+                    frag.cast[accum_type]()
+                )
+                st_matrix[simd_width=packed_width](
+                    c_smem.ptr.offset(accum_smem_idx), packed
+                )
+            else:
+                st_matrix[simd_width=elements_per_store](
+                    c_smem.ptr.offset(accum_smem_idx),
+                    frag.cast[DType.float32](),
+                )
 
     barrier()
 
