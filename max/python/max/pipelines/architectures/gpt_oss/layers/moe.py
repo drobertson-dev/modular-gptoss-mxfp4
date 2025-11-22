@@ -307,7 +307,7 @@ class GptOssMoE(MoE, Shardable):
                     self.hidden_dim // 32,
                 ],
             )
-            gate_up_output = grouped_mxfp4_matmul_swiglu(
+            gate_up_output = grouped_mxfp4_matmul(
                 permutated_states,
                 gate_blocks,
                 gate_scales,
@@ -315,8 +315,6 @@ class GptOssMoE(MoE, Shardable):
                 expert_start_indices,
                 expert_ids,
                 expert_usage_stats_host,
-                alpha=float(self.alpha),
-                limit=float(self.limit),
             )
         else:
             gate_up_output = grouped_matmul_ragged(
@@ -348,9 +346,6 @@ class GptOssMoE(MoE, Shardable):
             # GptOss-style activation: gate * sigmoid(gate * alpha) * (up + 1)
             glu = gate * ops.sigmoid(gate * self.alpha)
             gated_output = (up + 1.0) * glu
-        else:
-            # MXFP4 path already returns fused SwiGLU output of shape [tokens, moe_dim]
-            gated_output = gate_up_output
 
         # Apply down projection
         if self._use_mxfp4:
