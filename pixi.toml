@@ -1,12 +1,15 @@
 [workspace]
-channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
 name = "modular-gptoss-mxfp4"
-platforms = ["linux-64"]
+channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
+platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
+mxfp4-build = "bash scripts/mxfp4_build.sh"
+mxfp4-test = { depends-on = ["mxfp4-build"], cmd = "bash -c 'set -euo pipefail; source scripts/mxfp4_env.sh; mojo run -I max/kernels/src max/kernels/test/mxfp4_mojo/test_mxfp4.mojo; python -m pytest max/tests/integration/API/python/graph/test_mxfp4_moe_kernel.py -k test_mxfp4_grouped_matmul_matches_dense -q'" }
+mxfp4-serve = { cmd = "bash -c 'set -euo pipefail; source scripts/mxfp4_env.sh; python -m max.entrypoints.pipelines serve --model openai/gpt-oss-20b --devices gpu --force'" }
 
 [dependencies]
 mojo = ">=0.26.1.0.dev2025112005,<0.27"
-modular = ">=26.1.0.dev2025112005,<27"
+modular = ">=26.1.0.dev2025112205,<27"
 python = ">=3.11.0,<3.12"

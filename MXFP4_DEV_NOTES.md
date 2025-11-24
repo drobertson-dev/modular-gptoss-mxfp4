@@ -8,7 +8,7 @@ Repo root: `/workspace/modular-gptoss-mxfp4`
 pixi run mxfp4-build
 ```
 
-This wraps `scripts/mxfp4_build.sh`, which in turn runs `./bazelw build //max/kernels/src/custom_ops/mogg_mxfp4:mogg_mxfp4`, validates the artifact, and records its absolute path in `.mxfp4-package-path`. The environment hook reads that cache so every Pixi shell automatically exports `MXFP4_KERNEL_PACKAGE` and `MAX_CUSTOM_EXTENSIONS` without guessing paths.
+This wraps `scripts/mxfp4_build.sh`, which runs `./bazelw build //max/kernels/src/Mogg/MOGGKernelAPI:MOGGKernelAPI` (and the custom package) and prints the resulting `.mojopkg` path. No cache file is written; use the printed path directly when exporting `MAX_CUSTOM_EXTENSIONS`.
 
 ## Running the integration test
 
@@ -28,7 +28,7 @@ Like the other tasks, this rebuilds the kernel if needed, sources the env helper
 
 ## Running the Mojo CLI tests
 
-Pixi sources `scripts/mxfp4_env.sh` on every `pixi run`/`pixi shell`. The helper reads `.mojo-import-paths`, prepends those entries plus the SDK defaults to `MODULAR_MOJO_MAX_IMPORT_PATH`, exports `PYTHONPATH`, and injects the freshly built `.mojopkg` into `MAX_CUSTOM_EXTENSIONS`. Inside a Pixi-managed shell (including VS Code when launched via `pixi run code`), invoking `mojo` anywhere inside the workspace will locate `nn.moe_mxfp4`.
+Pixi sources `scripts/mxfp4_env.sh` on every `pixi run`/`pixi shell`. The helper derives import paths from the repo root (no sentinel files), prepends them plus the SDK defaults to `MODULAR_MOJO_MAX_IMPORT_PATH`, exports `PYTHONPATH`, and injects the freshly built `.mojopkg` into `MAX_CUSTOM_EXTENSIONS` when present. Inside a Pixi-managed shell (including VS Code when launched via `pixi run code`), invoking `mojo` anywhere inside the workspace will locate `nn.moe_mxfp4`.
 
 Outside Pixi, source the script manually:
 
@@ -48,15 +48,15 @@ During startup you should see `Loading 1 custom Mojo extension(s)` and the compi
 
 - To avoid path drift, you can source `scripts/mxfp4_env.sh` to export the Mojo
     search paths (`MODULAR_MOJO_MAX_IMPORT_PATH`) and `PYTHONPATH` before running
-    tests or launching the debugger. The script also keeps `MAX_CUSTOM_EXTENSIONS`
-    in sync with `.mxfp4-package-path` and clears the MAX cache for reproducible runs.
+    tests or launching the debugger. The script also sets `MAX_CUSTOM_EXTENSIONS`
+    to the freshly built `.mojopkg` when available.
 - Pixi environment is pinned to Python 3.11.14 (see `pixi.toml`).
 - `MAX_CUSTOM_EXTENSIONS` can list multiple `.mojopkg` paths separated by `:`.
 - `grouped_mxfp4_matmul` first tries `mo.moe.mx4.matmul` then `custom.moe.mx4.matmul`. Override via `MAX_MXFP4_KERNEL_OP` if needed.
 
 ## Runtime guard for MXFP4 quantization
 
-`max.pipelines.lib.pipeline_variants.TextGenerationPipeline` now refuses to start with `--quantization-encoding mxfp4` unless at least one `.mojopkg` is discoverable via `MAX_CUSTOM_EXTENSIONS`. The failure message points at `pixi run mxfp4-build` and `scripts/mxfp4_env.sh`. This keeps serve runs honest—if the custom op drops out of your environment, the pipeline exits immediately instead of silently falling back to unsupported kernels.
+`max.pipelines.lib.pipeline_variants.TextGenerationPipeline` still supports `--quantization-encoding mxfp4`, but the MXFP4 kernel must be available either from the built-in runtime or by pointing `MAX_CUSTOM_EXTENSIONS` at the freshly built `.mojopkg` (for local builds). The scalar fall-back kernel has been removed entirely; if MAX would otherwise run anything but the Hopper-optimized kernel, it raises a runtime error.
 
 ## Debugging from VS Code
 
@@ -81,9 +81,7 @@ What the launch config does:
 Using it:
 
 1. Open the Run and Debug view (`Ctrl+Shift+D`) and select **Debug MXFP4 Mojo tests**.
-2. (Optional) Set `MAX_MXFP4_FORCE_GENERIC_GPU=1` in your VS Code environment or the integrated terminal before launching if you want to
-    force the generic kernel path.
-3. Hit F5. Execution pauses on your first breakpoint; otherwise it will run until the CUDA error reproduces and the debugger halts.
+2. Hit F5. Execution pauses on your first breakpoint; otherwise it will run until the CUDA error reproduces and the debugger halts.
 
 Because the configuration relies on VS Code's environment resolution, any extra tweaks (e.g. toggling kernel variants, DEBUG flags, etc.) can
 be layered on by editing `.vscode/launch.json` or exporting variables in the terminal that launches VS Code.

@@ -96,11 +96,7 @@ def run_bench(args: argparse.Namespace) -> None:
     max_tokens = np.uint32(max_tokens_per_expert)
     num_experts = np.uint32(args.num_experts)
 
-    ext_env = (
-        args.custom_extension
-        or os.environ.get("MAX_CUSTOM_EXTENSIONS")
-        or os.environ.get("MXFP4_KERNEL_PACKAGE")
-    )
+    ext_env = args.custom_extension or os.environ.get("MAX_CUSTOM_EXTENSIONS") or os.environ.get("MXFP4_KERNEL_PACKAGE")
     extensions = collect_custom_extensions_from_env(
         ext_env,
         include_runtime_dependencies=True,
@@ -226,10 +222,7 @@ def run_bench(args: argparse.Namespace) -> None:
     elapsed = time.perf_counter() - start
 
     tokens_per_sec = token_count / elapsed if elapsed > 0 else 0.0
-    print(
-        f"iters={args.iters}, tokens/iter={total_tokens}, elapsed={elapsed:.4f}s, "
-        f"tokens/s={tokens_per_sec:.2f}"
-    )
+    print(f"iters={args.iters}, tokens/iter={total_tokens}, elapsed={elapsed:.4f}s, tokens/s={tokens_per_sec:.2f}")
     print(
         f"shape: experts={args.num_experts}, tokens_per_expert={args.tokens_per_expert}, "
         f"in_features={in_features}, out_features={out_features}"

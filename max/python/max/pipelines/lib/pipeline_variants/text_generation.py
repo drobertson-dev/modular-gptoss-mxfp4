@@ -18,7 +18,6 @@ import copy
 import dataclasses
 import json
 import logging
-import os
 from os import environ
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic
@@ -80,9 +79,7 @@ class BatchInfo:
 
 
 class TextGenerationPipeline(
-    Pipeline[
-        TextGenerationInputs[TextGenerationContextType], TextGenerationOutput
-    ],
+    Pipeline[TextGenerationInputs[TextGenerationContextType], TextGenerationOutput],
     GenerateMixin[TextGenerationContextType, TextGenerationRequest],
     Generic[TextGenerationContextType],
 ):
@@ -375,9 +372,7 @@ class TextGenerationPipeline(
         """
         if context.json_schema and context.matcher is None:
             if not self._pipeline_config.sampling_config.enable_structured_output:
-                raise ValueError(
-                    "json_schema provided but constrained decoding is not enabled."
-                )
+                raise ValueError("json_schema provided but constrained decoding is not enabled.")
 
             try:
                 serialized_grammar = LLMatcher.grammar_from_json_schema(
@@ -398,13 +393,9 @@ class TextGenerationPipeline(
                 context.jump_ahead(token)
 
             # Update the bitmask for the context.
-            llguidance.numpy.fill_next_token_bitmask(
-                context.matcher, bitmask, index=index
-            )
+            llguidance.numpy.fill_next_token_bitmask(context.matcher, bitmask, index=index)
 
-    def initialize_bitmask(
-        self, batch: list[TextGenerationContextType]
-    ) -> npt.NDArray[np.int32] | None:
+    def initialize_bitmask(self, batch: list[TextGenerationContextType]) -> npt.NDArray[np.int32] | None:
         """Allocate a per-request token bitmask for structured decoding.
 
         Args:
@@ -423,9 +414,7 @@ class TextGenerationPipeline(
         if all(context.json_schema is None for context in batch):
             return None
 
-        return llguidance.numpy.allocate_token_bitmask(
-            len(batch), self.vocab_size
-        )
+        return llguidance.numpy.allocate_token_bitmask(len(batch), self.vocab_size)
 
     @traced
     def prepare_batch(
@@ -456,15 +445,9 @@ class TextGenerationPipeline(
                 - list[TextGenerationContextType]: The flattened context batch.
         """
         # Initialize a flat batch of contexts and their replica ids.
-        replica_ids: list[int] = [
-            replica_idx
-            for replica_idx, batch in enumerate(batches)
-            for _ in batch.values()
-        ]
+        replica_ids: list[int] = [replica_idx for replica_idx, batch in enumerate(batches) for _ in batch.values()]
         flat_batch: list[TextGenerationContextType] = [
-            context
-            for batch in batches
-            for context in self._maybe_sort_loras(batch).values()
+            context for batch in batches for context in self._maybe_sort_loras(batch).values()
         ]
 
         # Initialize a bitmask for structured output.
@@ -472,9 +455,7 @@ class TextGenerationPipeline(
 
         # Keep a global index for bitmask indexing.
         i = 0
-        for i, (replica_idx, context) in enumerate(
-            zip(replica_ids, flat_batch, strict=False)
-        ):
+        for i, (replica_idx, context) in enumerate(zip(replica_ids, flat_batch, strict=False)):
             # Update state for structured output. Initialize a matcher if needed, this includes:
             # - Initializing a matcher if needed [once per request]
             # - Jumping ahead in generation if possible
@@ -483,9 +464,7 @@ class TextGenerationPipeline(
                 self.update_for_structured_output(context, bitmask, i)
 
             if not self._pipeline_model.kv_manager.contains(context.request_id):
-                self._pipeline_model.kv_manager.claim(
-                    context.request_id, replica_idx=replica_idx
-                )
+                self._pipeline_model.kv_manager.claim(context.request_id, replica_idx=replica_idx)
 
             # Update num_steps.
             num_steps = self.calculate_num_steps(num_steps, context)
@@ -496,9 +475,7 @@ class TextGenerationPipeline(
             num_steps = 1
 
         # Retrieve the KV Cache Inputs.
-        kv_cache_inputs = self._pipeline_model.kv_manager.get_runtime_inputs(
-            flat_batch, num_steps
-        )
+        kv_cache_inputs = self._pipeline_model.kv_manager.get_runtime_inputs(flat_batch, num_steps)
 
         # Log batch details
         if self.batch_info_output_fname is not None:
@@ -507,9 +484,7 @@ class TextGenerationPipeline(
         return (
             self._pipeline_model.prepare_initial_token_inputs(
                 context_batch=flat_batch,
-                kv_cache_inputs=KVCacheInputsSequence(
-                    kv_cache_inputs=kv_cache_inputs
-                ),
+                kv_cache_inputs=KVCacheInputsSequence(kv_cache_inputs=kv_cache_inputs),
             ),
             num_steps,
             bitmask,
@@ -554,13 +529,8 @@ class TextGenerationPipeline(
         When ``MAX_BATCH_INFO_FILENAME`` is set, this writes a JSON file
         containing per-step batch statistics collected during execution.
         """
-        if (
-            hasattr(self, "batch_info_output_fname")
-            and self.batch_info_output_fname is not None
-        ):
-            output = {
-                "batch_data": [dataclasses.asdict(x) for x in self.batch_infos]
-            }
+        if hasattr(self, "batch_info_output_fname") and self.batch_info_output_fname is not None:
+            output = {"batch_data": [dataclasses.asdict(x) for x in self.batch_infos]}
             with open(self.batch_info_output_fname, "w") as f:
                 json.dump(output, f, indent=2)
                 f.flush()  # Refer to MAXSERV-893
@@ -597,14 +567,10 @@ class TextGenerationPipeline(
                 log_probs: LogProbabilities | None = None
                 if enable_log_probs and step < len(batch_log_probabilities):
                     log_probs_for_step = batch_log_probabilities[step]
-                    if log_probs_for_step and batch_index < len(
-                        log_probs_for_step
-                    ):
+                    if log_probs_for_step and batch_index < len(log_probs_for_step):
                         log_probs = log_probs_for_step[batch_index]
 
-                context.update(
-                    new_token=next_token, log_probabilities=log_probs
-                )
+                context.update(new_token=next_token, log_probabilities=log_probs)
 
                 if context.is_done:
                     break
@@ -622,18 +588,14 @@ class TextGenerationPipeline(
         then decode the tokens holistically and return the list of decoded tokens.
         """
         # Prepare the batch.
-        model_inputs, num_steps, bitmask, flat_batch = self.prepare_batch(
-            inputs.batches, inputs.num_steps
-        )
+        model_inputs, num_steps, bitmask, flat_batch = self.prepare_batch(inputs.batches, inputs.num_steps)
 
         batch_processors: list[BatchLogitsProcessor] = []
         if len(flat_batch) > 0:
             # If structured output is present in the batch, use the sampler with bitmask.
             sampler: Model
             if bitmask is not None:
-                assert self._sampler_with_bitmask is not None, (
-                    "Sampler must be built with bitmask sampling"
-                )
+                assert self._sampler_with_bitmask is not None, "Sampler must be built with bitmask sampling"
                 sampler = self._sampler_with_bitmask
             else:
                 sampler = self._sampler_without_bitmask
@@ -656,9 +618,7 @@ class TextGenerationPipeline(
             with Tracer(f"multistep_execution_loop_step_{i}"):
                 # Execute the model and get next tokens.
                 try:
-                    model_outputs = self._pipeline_model.execute(
-                        model_inputs=curr_step_inputs
-                    )
+                    model_outputs = self._pipeline_model.execute(model_inputs=curr_step_inputs)
                 except Exception:
                     batch_size = len(flat_batch)
                     cache_tokens = sum(ctx.start_idx for ctx in flat_batch)
@@ -671,13 +631,8 @@ class TextGenerationPipeline(
 
             # Validate output. This is more of an internal check that the model
             # is implemented correctly.
-            if (
-                self._pipeline_config.sampling_config.enable_variable_logits
-                and model_outputs.logit_offsets is None
-            ):
-                raise ValueError(
-                    "Model must return logit_offsets when enable_variable_logits is True."
-                )
+            if self._pipeline_config.sampling_config.enable_variable_logits and model_outputs.logit_offsets is None:
+                raise ValueError("Model must return logit_offsets when enable_variable_logits is True.")
 
             # Continue and execute the next step if the batch.
             if len(flat_batch) == 0:
@@ -709,30 +664,23 @@ class TextGenerationPipeline(
                         )
                     except NotImplementedError:
                         logger.warning(
-                            "Unable to compute log probabilities for"
-                            f" {self._pipeline_config.model_config.model_path}"
+                            f"Unable to compute log probabilities for {self._pipeline_config.model_config.model_path}"
                         )
-                        batch_log_probabilities.append(
-                            [None for _ in flat_batch]
-                        )
+                        batch_log_probabilities.append([None for _ in flat_batch])
 
             # Check if we're on our last iteration. If so, skip preparing the next batch
             if i == num_steps - 1:
                 break
 
-            assert isinstance(
-                curr_step_inputs.kv_cache_inputs, KVCacheInputsSequence
-            ), (
+            assert isinstance(curr_step_inputs.kv_cache_inputs, KVCacheInputsSequence), (
                 "prepare_batch instantiates and passes this as a KVCacheInputsSequence"
             )
-            assert isinstance(
-                curr_step_inputs.kv_cache_inputs.kv_cache_inputs, list
-            ), "increment_cache_lengths instantiates and passes this as a list"
-            curr_step_inputs.kv_cache_inputs.kv_cache_inputs = (
-                self._pipeline_model.kv_manager.increment_cache_lengths(
-                    curr_step_inputs.kv_cache_inputs.kv_cache_inputs,
-                    curr_step_inputs,
-                )
+            assert isinstance(curr_step_inputs.kv_cache_inputs.kv_cache_inputs, list), (
+                "increment_cache_lengths instantiates and passes this as a list"
+            )
+            curr_step_inputs.kv_cache_inputs.kv_cache_inputs = self._pipeline_model.kv_manager.increment_cache_lengths(
+                curr_step_inputs.kv_cache_inputs.kv_cache_inputs,
+                curr_step_inputs,
             )
 
             curr_step_inputs = self._pipeline_model.prepare_next_token_inputs(

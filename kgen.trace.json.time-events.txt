@@ -1,0 +1,32 @@
+Thread   Start(us)  B/E     Dur(us)  Name/Detail
+------  ----------  ---  ----------  ------------------------------
+1114632   384901890  BEG           8  AnnotateKernels
+1114632   384901898  END           8  AnnotateKernels
+1114632   384901900  BEG           1  VerifyKernels
+1114632   384901902  END           1  VerifyKernels
+1114632   384901902  BEG           0  LowerSemanticCF
+1114632   384901903  END           0  LowerSemanticCF
+1114632   384901904  BEG          20  CheckLifetimes
+1114632   384901920  BEG           3  (A) SymbolTableAnalysis
+1114632   384901923  END           3  (A) SymbolTableAnalysis
+1114632   384901924  END          20  CheckLifetimes
+1114632  2752117465  BEG           4  AnnotateKernels
+1114632  2752117470  END           4  AnnotateKernels
+1114632  2752117471  BEG           1  VerifyKernels
+1114632  2752117472  END           1  VerifyKernels
+1114632  2752117473  BEG           1  LowerSemanticCF
+1114632  2752117475  END           1  LowerSemanticCF
+1114632  2752117476  BEG          11  CheckLifetimes
+1114632  2752117479  BEG           7  (A) SymbolTableAnalysis
+1114632  2752117486  END           7  (A) SymbolTableAnalysis
+1114632  2752117487  END          11  CheckLifetimes
+1114632  5786057324  BEG           3  AnnotateKernels
+1114632  5786057327  END           3  AnnotateKernels
+1114632  5786057328  BEG           1  VerifyKernels
+1114632  5786057329  END           1  VerifyKernels
+1114632  5786057330  BEG           0  LowerSemanticCF
+1114632  5786057331  END           0  LowerSemanticCF
+1114632  5786057331  BEG           6  CheckLifetimes
+1114632  5786057334  BEG           3  (A) SymbolTableAnalysis
+1114632  5786057337  END           3  (A) SymbolTableAnalysis
+1114632  5786057338  END           6  CheckLifetimes

@@ -28,11 +28,10 @@ from .model import GptOssModel
 gpt_oss_arch = SupportedArchitecture(
     name="GptOssForCausalLM",
     example_repo_ids=[
-        # "openai/gpt-oss-20b",
-        # "openai/gpt-oss-120b",
-        "unsloth/gpt-oss-20b-BF16",
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
     ],
-    default_encoding=SupportedEncoding.bfloat16,
+    default_encoding=SupportedEncoding.mxfp4,
     supported_encodings={
         SupportedEncoding.bfloat16: [KVCacheStrategy.PAGED],
         SupportedEncoding.mxfp4: [KVCacheStrategy.PAGED],

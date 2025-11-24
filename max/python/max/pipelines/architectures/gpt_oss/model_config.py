@@ -146,7 +146,7 @@ class GptOssConfig(MAXModelConfig, GptOssConfigBase):
     provides methods to derive necessary pipeline components like KV cache parameters.
     """
 
-    quantization: Literal["bf16", "mxfp4"] = "bf16"
+    quantization: Literal["mxfp4"]
 
     def is_mxfp4(self) -> bool:
         return self.quantization == "mxfp4"
@@ -195,9 +195,7 @@ class GptOssConfig(MAXModelConfig, GptOssConfigBase):
         return huggingface_config.num_hidden_layers
 
     @staticmethod
-    def calculate_max_seq_len(
-        pipeline_config: PipelineConfig, huggingface_config: AutoConfig
-    ) -> int:
+    def calculate_max_seq_len(pipeline_config: PipelineConfig, huggingface_config: AutoConfig) -> int:
         """Calculates the maximum sequence length for the model.
 
         Uses the `max_length` from the :obj:`max.pipelines.config.PipelineConfig` if provided,
@@ -250,17 +248,11 @@ class GptOssConfig(MAXModelConfig, GptOssConfigBase):
         Returns:
             An initialized :obj:`GptOssConfig` instance.
         """
-        _weights_format = weights_format(
-            pipeline_config.model_config.weight_path
-        )
+        _weights_format = weights_format(pipeline_config.model_config.weight_path)
         interleaved_rope_weights = (
-            _weights_format == WeightsFormat.gguf
-            and pipeline_config.model_config.rope_type == RopeType.normal
+            _weights_format == WeightsFormat.gguf and pipeline_config.model_config.rope_type == RopeType.normal
         )
-        device_refs = [
-            DeviceRef(spec.device_type, spec.id)
-            for spec in pipeline_config.model_config.device_specs
-        ]
+        device_refs = [DeviceRef(spec.device_type, spec.id) for spec in pipeline_config.model_config.device_specs]
 
         # When tie_word_embeddings=True, the embedding weights are shared with
         # the output weights.
@@ -278,29 +270,19 @@ class GptOssConfig(MAXModelConfig, GptOssConfigBase):
             rope_type = rope_scaling.get("type")
             rope_type_alt = rope_scaling.get("rope_type")
             if rope_type is None and rope_type_alt is None:
-                raise ValueError(
-                    "Neither 'type' nor 'rope_type' found in rope_scaling huggingface config"
-                )
+                raise ValueError("Neither 'type' nor 'rope_type' found in rope_scaling huggingface config")
             if rope_type == "linear" or rope_type_alt == "linear":
-                raise ValueError(
-                    "Linear scaling is not supported for GPT-OSS models"
-                )
-            elif (
-                rope_type == "yarn" or rope_type_alt == "yarn"
-            ):  # GPT-OSS uses YARN scaling
+                raise ValueError("Linear scaling is not supported for GPT-OSS models")
+            elif rope_type == "yarn" or rope_type_alt == "yarn":  # GPT-OSS uses YARN scaling
                 rope_scaling_params = YarnScalingParams(
                     factor=rope_scaling.get("factor", 32.0),
                     beta_fast=rope_scaling.get("beta_fast", 32.0),
                     beta_slow=rope_scaling.get("beta_slow", 1.0),
-                    original_max_position_embeddings=rope_scaling.get(
-                        "original_max_position_embeddings", 4096
-                    ),
+                    original_max_position_embeddings=rope_scaling.get("original_max_position_embeddings", 4096),
                     truncate=rope_scaling.get("truncate", False),
                 )
             else:
-                raise ValueError(
-                    f"Unknown rope scaling type: {rope_type} or {rope_type_alt}"
-                )
+                raise ValueError(f"Unknown rope scaling type: {rope_type} or {rope_type_alt}")
         else:
             raise ValueError("RoPE scaling is required for GPT-OSS models")
 
@@ -313,25 +295,16 @@ class GptOssConfig(MAXModelConfig, GptOssConfigBase):
         layer_types = getattr(
             huggingface_config,
             "layer_types",
-            ["sliding_attention", "full_attention"]
-            * (huggingface_config.num_hidden_layers // 2),
+            ["sliding_attention", "full_attention"] * (huggingface_config.num_hidden_layers // 2),
         )
 
         # Get additional parameters from HuggingFace config
-        query_pre_attn_scalar = getattr(
-            huggingface_config, "query_pre_attn_scalar", None
-        )
-        final_logit_softcapping = getattr(
-            huggingface_config, "final_logit_softcapping", None
-        )
-        attn_logit_softcapping = getattr(
-            huggingface_config, "attn_logit_softcapping", None
-        )
+        query_pre_attn_scalar = getattr(huggingface_config, "query_pre_attn_scalar", None)
+        final_logit_softcapping = getattr(huggingface_config, "final_logit_softcapping", None)
+        attn_logit_softcapping = getattr(huggingface_config, "attn_logit_softcapping", None)
         swiglu_limit = getattr(huggingface_config, "swiglu_limit", 7.0)
 
-        quantization_mode: Literal["bf16", "mxfp4"] = (
-            "mxfp4" if encoding == SupportedEncoding.mxfp4 else "bf16"
-        )
+        quantization_mode: Literal["mxfp4"] = "mxfp4"
 
         return GptOssConfig(
             vocab_size=huggingface_config.vocab_size,
@@ -349,19 +322,11 @@ class GptOssConfig(MAXModelConfig, GptOssConfigBase):
             attention_bias=huggingface_config.attention_bias,
             sliding_window=huggingface_config.sliding_window,
             rope_scaling=rope_scaling_params,
-            num_local_experts=getattr(
-                huggingface_config, "num_local_experts", 32
-            ),
-            num_experts_per_tok=getattr(
-                huggingface_config, "num_experts_per_tok", 4
-            ),
-            router_aux_loss_coef=getattr(
-                huggingface_config, "router_aux_loss_coef", 0.9
-            ),
+            num_local_experts=getattr(huggingface_config, "num_local_experts", 32),
+            num_experts_per_tok=getattr(huggingface_config, "num_experts_per_tok", 4),
+            router_aux_loss_coef=getattr(huggingface_config, "router_aux_loss_coef", 0.9),
             layer_types=layer_types,
-            attention_dropout=getattr(
-                huggingface_config, "attention_dropout", 0.0
-            ),
+            attention_dropout=getattr(huggingface_config, "attention_dropout", 0.0),
             query_pre_attn_scalar=query_pre_attn_scalar,
             final_logit_softcapping=final_logit_softcapping,
             attn_logit_softcapping=attn_logit_softcapping,

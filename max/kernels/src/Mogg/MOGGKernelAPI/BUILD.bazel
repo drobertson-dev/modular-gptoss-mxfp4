@@ -16,25 +16,14 @@ mogg_lib_deps = [
 
 mojo_kgen_lib(
     name = "MOGGKernelAPILib",
-    srcs = glob(["**/*.mojo"], exclude=["MXFP4Extension.mojo"]),
+    srcs = glob(["**/*.mojo"]),
     deps = mogg_lib_deps + ["//max:MOGGPrimitives"],
 )
 
 mojo_library(
     name = "MOGGKernelAPI",
     testonly = True,
-    srcs = glob(["**/*.mojo"], exclude=["MXFP4Extension.mojo"]),
+    srcs = glob(["**/*.mojo"]),
     validate_missing_docs = False,
     deps = mogg_lib_deps + ["//max:MOGGPrimitives"],
-)
-
-mojo_library(
-    name = "MOGGMxfp4Extension",
-    srcs = ["MXFP4Extension.mojo", "__init__.mojo"],
-    deps = [
-        "//max:compiler_internal",
-        "//max:tensor",
-        "@mojo//:stdlib",
-        "//max/kernels/src/nn:nn",
-    ],
 )

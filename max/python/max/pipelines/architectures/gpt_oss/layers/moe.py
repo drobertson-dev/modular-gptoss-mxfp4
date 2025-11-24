@@ -335,17 +335,17 @@ class GptOssMoE(MoE, Shardable):
             )
             gate_up_output = gate_up_output + bias_per_token
 
-            # Split gate and up projections (interleaved: [gate, up, gate, up, ...])
-            gate = gate_up_output[:, 0::2]
-            up = gate_up_output[:, 1::2]
+        # Split gate and up projections (interleaved: [gate, up, gate, up, ...])
+        gate = gate_up_output[:, 0::2]
+        up = gate_up_output[:, 1::2]
 
-            # Apply clamping (NOTE: This is specific to GptOss and matches the Triton reference)
-            gate = ops.min(gate, self.limit)
-            up = clamp(up, min=-self.limit, max=self.limit)
+        # Apply clamping (NOTE: This is specific to GptOss and matches the Triton reference)
+        gate = ops.min(gate, self.limit)
+        up = clamp(up, min=-self.limit, max=self.limit)
 
-            # GptOss-style activation: gate * sigmoid(gate * alpha) * (up + 1)
-            glu = gate * ops.sigmoid(gate * self.alpha)
-            gated_output = (up + 1.0) * glu
+        # GptOss-style activation: gate * sigmoid(gate * alpha) * (up + 1)
+        glu = gate * ops.sigmoid(gate * self.alpha)
+        gated_output = (up + 1.0) * glu
 
         # Apply down projection
         if self._use_mxfp4:

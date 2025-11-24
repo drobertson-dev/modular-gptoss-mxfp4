@@ -167,7 +167,7 @@ _SUPPORTED_ENCODING_TO_DTYPE = {
     SupportedEncoding.q4_0: DType.uint8,
     SupportedEncoding.q6_k: DType.uint8,
     SupportedEncoding.gptq: DType.uint8,
-    SupportedEncoding.mxfp4: DType.bfloat16,
+    SupportedEncoding.mxfp4: DType.uint8,
 }
 
 
@@ -179,7 +179,7 @@ _SUPPORTED_ENCODING_TO_CACHE_DTYPE = {
     SupportedEncoding.q4_0: DType.float32,
     SupportedEncoding.q6_k: DType.float32,
     SupportedEncoding.gptq: DType.bfloat16,
-    SupportedEncoding.mxfp4: DType.bfloat16,
+    SupportedEncoding.mxfp4: DType.uint8,
 }
 
 _SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING = {

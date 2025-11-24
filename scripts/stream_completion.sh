@@ -14,12 +14,12 @@ trap 'rm -f "${tmp_err}"' EXIT
 
 # Run the streaming pipeline; tolerate curl's EPIPE (23) if the reader finishes first.
 set +o pipefail
-curl -sN "${HOST}/v1/completions" \
+curl -sN "${HOST}/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
   "model": "${MODEL}",
-  "prompt": "${PROMPT}",
+  "messages": [{"role": "user", "content": "${PROMPT}"}],
   "max_tokens": ${MAX_TOKENS},
   "stream": true
 }

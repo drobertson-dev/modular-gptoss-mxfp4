@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Sets up a predictable environment for MXFP4 Mojo work.
-# Can be executed directly (Pixi activation) or sourced in a shell.
+# Sets up a predictable environment for MXFP4 Mojo work without relying on
+# repo-sentinel files. Can be executed directly (Pixi activation) or sourced.
 
 set -euo pipefail
 
@@ -18,25 +18,7 @@ PY
 }
 
 default_import_path="$(read_sdk_env_var MODULAR_MOJO_MAX_IMPORT_PATH 2>/dev/null || printf '')"
-default_cache_dir="$(read_sdk_env_var MODULAR_MAX_CACHE_DIR 2>/dev/null || printf '')"
 existing_import_path="${MODULAR_MOJO_MAX_IMPORT_PATH:-}"
-
-sentinel="$repo_root/.mojo-import-paths"
-sentinel_paths=()
-if [[ -f "$sentinel" ]]; then
-  while IFS= read -r line; do
-    trimmed="${line%%#*}"
-    trimmed="${trimmed##[[:space:]]}"
-    trimmed="${trimmed%%[[:space:]]}"
-    if [[ -z "$trimmed" ]]; then
-      continue
-    fi
-    if [[ "$trimmed" != /* ]]; then
-      trimmed="$repo_root/$trimmed"
-    fi
-    sentinel_paths+=("$trimmed")
-  done < "$sentinel"
-fi
 
 mojo_lib_dir="$(python - <<'PY'
 import sys
@@ -52,11 +34,6 @@ if [[ -n "$mojo_lib_dir" ]]; then
   extra_paths+=("$mojo_lib_dir")
 fi
 extra_paths+=("$local_kernel_path")
-for path in "${sentinel_paths[@]}"; do
-  if [[ "$path" != "$local_kernel_path" ]]; then
-    extra_paths+=("$path")
-  fi
-done
 
 combine_paths() {
   local joined=()
@@ -79,13 +56,7 @@ combine_colon_paths() {
 MODULAR_MOJO_MAX_IMPORT_PATH="$(combine_paths "${extra_paths[@]}" "$default_import_path" "$existing_import_path")"
 
 export MODULAR_MOJO_MAX_IMPORT_PATH
-export MODULAR_MOJO_MAX_IMPORT_SENTINEL="$sentinel"
-
-if [[ -n "$mojo_lib_dir" ]]; then
-  export MOJO_PACKAGE_PATH="$(combine_colon_paths "$mojo_lib_dir" "${MOJO_PACKAGE_PATH:-}")"
-else
-  export MOJO_PACKAGE_PATH="${MOJO_PACKAGE_PATH:-}"
-fi
+export MOJO_PACKAGE_PATH="$(combine_colon_paths "$mojo_lib_dir" "${MOJO_PACKAGE_PATH:-}")"
 
 py_paths=("$repo_root/max/python" "$repo_root/mojo/python")
 if [[ -n "${PYTHONPATH:-}" ]]; then
@@ -96,12 +67,19 @@ fi
 
 export MODULAR_DEVICE_CONTEXT_SYNC_MODE="${MODULAR_DEVICE_CONTEXT_SYNC_MODE:-true}"
 
-pkg_cache_file="$repo_root/.mxfp4-package-path"
-if [[ -f "$pkg_cache_file" ]]; then
-  mxfp4_pkg_path="$(<"$pkg_cache_file")"
-else
-  mxfp4_pkg_path=""
-fi
+# Prefer the in-tree Mojo package; fall back to the custom ops package if built.
+pkg_candidates=(
+  "$repo_root/bazel-bin/max/kernels/src/Mogg/MOGGKernelAPI/MOGGKernelAPI.mojopkg"
+  "$repo_root/bazel-bin/max/kernels/src/Mogg/MOGGKernelAPI/MOGGMxfp4Extension.mojopkg"
+  "$repo_root/bazel-bin/max/kernels/src/custom_ops/mogg_mxfp4/mogg_mxfp4.mojopkg"
+)
+mxfp4_pkg_path=""
+for candidate in "${pkg_candidates[@]}"; do
+  if [[ -f "$candidate" ]]; then
+    mxfp4_pkg_path="$candidate"
+    break
+  fi
+done
 
 if [[ -n "$mxfp4_pkg_path" ]]; then
   export MXFP4_KERNEL_PACKAGE="$mxfp4_pkg_path"
@@ -112,25 +90,12 @@ fi
 
 export MAX_ALLOW_UNSUPPORTED_ENCODING=1
 
-cache_dir="${MODULAR_MAX_CACHE_DIR:-}" 
-if [[ -z "$cache_dir" ]]; then
-  cache_dir="$default_cache_dir"
-fi
-if [[ -n "$cache_dir" ]]; then
-  rm -rf "$cache_dir"
-  export MODULAR_MAX_CACHE_DIR="$cache_dir"
-fi
-
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   echo "Set MODULAR_MOJO_MAX_IMPORT_PATH=$MODULAR_MOJO_MAX_IMPORT_PATH"
   echo "Set PYTHONPATH=$PYTHONPATH"
-  echo "Set MODULAR_DEVICE_CONTEXT_SYNC_MODE=$MODULAR_DEVICE_CONTEXT_SYNC_MODE"
   if [[ -n "$mxfp4_pkg_path" ]]; then
     echo "Set MXFP4 kernel package=$mxfp4_pkg_path"
   else
-    echo "Warning: MXFP4 kernel package path not found; run pixi run mxfp4-build" >&2
-  fi
-  if [[ -n "$cache_dir" ]]; then
-    echo "Cleared MAX cache at $cache_dir"
+    echo "Warning: MXFP4 kernel package not found; build //max/kernels/src/Mogg/MOGGKernelAPI:MOGGKernelAPI" >&2
   fi
 fi

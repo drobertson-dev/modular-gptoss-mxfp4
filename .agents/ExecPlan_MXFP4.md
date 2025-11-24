@@ -41,12 +41,16 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
 - [x] (2025-11-20 19:20Z) Added fused MXFP4 gate/up + SwiGLU kernel/op (mo/custom.moe.mx4.matmul_swiglu), Python wrapper, and MXFP4 MoE callsite; added CPU/GPU regression tests with bias and fused activation and restored passing state.
 - [x] (2025-11-22 18:00Z) Scalarized SM90 C write-back (registers → shared) to eliminate misaligned vector stores causing `CUDA_ERROR_MISALIGNED_ADDRESS`; GPU MXFP4 regression tests to be rerun.
 - [ ] (2025-11-22 18:45Z) Rewired SM90 epilogue to use tensor core layouts (row-major c_reg fragments + `st_matrix_n_layout` + `st.matrix` write-back) for aligned shared stores; pending rebuild/tests.
+- [x] (2025-11-24 09:20Z) Fix Mojo import/LSP visibility for `nn.moe_mxfp4` and align fused op registration names so Python can hit the built-in MXFP4 kernels without relying on the custom package; update plan/docs accordingly.
+- [x] (2025-11-24 09:40Z) Removed repo-sentinel files (.mojo-import-paths/.mxfp4-package-path), simplified env helper to derive paths directly from Bazel outputs, and refreshed docs/plan to match non-hacky setup.
 
 ## Surprises & Discoveries
 
 - Observation: The GPT-OSS SwiGLU activation in `layers/moe.py` applied the nonlinearity to the gate branch and multiplied by `(up + 1)`, diverging from the published `(gate + 1) * (up * sigmoid(alpha * up))` form. Evidence: activation ordering updated on 2025-11-20 with config-driven clamp.
 - Observation: Tensor-parallel sharding divided `hidden_size` and `num_experts_per_tok`, which would shrink router top-k on multi-GPU runs; sharding now only slices intermediate size and local experts. Evidence: `GptOssMoE.shard` adjusted on 2025-11-20.
 - Observation: Two independent MXFP4 kernel copies (core vs custom) risked drift; the custom package now imports the core kernel to keep behavior identical. Evidence: `mogg_mxfp4` `BUILD.bazel` depends on `//max/kernels/src/nn:nn` as of 2025-11-20.
+- Observation: `MXFP4Extension.mojo` registered the fused op as `mo.moe.mx4.matmul.swiglu` while the Python client probes `mo.moe.mx4.matmul_swiglu`, so the built-in package could not satisfy fused calls unless the custom `custom.moe.mx4.matmul_swiglu` package was loaded. Evidence: name mismatch between `max/kernels/src/Mogg/MOGGKernelAPI/MXFP4Extension.mojo` and `max/python/max/nn/kernels.py`.
+- Observation: Repo-level sentinel caches (`.mojo-import-paths`, `.mxfp4-package-path`) added brittle coupling for the LSP/CLI instead of deriving paths from the Bazel outputs already produced locally. Evidence: removing those files and computing `MAX_CUSTOM_EXTENSIONS`/import paths directly from `bazel-bin` keeps the workflow simpler and matches upstream conventions.
 
 ## Decision Log
 
@@ -86,6 +90,12 @@ GPT-OSS checkpoints ship their MoE weights in MXFP4 so that the 120B variant fit
 - Decision: Switch SM90 epilogue to tensor-core-friendly mapping (row-major fragment tiles, `st_matrix_n_layout`, and `st.matrix` stores) to regain alignment and performance headroom over the scalar checkpoint.  
   Rationale: Uses the intended layout abstractions for WGMMA C write-back and restores 16B-aligned shared stores without manual offset math.  
   Date/Author: 2025-11-22 / Codex
+- Decision: Align the fused MXFP4 op registration name in `MXFP4Extension.mojo` to `mo.moe.mx4.matmul_swiglu` and drop repo-local sentinels in favor of deriving import/custom-extension paths directly from Bazel outputs.  
+  Rationale: Python probes `mo.moe.mx4.matmul_swiglu` first; mismatched registration blocked the built-in fused path, and the sentinel files added unnecessary coupling for the LSP/CLI.  
+  Date/Author: 2025-11-24 / Codex
+- Decision: Remove the MXFP4-specific requirement for `MAX_CUSTOM_EXTENSIONS` in the text-generation pipeline so the built-in kernel path is the default, with optional custom extensions passed explicitly.  
+  Rationale: The pipeline should behave like other kernels—use built-ins when present and only rely on custom packages when the user provides them.  
+  Date/Author: 2025-11-24 / Codex
 
 ## Outcomes & Retrospective
 
@@ -99,7 +109,13 @@ MXFP4 (documented in `ref-docs/MXFP4.md`) stores 32 FP4 (E2M1) elements per bloc
 
 MAX supports quantized weights through `max.graph.quantization.QuantizationEncoding`. `SupportedEncoding` (in `max/python/max/pipelines/lib/config_enums.py`) maps CLI-friendly encodings to `QuantizationEncoding`, dtype, cache dtype, and supported devices, and GPT-OSS exposes `SupportedEncoding.mxfp4` via `arch.py`. Custom ops are compiled into `.mojopkg` bundles via Bazel targets under `max/kernels/src`. The MXFP4 matmul lives in `max/kernels/src/nn/moe_mxfp4.mojo` and is registered as `mo.moe.mx4.matmul`; the `mogg_mxfp4` custom package now imports that implementation to register `custom.moe.mx4.matmul` without duplicating code. Python calls flow through `max/python/max/nn/kernels.py::grouped_mxfp4_matmul`, which tries the built-in op first and then the custom registration.
 
+Mojo import resolution for both the CLI and the VS Code LSP now derives directly from the repo root (e.g., `max/kernels/src`) plus the SDK defaults via `scripts/mxfp4_env.sh`; no sentinel cache files are used. The helper also injects any freshly built `.mojopkg` (e.g., `bazel-bin/max/kernels/src/Mogg/MOGGKernelAPI/MOGGKernelAPI.mojopkg`) into `MAX_CUSTOM_EXTENSIONS` when present.
+
 ## Plan of Work
+
+### Phase 0 – Restore Mojo import/LSP plumbing for MXFP4
+
+Ensure developers pick up the correct import paths so `nn.moe_mxfp4` resolves in both the CLI and VS Code without repo-sentinel files: run `scripts/mxfp4_env.sh` (via Pixi activation or manual `source`) to set `MODULAR_MOJO_MAX_IMPORT_PATH`, `MOJO_PACKAGE_PATH`, `PYTHONPATH`, and `MAX_CUSTOM_EXTENSIONS` based on `bazel-bin` outputs, and keep the fused op registered as `mo.moe.mx4.matmul_swiglu` to match the Python client.
 
 ### Phase 1 – Extend encoding, config, and CLI surfaces
 
@@ -132,6 +148,9 @@ Rewrite the GPU kernel in `max/kernels/src/nn/moe_mxfp4.mojo` to mirror a tiled 
 ## Concrete Steps
 
 Work from the repo root (`/Users/m1mbp/tools/modular-gptoss-mxfp4`) unless noted.
+
+    source scripts/mxfp4_env.sh
+      Populate `MODULAR_MOJO_MAX_IMPORT_PATH`, `MOJO_PACKAGE_PATH`, and `MAX_CUSTOM_EXTENSIONS` so Mojo CLI/LSP can resolve `nn.moe_mxfp4` and load the packaged kernel.
 
     ./bazelw test //max/python/max/pipelines/architectures/gpt_oss:all
       Expect the new MXFP4-specific unit tests (e.g. test_mxfp4_weight_adapter) to pass alongside existing ones.
@@ -182,6 +201,7 @@ Attach those snippets (trimmed to essentials) here when available so future cont
 
 Define or update the following:
 
+ - Environment plumbing: `scripts/mxfp4_env.sh` can be sourced (or inherited via Pixi activation) to set `MODULAR_MOJO_MAX_IMPORT_PATH`, `MOJO_PACKAGE_PATH`, `PYTHONPATH`, and `MAX_CUSTOM_EXTENSIONS` based on `bazel-bin` outputs so `nn.moe_mxfp4` resolves for both the CLI and the VS Code LSP; no sentinel files are required.
 - `max/python/max/graph/quantization.py`: add `QuantizationEncoding.MXFP4` with `block_parameters=BlockParameters(32, 17)` and document the E8M0 scale semantics.
 - `max/python/max/pipelines/lib/config_enums.py`: new `SupportedEncoding.mxfp4` with dtype `DType.bfloat16`, cache dtype `DType.bfloat16`, quantization encoding `QuantizationEncoding.MXFP4`, and GPU-only support.
 - `max/python/max/pipelines/architectures/gpt_oss/model_config.py`: extend `GptOssConfig` with `quantization: Literal["bf16","mxfp4"]` and a helper such as `def is_mxfp4(self) -> bool`.
@@ -198,5 +218,6 @@ Note any new Python dependencies (none expected) and ensure Bazel targets list t
 
 Revision history:
 
+- 2025-11-24: Added Phase 0 for Mojo import/LSP plumbing, noted fused op name mismatch, and removed repo sentinel/cache files in favor of deriving env from `bazel-bin` outputs. (Codex)
 - 2025-11-20: Moved plan to `.agents/`, fixed SwiGLU math/clamp, corrected MoE sharding metadata, and deduplicated MXFP4 kernel implementations. (Codex)
 - 2025-11-19: Initial ExecPlan drafted after reviewing AGENTS.md and reference docs. (Codex)

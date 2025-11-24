@@ -26,13 +26,19 @@ alias _NUM_EXPERTS = 1
 
 struct Inputs:
     var hidden_storage: InlineArray[Float32, _TOKENS * _IN_FEATURES]
-    var packed_storage: InlineArray[UInt8, _NUM_EXPERTS * _OUT_FEATURES * (_IN_FEATURES // 2)]
-    var scales_storage: InlineArray[UInt8, _NUM_EXPERTS * _OUT_FEATURES * (_IN_FEATURES // 32)]
+    var packed_storage: InlineArray[
+        UInt8, _NUM_EXPERTS * _OUT_FEATURES * (_IN_FEATURES // 2)
+    ]
+    var scales_storage: InlineArray[
+        UInt8, _NUM_EXPERTS * _OUT_FEATURES * (_IN_FEATURES // 32)
+    ]
     var bias_storage: InlineArray[Float32, _NUM_EXPERTS * _OUT_FEATURES]
     var offsets_storage: InlineArray[UInt32, _NUM_EXPERTS + 1]
     var ids_storage: InlineArray[Int32, _NUM_EXPERTS]
 
-    var hidden: NDBuffer[DType.float32, 2, MutAnyOrigin, DimList(_TOKENS, _IN_FEATURES)]
+    var hidden: NDBuffer[
+        DType.float32, 2, MutAnyOrigin, DimList(_TOKENS, _IN_FEATURES)
+    ]
     var packed: NDBuffer[
         DType.uint8,
         3,
@@ -45,8 +51,12 @@ struct Inputs:
         MutAnyOrigin,
         DimList(_NUM_EXPERTS, _OUT_FEATURES, _IN_FEATURES // 32),
     ]
-    var bias: NDBuffer[DType.float32, 2, MutAnyOrigin, DimList(_NUM_EXPERTS, _OUT_FEATURES)]
-    var offsets: NDBuffer[DType.uint32, 1, MutAnyOrigin, DimList(_NUM_EXPERTS + 1)]
+    var bias: NDBuffer[
+        DType.float32, 2, MutAnyOrigin, DimList(_NUM_EXPERTS, _OUT_FEATURES)
+    ]
+    var offsets: NDBuffer[
+        DType.uint32, 1, MutAnyOrigin, DimList(_NUM_EXPERTS + 1)
+    ]
     var ids: NDBuffer[DType.int32, 1, MutAnyOrigin, DimList(_NUM_EXPERTS)]
 
     fn __init__(out self):
@@ -205,21 +215,30 @@ struct DeviceInputs:
 
 
 fn _decode_weights(
-    packed: NDBuffer[DType.uint8, 3, _, DimList(_NUM_EXPERTS, _OUT_FEATURES, _IN_FEATURES // 2)],
-    scales: NDBuffer[DType.uint8, 3, _, DimList(_NUM_EXPERTS, _OUT_FEATURES, _IN_FEATURES // 32)],
+    packed: NDBuffer[
+        DType.uint8,
+        3,
+        _,
+        DimList(_NUM_EXPERTS, _OUT_FEATURES, _IN_FEATURES // 2),
+    ],
+    scales: NDBuffer[
+        DType.uint8,
+        3,
+        _,
+        DimList(_NUM_EXPERTS, _OUT_FEATURES, _IN_FEATURES // 32),
+    ],
 ) raises -> InlineArray[Float32, _NUM_EXPERTS * _OUT_FEATURES * _IN_FEATURES]:
-    var dense = InlineArray[Float32, _NUM_EXPERTS * _OUT_FEATURES * _IN_FEATURES](
-        uninitialized=True
-    )
+    var dense = InlineArray[
+        Float32, _NUM_EXPERTS * _OUT_FEATURES * _IN_FEATURES
+    ](uninitialized=True)
     for e in range(_NUM_EXPERTS):
         for n in range(_OUT_FEATURES):
             for k in range(_IN_FEATURES):
                 var packed_byte = packed[e, n, k >> 1]
                 var scale_byte = scales[e, n, k >> 5]
                 var nibble = (
-                    packed_byte & UInt8(0x0F)
-                    if (k & 1) == 0
-                    else packed_byte >> 4
+                    packed_byte & UInt8(0x0F) if (k & 1)
+                    == 0 else packed_byte >> 4
                 )
                 var scale_mul = _scale_multiplier(scale_byte)
                 var decoded = _FP4_VALUES[Int(nibble)] * scale_mul
@@ -229,7 +248,9 @@ fn _decode_weights(
 
 fn _reference_matmul(
     hidden: NDBuffer[DType.float32, 2, _, DimList(_TOKENS, _IN_FEATURES)],
-    dense_weights: InlineArray[Float32, _NUM_EXPERTS * _OUT_FEATURES * _IN_FEATURES],
+    dense_weights: InlineArray[
+        Float32, _NUM_EXPERTS * _OUT_FEATURES * _IN_FEATURES
+    ],
     bias: NDBuffer[DType.float32, 2, _, DimList(_NUM_EXPERTS, _OUT_FEATURES)],
 ) raises -> InlineArray[Float32, _TOKENS * _OUT_FEATURES]:
     var out = InlineArray[Float32, _TOKENS * _OUT_FEATURES](uninitialized=True)
