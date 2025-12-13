@@ -38,7 +38,7 @@ Risks:
 - [x] (2025-12-12 05:27Z) Reviewed `examples/custom_ops/kernels/moe_mxfp4_ops.mojo` against the Triton MoE path; confirmed high-level contracts match (remaining gaps are perf-only internals).
 - [x] (2025-12-13) Updated this ExecPlan to incorporate per-subdir pixi usage, the “Python adapts to Mojo” rule, and the actual registered Mojo op signatures/weight layouts in the current tree.
 - [x] (2025-12-13) Wired Python to the Mojo contracts: added wrappers (`gpt_oss_mxfp4/kernels.py`), switched MoE to call `mxfp4_moe_w1_swiglu`/`mxfp4_moe_w2_scatter`, added MXFP4 weight adapter, and ensured the pipeline graph loads custom ops via `custom_extensions`.
-- [ ] Implement the real SM90 kernel (decode-in-register + `wgmma`) inside the MoE ops (or in a new Mojo kernel file) **without changing the Python-visible op signatures**.
+- [x] (2025-12-13) Implemented SM90 `wgmma` paths inside the MoE ops (`examples/custom_ops/kernels/moe_mxfp4_ops.mojo`) **without changing the Python-visible op signatures** (initial correctness-first WGMMA; perf work continues).
 - [x] (2025-12-13) Added pixi tasks + ran smoke validations (Mojo runner for Mojo tests; Python tests for integration).
 
 ## Surprises & Discoveries
@@ -48,6 +48,7 @@ Risks:
 - The MoE ops already implement the correct *high-level* Triton behavior (routing → W1+SwiGLU → W2 scatter-add with gammas); the remaining work is internal performance engineering and Python architecture wiring.
 - Mojo test helpers in `examples/custom-models/tests/mojo/` used outdated `internal_utils.HostNDBuffer`/`DeviceNDBuffer`; replaced with a local `ndbuffer_utils.mojo` wrapper so tests run via `mojo run`.
 - In Mojo GPU tests, keep tiny routing metadata like `stats = [max_tokens, num_active_experts]` on the host; reading device-resident LayoutTensor scalars on the host can crash under KGEN.
+- The current MAX/Mojo CUDA toolchain is enforcing a **48KB static shared-memory cap** for these kernels (`0xc000 max` in `ptxas`). A BM=128 WGMMA version with an FP32 shared C tile overflowed this limit (`0xe400`), so the current WGMMA implementation uses **one warpgroup per CTA** with `BM=64` to stay under the cap.
 
 ## Decision Log
 
@@ -88,6 +89,7 @@ Terminology:
    - Replace the current implementation inside `examples/custom_ops/kernels/moe_mxfp4_ops.mojo` with an SM90 `wgmma` implementation that:
      - Stages packed blocks + scales (compact) and decodes per warp into register fragments in the K-loop.
      - Preserves the registered op names/signatures and the packed weight layout.
+   - Current state: SM90 WGMMA is wired up and correct, but still correctness-first; next perf iteration should follow the Triton pattern more tightly (minimize dequant traffic and pipeline loads/compute).
 
 ## Concrete Steps
 
@@ -169,6 +171,9 @@ Evidence from pre-flight (historical):
       - `w_scales`: `[num_experts, D, I/32]` `uint8` (E8M0 exponent bytes)
       - `bias`: `[num_experts, D]` `float32`
     - Output: `y`: `[T, D]` `float32` (the op zero-initializes output and scatter-adds into it)
+
+Internal kernel notes (implementation detail; not part of the Python contract):
+- `examples/custom_ops/kernels/moe_mxfp4_ops.mojo` WGMMA kernels currently launch with `block_dim=(128,1,1)` (one warpgroup) and tile params `BM=64`, `BN=64`/`BN_RAW=64`, `BK=64`, `wgmma_shape=(64,64,16)`.
 
 **Python wrappers (must match Mojo):**
 - `examples/custom-models/gpt_oss_mxfp4/kernels.py` defines `get_mxfp4_kernels_path()` and thin wrappers around `ops.custom(...)` for the ops above.
