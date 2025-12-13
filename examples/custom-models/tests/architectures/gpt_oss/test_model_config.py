@@ -6,9 +6,12 @@ import pytest
 
 pytest.importorskip("max")
 
-from max.pipelines.lib import KVCacheConfig, PipelineConfig, YarnScalingParams  # type: ignore
-
 from gpt_oss.model_config import GptOssConfig
+from max.pipelines.lib import (  # type: ignore
+    KVCacheConfig,
+    PipelineConfig,
+    YarnScalingParams,
+)
 
 config = {
     "architectures": ["GptOssForCausalLM"],

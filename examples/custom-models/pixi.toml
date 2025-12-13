@@ -29,6 +29,7 @@ mxfp4-mojo-tests = { depends-on = [
 # SM90-only Mojo tests (expected to run only on NVIDIA sm90+; currently under active development).
 mxfp4-mojo-sm90-clean-tile-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/test_mxfp4_sm90_clean_tile_wgmma.mojo"
 mxfp4-mojo-sm90-moe-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/test_mxfp4_moe_sm90.mojo"
+mxfp4-moe-bench = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo"
 format = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff format $PIXI_PROJECT_ROOT/gpt_oss_mxfp4"
 lint = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff check --fix $PIXI_PROJECT_ROOT/gpt_oss_mxfp4"
 

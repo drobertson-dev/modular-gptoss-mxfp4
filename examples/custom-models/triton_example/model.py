@@ -404,7 +404,7 @@ class Transformer(torch.nn.Module):
 
         if config is None:
             config_path = os.path.join(path, "config.json")
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 json_config = json.load(f)
                 config = ModelConfig(**json_config)
 

@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 import torch
 import torch.distributed as dist
-
 from gpt_oss.torch.weights import Checkpoint
 
 
@@ -359,7 +358,7 @@ class Transformer(torch.nn.Module):
             device = torch.device(device)
 
         config_path = os.path.join(path, "config.json")
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             json_config = json.load(f)
             config = ModelConfig(**json_config)
 

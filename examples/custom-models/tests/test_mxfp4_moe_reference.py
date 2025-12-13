@@ -150,7 +150,7 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
         pytest.skip("GPT-OSS checkpoint not found in HF cache; run `pixi run generate` once")
 
     # Small slice sizes (must respect MXFP4 32-value blocks and kernel tile constraints).
-    num_experts = 1
+    num_experts = 2
     t_tokens = 1
     d_hidden = 64
     i_moe = 32
@@ -168,13 +168,13 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
     w1_bias_all = _load_safetensor_bf16_as_f32(ckpt, "model.layers.0.mlp.experts.gate_up_proj_bias")
     w2_bias_all = _load_safetensor_bf16_as_f32(ckpt, "model.layers.0.mlp.experts.down_proj_bias")
 
-    w1_blocks = w1_blocks_all[0, :n_raw, :kblocks_w1, :].copy()[None, ...]
-    w1_scales = w1_scales_all[0, :n_raw, :kblocks_w1].copy()[None, ...]
-    w1_bias = w1_bias_all[0, :n_raw].copy()[None, ...]
+    w1_blocks = w1_blocks_all[:num_experts, :n_raw, :kblocks_w1, :].copy()
+    w1_scales = w1_scales_all[:num_experts, :n_raw, :kblocks_w1].copy()
+    w1_bias = w1_bias_all[:num_experts, :n_raw].copy()
 
-    w2_blocks = w2_blocks_all[0, :d_hidden, :kblocks_w2, :].copy()[None, ...]
-    w2_scales = w2_scales_all[0, :d_hidden, :kblocks_w2].copy()[None, ...]
-    w2_bias = w2_bias_all[0, :d_hidden].copy()[None, ...]
+    w2_blocks = w2_blocks_all[:num_experts, :d_hidden, :kblocks_w2, :].copy()
+    w2_scales = w2_scales_all[:num_experts, :d_hidden, :kblocks_w2].copy()
+    w2_bias = w2_bias_all[:num_experts, :d_hidden].copy()
 
     # Reference computation (bf16 inputs/weights, f32 accumulate, bf16 activation output).
     rng = np.random.default_rng(0)
@@ -191,9 +191,10 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
     w2_dense = _bf16_round_to_f32(w2_dense)
     ref = (h_bf16 @ w2_dense.T) + w2_bias[0]
 
-    # Single pair routed to expert 0 with gamma=1.0.
+    # Single pair routed to expert 0 with gamma=1.0 (expert 1 is inactive).
     token_expert_order = np.array([0], dtype=np.uint32)
-    expert_start = np.array([0, 1], dtype=np.uint32)
+    expert_start = np.array([0, 1, 1], dtype=np.uint32)
+    expert_ids = np.array([0, -1], dtype=np.int32)
     gate_weights = np.array([1.0], dtype=np.float32)
 
     devref = DeviceRef.from_device(device)
@@ -203,6 +204,7 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
             TensorType(DType.float32, shape=[t_tokens, d_hidden], device=devref),
             TensorType(DType.uint32, shape=[1], device=devref),  # token_expert_order
             TensorType(DType.uint32, shape=[num_experts + 1], device=devref),  # expert_start
+            TensorType(DType.int32, shape=[num_experts], device=devref),  # expert_ids
             TensorType(
                 DType.uint8,
                 shape=[num_experts, n_raw, kblocks_w1, 16],
@@ -241,6 +243,7 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
             x_in,
             order_in,
             expert_start_in,
+            expert_ids_in,
             w1_blocks_in,
             w1_scales_in,
             w1_bias_in,
@@ -253,6 +256,10 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
         x_bf16_in = ops.cast(x_in.tensor, DType.bfloat16)
         alpha_val = ops.constant(1.702, dtype=DType.float32, device=DeviceRef.CPU())
         limit_val = ops.constant(7.0, dtype=DType.float32, device=DeviceRef.CPU())
+        max_tokens_val = ops.constant(1, dtype=DType.uint32, device=DeviceRef.CPU())
+        num_active_experts_val = ops.constant(
+            1, dtype=DType.uint32, device=DeviceRef.CPU()
+        )
 
         h_sorted_type = TensorType(
             dtype=DType.bfloat16,
@@ -266,6 +273,9 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
                 x_bf16_in,
                 order_in.tensor,
                 expert_start_in.tensor,
+                expert_ids_in.tensor,
+                max_tokens_val,
+                num_active_experts_val,
                 w1_blocks_in.tensor,
                 w1_scales_in.tensor,
                 w1_bias_in.tensor,
@@ -288,6 +298,9 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
                 h_sorted,
                 order_in.tensor,
                 expert_start_in.tensor,
+                expert_ids_in.tensor,
+                max_tokens_val,
+                num_active_experts_val,
                 gate_in.tensor,
                 w2_blocks_in.tensor,
                 w2_scales_in.tensor,
@@ -306,6 +319,7 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
         Tensor.from_numpy(x_f32).to(device),
         Tensor.from_numpy(token_expert_order).to(device),
         Tensor.from_numpy(expert_start).to(device),
+        Tensor.from_numpy(expert_ids).to(device),
         Tensor.from_numpy(w1_blocks).to(device),
         Tensor.from_numpy(w1_scales).to(device),
         Tensor.from_numpy(w1_bias).to(device),

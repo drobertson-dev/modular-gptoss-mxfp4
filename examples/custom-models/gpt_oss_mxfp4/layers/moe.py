@@ -162,11 +162,16 @@ class GptOssMoE(MoE, Shardable):
             token_expert_order,
             expert_start_indices,
             _restore_token_order,
-            _expert_ids,
-            _expert_usage_stats,
+            expert_ids,
+            expert_usage_stats,
         ) = moe_create_indices(
             ops.cast(router_idx_flat, DType.int32), self.num_experts
         )
+
+        # `moe_create_indices` compacts active experts; use host scalars for launch geometry.
+        expert_usage_stats_host = expert_usage_stats.to(DeviceRef.CPU())
+        max_num_tokens_per_expert = expert_usage_stats_host[0]
+        num_active_experts = expert_usage_stats_host[1]
 
         # Mojo kernels expect BF16 activations and FP32 biases/gate weights.
         x_bf16 = ops.cast(x, DType.bfloat16) if x.dtype != DType.bfloat16 else x
@@ -178,6 +183,9 @@ class GptOssMoE(MoE, Shardable):
             x_bf16,
             token_expert_order,
             expert_start_indices,
+            expert_ids,
+            max_num_tokens_per_expert,
+            num_active_experts,
             self._experts_gate_up_proj_weight_blocks,
             self._experts_gate_up_proj_weight_scales,
             w1_bias_f32,
@@ -190,6 +198,9 @@ class GptOssMoE(MoE, Shardable):
             h_sorted,
             token_expert_order,
             expert_start_indices,
+            expert_ids,
+            max_num_tokens_per_expert,
+            num_active_experts,
             gate_weights_f32,
             self._experts_down_proj_weight_blocks,
             self._experts_down_proj_weight_scales,

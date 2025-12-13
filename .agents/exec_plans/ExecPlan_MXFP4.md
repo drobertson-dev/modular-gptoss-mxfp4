@@ -110,6 +110,10 @@ Mojo tests (use Mojo runner):
     pixi run mxfp4-mojo-sm90-clean-tile-test
     pixi run mxfp4-mojo-sm90-moe-test
 
+Benchmark (SM90-only):
+
+    pixi run mxfp4-moe-bench
+
 Python integration tests (verify wrappers + custom op loading):
 
     cd examples/custom-models
@@ -155,7 +159,10 @@ Evidence from pre-flight (historical):
     - Inputs:
       - `x`: `[T, D]` `bf16`
       - `token_expert_order`: `[P]` `uint32`
-      - `expert_start_indices`: `[num_experts + 1]` `uint32`
+      - `expert_start_indices`: `[num_experts + 1]` `uint32` (compacted; only first `num_active_experts+1` entries are used)
+      - `expert_ids`: `[num_experts]` `int32` (compacted; first `num_active_experts` entries are active expert ids)
+      - `max_num_tokens_per_expert`: scalar `uint32` (host; from `expert_usage_stats[0]`)
+      - `num_active_experts`: scalar `uint32` (host; from `expert_usage_stats[1]`)
       - `w_blocks`: `[num_experts, 2*I, D/32, 16]` `uint8`
       - `w_scales`: `[num_experts, 2*I, D/32]` `uint8` (E8M0 exponent bytes)
       - `bias`: `[num_experts, 2*I]` `float32`
@@ -165,7 +172,10 @@ Evidence from pre-flight (historical):
     - Inputs:
       - `h_sorted`: `[P, I]` `bf16`
       - `token_expert_order`: `[P]` `uint32`
-      - `expert_start_indices`: `[num_experts + 1]` `uint32`
+      - `expert_start_indices`: `[num_experts + 1]` `uint32` (compacted; only first `num_active_experts+1` entries are used)
+      - `expert_ids`: `[num_experts]` `int32` (compacted; first `num_active_experts` entries are active expert ids)
+      - `max_num_tokens_per_expert`: scalar `uint32` (host; from `expert_usage_stats[0]`)
+      - `num_active_experts`: scalar `uint32` (host; from `expert_usage_stats[1]`)
       - `gate_weights`: `[P]` `float32` (original pair order; the op uses `pair_idx` to index it)
       - `w_blocks`: `[num_experts, D, I/32, 16]` `uint8`
       - `w_scales`: `[num_experts, D, I/32]` `uint8` (E8M0 exponent bytes)

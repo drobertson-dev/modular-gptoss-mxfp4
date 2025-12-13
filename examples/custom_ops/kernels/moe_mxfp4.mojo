@@ -52,7 +52,9 @@ fn swiglu_activation_simd[
 ](
     gate: SIMD[DType.float32, width],
     up: SIMD[DType.float32, width],
-) -> SIMD[DType.float32, width]:
+) -> SIMD[
+    DType.float32, width
+]:
     var out = SIMD[DType.float32, width]()
 
     @parameter
@@ -116,15 +118,9 @@ fn grouped_mxfp4_matmul_ref[
         var k0 = (k_block_start // MXFP4_SF_VECTOR_SIZE) % SF_ATOM_K
 
         var scale_idx = (
-            (
-                (
-                    ((row_group * col_groups + col_group) * 32 + m0) * 4
-                    + m1
-                )
-                * SF_ATOM_K
-            )
-            + k0
-        )
+            (((row_group * col_groups + col_group) * 32 + m0) * 4 + m1)
+            * SF_ATOM_K
+        ) + k0
         var scale_exp = rebind[Scalar[U8]](scales_ptr[scale_idx])
 
         @parameter
@@ -144,9 +140,7 @@ fn grouped_mxfp4_matmul_ref[
                 )
             ]
             var v2 = decode_mxfp4_byte_to_2xbf16_e8m0(packed, scale_exp)
-            acc += (
-                a0 * v2[0].cast[F32]() + a1 * v2[1].cast[F32]()
-            )
+            acc += a0 * v2[0].cast[F32]() + a1 * v2[1].cast[F32]()
 
     var b = bias_ptr[expert_id * N + col].cast[F32]()
     out_ptr.store(row * N + col, (acc + b).cast[BF16]())
@@ -217,31 +211,15 @@ fn grouped_mxfp4_swiglu_ref[
 
         var scale_idx_gate = (
             (
-                (
-                    (
-                        (row_group_gate * col_groups + col_group) * 32
-                        + m0_gate
-                    )
-                    * 4
-                    + m1_gate
-                )
-                * SF_ATOM_K
+                ((row_group_gate * col_groups + col_group) * 32 + m0_gate) * 4
+                + m1_gate
             )
-            + k0
-        )
+            * SF_ATOM_K
+        ) + k0
         var scale_idx_up = (
-            (
-                (
-                    (
-                        (row_group_up * col_groups + col_group) * 32 + m0_up
-                    )
-                    * 4
-                    + m1_up
-                )
-                * SF_ATOM_K
-            )
-            + k0
-        )
+            (((row_group_up * col_groups + col_group) * 32 + m0_up) * 4 + m1_up)
+            * SF_ATOM_K
+        ) + k0
 
         var scale_gate = rebind[Scalar[U8]](scales_ptr[scale_idx_gate])
         var scale_up = rebind[Scalar[U8]](scales_ptr[scale_idx_up])
@@ -273,14 +251,10 @@ fn grouped_mxfp4_swiglu_ref[
                 )
             ]
 
-            var g2 = decode_mxfp4_byte_to_2xbf16_e8m0(
-                packed_gate, scale_gate
-            )
+            var g2 = decode_mxfp4_byte_to_2xbf16_e8m0(packed_gate, scale_gate)
             var u2 = decode_mxfp4_byte_to_2xbf16_e8m0(packed_up, scale_up)
 
-            acc_gate += (
-                a0 * g2[0].cast[F32]() + a1 * g2[1].cast[F32]()
-            )
+            acc_gate += a0 * g2[0].cast[F32]() + a1 * g2[1].cast[F32]()
             acc_up += a0 * u2[0].cast[F32]() + a1 * u2[1].cast[F32]()
 
     var gate_bias = bias_ptr[expert_id * (2 * I) + col_gate].cast[F32]()
@@ -361,7 +335,11 @@ struct GroupedMXFP4Matmul:
             offsets_dev,
             ids_dev,
             num_active_experts,
-            grid_dim=(ceildiv(N, 16), ceildiv(max_tokens, 16), num_active_experts),
+            grid_dim=(
+                ceildiv(N, 16),
+                ceildiv(max_tokens, 16),
+                num_active_experts,
+            ),
             block_dim=(256),
         )
 
@@ -438,6 +416,10 @@ struct GroupedMXFP4MatmulSwiGLU:
             offsets_dev,
             ids_dev,
             num_active_experts,
-            grid_dim=(ceildiv(I, 16), ceildiv(max_tokens, 16), num_active_experts),
+            grid_dim=(
+                ceildiv(I, 16),
+                ceildiv(max_tokens, 16),
+                num_active_experts,
+            ),
             block_dim=(256),
         )
