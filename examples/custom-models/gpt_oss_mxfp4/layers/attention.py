@@ -110,8 +110,10 @@ class GptOssAttention(Module, Shardable):
         self.has_bias = has_bias
         self.devices = devices
         self._sharding_strategy: ShardingStrategy | None = None
-        self.scale = scale if scale is not None else math.sqrt(
-            1.0 / self.kv_params.head_dim
+        self.scale = (
+            scale
+            if scale is not None
+            else math.sqrt(1.0 / self.kv_params.head_dim)
         )
         self.local_window_size = local_window_size
         self.layer_type = layer_type
@@ -233,8 +235,9 @@ class GptOssAttention(Module, Shardable):
 
         # Calculate Flash Attention with sinks.
         mask_variant = (
-            MHAMaskVariant.SLIDING_WINDOW_CAUSAL_MASK if self.layer_type
-            == "sliding_attention" else MHAMaskVariant.CAUSAL_MASK
+            MHAMaskVariant.SLIDING_WINDOW_CAUSAL_MASK
+            if self.layer_type == "sliding_attention"
+            else MHAMaskVariant.CAUSAL_MASK
         )
         # The sinks parameter modifies the attention computation by adding an extra
         # logit column that acts as an attention sink.

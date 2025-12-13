@@ -15,8 +15,9 @@ from max.nn.transformer.distributed_transformer import (
     ShardableCallable,
     forward_sharded_layers,
 )
-from max.pipelines.architectures.gpt_oss.layers.attention import GptOssAttention
-from max.pipelines.architectures.gpt_oss.layers.moe import GptOssMoE
+
+from .attention import GptOssAttention
+from .moe import GptOssMoE
 
 
 class GptOssTransformerBlock(Module):

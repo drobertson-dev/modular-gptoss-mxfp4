@@ -1,5 +1,7 @@
 # MXFP4 GPT-OSS SM90 Kernel and Architecture
 
+**Status:** Superseded by `.agents/exec_plans/ExecPlan_MXFP4.md`. This file is kept for historical context only; do not execute it without reconciling it with the canonical ExecPlan.
+
 This ExecPlan is a living document. Maintain it in line with `.agents/PLANS.md` and `AGENTS.md`; keep `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` current as work proceeds. Critical local rules: do not modify existing Modular kernel code under `max/`; add all new code under `examples/`. MXFP4 dequantization must stay fused inside the GEMM (decode in registers after staging packed data in shared), mirroring the Triton reference.
 
 ## Purpose / Big Picture
@@ -96,3 +98,5 @@ Evidence from pre-flight:
 Kernel interface (planned): custom op name `gpt_oss.mxfp4.matmul.sm90`; inputs `(C_out: OutputTensor[bf16, rank=2], A: InputTensor[bf16, rank=2], B_packed: InputTensor[uint8, rank=2 or 3 for experts], B_scales: InputTensor[float8_e8m0fnu, matching packed dims], bias: InputTensor[bf16, rank=1], alpha: Float32, limit: Float32, ctx: DeviceContextPtr)`; output `[M,N]` BF16. B layout expects K multiple of 32 with packed bytes shaped `[K/32, N]` (or `[experts, K/32, N_local]`), scales matching. Python wrapper signature `mxfp4_matmul_swiglu(x, w_blocks, w_scales, bias, alpha=1.702, limit=7.0) -> TensorValue`.
 
 Dependencies to declare: `safetensors`, `torch` (for reference tests), `max` (already present), optional `pytest` for tests. Use MAX Graph ops (`ops.custom`, `ops.softmax`, `moe_create_indices`, etc.) and existing attention utilities from `max.nn`. Ensure pixi env under `examples/custom-models` includes new deps so tasks run reproducibly.
+
+Update 2025-12-13: Marked this ExecPlan as superseded by `.agents/exec_plans/ExecPlan_MXFP4.md` (canonical).

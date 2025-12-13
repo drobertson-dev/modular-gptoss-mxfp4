@@ -27,8 +27,8 @@ def _ensure_modular_home() -> None:
 
 _ensure_modular_home()
 
-from .arch import gpt_oss_mxfp4_arch
+from .arch import gpt_oss_arch
 
-ARCHITECTURES = [gpt_oss_mxfp4_arch]
+ARCHITECTURES = [gpt_oss_arch]
 
-__all__ = ["ARCHITECTURES", "gpt_oss_mxfp4_arch"]
+__all__ = ["ARCHITECTURES", "gpt_oss_arch"]

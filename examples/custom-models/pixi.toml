@@ -9,7 +9,9 @@ version = "0.1.0"
 [tasks]
 generate = "python -m max.entrypoints.pipelines generate --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --max-length 10000 --prompt 'Why is the sky blue?'"
 serve = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/qwen2 --model Qwen/Qwen2.5-0.5B-Instruct"
-mxfp4-matmul-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/gpt_oss_mxfp4/tests/test_mxfp4_matmul.py -q"
+mxfp4-matmul-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_mxfp4_matmul.py -q"
+format = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff format $PIXI_PROJECT_ROOT/gpt_oss_mxfp4"
+lint = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff check --fix $PIXI_PROJECT_ROOT/gpt_oss_mxfp4"
 
 [dependencies]
 python = ">=3.9,<3.14"
