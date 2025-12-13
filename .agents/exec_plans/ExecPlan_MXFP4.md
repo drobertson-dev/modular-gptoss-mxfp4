@@ -5,7 +5,7 @@ This ExecPlan is a living document. Maintain it in line with `.agents/PLANS.md` 
 Critical local rules (repeat of repo constraints):
 - **Do not modify existing Modular kernel code under `max/`.** Import/reuse upstream kernels if needed; all new code goes under `examples/`.
 - **Triton is the blueprint.** The reference implementation in `examples/custom-models/triton_example/` (and the rules in `.agents/ref_docs/MXFP4_KEY_TAKEAWAYS.md`) define the required kernel pattern.
-- **MXFP4 must stay fused.** Stage packed bytes + scales, then decode per warp into register fragments as part of the GEMM K-loop; do not dequantize B into BF16/FP16 in shared and then run a “normal” BF16 matmul.
+- **MXFP4 must stay fused.** Stage packed bytes + scales, then decode per-tile inside the GEMM K-loop. For SM90 WGMMA this can include decoding into BF16/FP16 tiles in shared (as required by WGMMA) immediately before compute; avoid any global pre-dequantization or separate BF16 matmul pass.
 - **Per-subdir environments.** `examples/custom_ops/` and `examples/custom-models/` each have their own `pixi.toml`. Prefer `pixi run --manifest-path <dir> ...` (or run `pixi run ...` with CWD set to that directory) over `pixi shell` (known to reset CWD to `/workspace`).
 - **Mojo tests with Mojo.** Use the Mojo runner (`mojo run`) for Mojo tests; Python tests are only for Python integration/graph wiring.
 
@@ -40,6 +40,8 @@ Risks:
 - [x] (2025-12-13) Wired Python to the Mojo contracts: added wrappers (`gpt_oss_mxfp4/kernels.py`), switched MoE to call `mxfp4_moe_w1_swiglu`/`mxfp4_moe_w2_scatter`, added MXFP4 weight adapter, and ensured the pipeline graph loads custom ops via `custom_extensions`.
 - [x] (2025-12-13) Implemented SM90 `wgmma` paths inside the MoE ops (`examples/custom_ops/kernels/moe_mxfp4_ops.mojo`) **without changing the Python-visible op signatures** (initial correctness-first WGMMA; perf work continues).
 - [x] (2025-12-13) Added pixi tasks + ran smoke validations (Mojo runner for Mojo tests; Python tests for integration).
+- [x] (2025-12-13) Vectorized activation (A) global loads (UInt64 -> 4x BF16) for W1/W2 WGMMA preload + prefetch, improving the `mxfp4-moe-bench` microbench substantially.
+- [x] (2025-12-13) Reduced MXFP4 decode overhead by converting E8M0 scale once per 32-value block and reusing it for all 16 packed bytes during B-tile decode (Triton-like K-loop behavior).
 
 ## Surprises & Discoveries
 

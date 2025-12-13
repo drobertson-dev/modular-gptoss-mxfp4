@@ -120,6 +120,19 @@ fn decode_mxfp4_byte_to_2xbf16_e8m0(
 
 
 @always_inline
+fn decode_mxfp4_byte_to_2xbf16_scaled(
+    packed: Scalar[U8],
+    scale: Scalar[F32],
+) -> SIMD[BF16, 2]:
+    var lo = UInt8(packed) & 0x0F
+    var hi = UInt8(packed) >> 4
+    var out = SIMD[BF16, 2](0)
+    out[0] = (fp4_e2m1_to_f32(lo) * scale).cast[BF16]()
+    out[1] = (fp4_e2m1_to_f32(hi) * scale).cast[BF16]()
+    return out
+
+
+@always_inline
 fn decode_mxfp4_byte_to_2xf16[
     scale_dtype: DType,
 ](packed: Scalar[U8], scale: Scalar[scale_dtype],) -> SIMD[F16, 2]:
