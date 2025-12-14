@@ -12,6 +12,13 @@ generate-smoke = "python -m max.entrypoints.pipelines generate --custom-architec
 generate-smoke-prof = "python -m max.entrypoints.pipelines generate --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --max-length 2048 --prompt 'Say hello in one sentence.' --gpu-profiling detailed"
 serve = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b"
 serve-prof = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --gpu-profiling detailed"
+serve-20b = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b"
+serve-20b-prof = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --gpu-profiling detailed"
+serve-120b = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-120b --max-batch-size 32 --max-length 16384 --enable-in-flight-batching  --experimental-background-queue"
+serve-120b-prof = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-120b --gpu-profiling detailed"
+
+# NOTE: `max benchmark` expects a running `pixi run serve-*` instance.
+benchmark-20b-sharegpt-500-r32 = "max benchmark --model openai/gpt-oss-20b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 500 --seed 0 --request-rate 32 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
 mxfp4-matmul-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_mxfp4_matmul.py -q"
 mxfp4-bootstrap-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_modular_home_bootstrap.py -q"
 mxfp4-moe-reference-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_mxfp4_moe_reference.py -q"

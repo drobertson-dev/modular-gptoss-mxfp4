@@ -110,8 +110,7 @@ def mxfp4_moe_w1_swiglu(
     token_expert_order: Any,
     expert_start_indices: Any,
     expert_ids: Any,
-    max_num_tokens_per_expert: Any,
-    num_active_experts: Any,
+    expert_usage_stats: Any,
     w_blocks: Any,
     w_scales: Any,
     bias_f32: Any,
@@ -126,8 +125,7 @@ def mxfp4_moe_w1_swiglu(
     token_expert_order_t = _as_tensor(token_expert_order)
     expert_start_indices_t = _as_tensor(expert_start_indices)
     expert_ids_t = _as_tensor(expert_ids)
-    max_tokens_t = _as_tensor(max_num_tokens_per_expert)
-    num_active_t = _as_tensor(num_active_experts)
+    expert_usage_stats_t = _as_tensor(expert_usage_stats)
     w_blocks_t = _as_tensor(w_blocks)
     w_scales_t = _as_tensor(w_scales)
     bias_t = _as_tensor(bias_f32)
@@ -152,8 +150,7 @@ def mxfp4_moe_w1_swiglu(
             token_expert_order_t,
             expert_start_indices_t,
             expert_ids_t,
-            max_tokens_t,
-            num_active_t,
+            expert_usage_stats_t,
             w_blocks_t,
             w_scales_t,
             bias_t,
@@ -171,8 +168,7 @@ def mxfp4_moe_w2_scatter(
     token_expert_order: Any,
     expert_start_indices: Any,
     expert_ids: Any,
-    max_num_tokens_per_expert: Any,
-    num_active_experts: Any,
+    expert_usage_stats: Any,
     gate_weights_f32: Any,
     w_blocks: Any,
     w_scales: Any,
@@ -187,8 +183,7 @@ def mxfp4_moe_w2_scatter(
     token_expert_order_t = _as_tensor(token_expert_order)
     expert_start_indices_t = _as_tensor(expert_start_indices)
     expert_ids_t = _as_tensor(expert_ids)
-    max_tokens_t = _as_tensor(max_num_tokens_per_expert)
-    num_active_t = _as_tensor(num_active_experts)
+    expert_usage_stats_t = _as_tensor(expert_usage_stats)
     gate_weights_t = _as_tensor(gate_weights_f32)
     w_blocks_t = _as_tensor(w_blocks)
     w_scales_t = _as_tensor(w_scales)
@@ -209,8 +204,7 @@ def mxfp4_moe_w2_scatter(
             token_expert_order_t,
             expert_start_indices_t,
             expert_ids_t,
-            max_tokens_t,
-            num_active_t,
+            expert_usage_stats_t,
             gate_weights_t,
             w_blocks_t,
             w_scales_t,
@@ -227,8 +221,7 @@ def mxfp4_moe_w2_pairs(
     token_expert_order: Any,
     expert_start_indices: Any,
     expert_ids: Any,
-    max_num_tokens_per_expert: Any,
-    num_active_experts: Any,
+    expert_usage_stats: Any,
     gate_weights_f32: Any,
     w_blocks: Any,
     w_scales: Any,
@@ -243,8 +236,7 @@ def mxfp4_moe_w2_pairs(
     token_expert_order_t = _as_tensor(token_expert_order)
     expert_start_indices_t = _as_tensor(expert_start_indices)
     expert_ids_t = _as_tensor(expert_ids)
-    max_tokens_t = _as_tensor(max_num_tokens_per_expert)
-    num_active_t = _as_tensor(num_active_experts)
+    expert_usage_stats_t = _as_tensor(expert_usage_stats)
     gate_weights_t = _as_tensor(gate_weights_f32)
     w_blocks_t = _as_tensor(w_blocks)
     w_scales_t = _as_tensor(w_scales)
@@ -265,8 +257,7 @@ def mxfp4_moe_w2_pairs(
             token_expert_order_t,
             expert_start_indices_t,
             expert_ids_t,
-            max_tokens_t,
-            num_active_t,
+            expert_usage_stats_t,
             gate_weights_t,
             w_blocks_t,
             w_scales_t,

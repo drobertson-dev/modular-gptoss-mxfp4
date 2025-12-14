@@ -18,7 +18,7 @@ from math import ceildiv
 from os import Atomic
 
 import compiler
-from gpu import barrier, block_dim, block_idx, thread_idx, warp_id
+from gpu import barrier, block_dim, block_idx, grid_dim, thread_idx, warp_id
 from gpu.host import DeviceBuffer, FuncAttribute
 from gpu.host.info import is_cpu
 from gpu.memory import (
@@ -78,7 +78,7 @@ fn moe_w1_mxfp4_swiglu_wgmma[
     P: Int,
     expert_start_ptr: UnsafePointer[UInt32, MutAnyOrigin],
     expert_ids_ptr: UnsafePointer[Int32, MutAnyOrigin],
-    num_active_experts: Int,
+    expert_usage_stats_ptr: UnsafePointer[UInt32, MutAnyOrigin],
     w_blocks_ptr: UnsafePointer[UInt8, MutAnyOrigin],
     w_scales_ptr: UnsafePointer[UInt8, MutAnyOrigin],
     Kblocks: Int,
@@ -98,6 +98,7 @@ fn moe_w1_mxfp4_swiglu_wgmma[
     constrained[BM % (WGMMA_M * NUM_WARP_GROUPS) == 0]()
 
     var expert_idx = Int(block_idx.z)
+    var num_active_experts = Int(expert_usage_stats_ptr[1])
     if expert_idx >= num_active_experts:
         return
 
@@ -114,20 +115,15 @@ fn moe_w1_mxfp4_swiglu_wgmma[
 
     var seg_start = Int(expert_start_ptr[expert_idx])
     var seg_end = Int(expert_start_ptr[expert_idx + 1])
-    var row0 = seg_start + Int(block_idx.y) * BM
+    var row_base = seg_start + Int(block_idx.y) * BM
+    if row_base >= seg_end or row_base >= P:
+        return
+    var row_stride = BM * Int(grid_dim.y)
 
     # Routing: token ids for BM rows (pair_idx sorted by expert, TOPK packed).
     var token_ids_s = stack_allocation[
         BM, Scalar[U32], address_space = AddressSpace.SHARED
     ]()
-    for r in range(Int(thread_idx.x), BM, Int(block_dim.x)):
-        var global_row = row0 + r
-        if global_row < seg_end and global_row < P:
-            var pair_idx = Int(token_expert_order_ptr[global_row])
-            token_ids_s[r] = UInt32(pair_idx // TOPK)
-        else:
-            token_ids_s[r] = UInt32(0)
-    barrier()
 
     comptime blocks_per_tile = BK // VALUES_PER_BLOCK
 
@@ -237,452 +233,468 @@ fn moe_w1_mxfp4_swiglu_wgmma[
 
     comptime a_chunks = BK // 4
 
-    # Preload first K tile into buffer 0.
-    var kb0 = 0
-    for idx in range(
-        Int(thread_idx.x),
-        BN_RAW * blocks_per_tile,
-        Int(block_dim.x),
-    ):
-        var c = idx // blocks_per_tile
-        var block_in_tile = idx - c * blocks_per_tile
-        var n_raw = n_raw0 + c
-        var kb = kb0 + block_in_tile
-
-        if n_raw < N_raw_total and kb < Kblocks:
-            var packed_base = (
-                (expert_id * N_raw_total + n_raw) * Kblocks + kb
-            ) * BYTES_PER_BLOCK
-            async_copy[16](
-                w_blocks_u8 + packed_base,
-                B_pack0 + idx * BYTES_PER_BLOCK,
-            )
-        else:
-            var base_u64 = idx * 2
-            B_pack0_u64.store[alignment=8](base_u64 + 0, Scalar[U64](0))
-            B_pack0_u64.store[alignment=8](base_u64 + 1, Scalar[U64](0))
-
-    async_copy_commit_group()
-
-    for idx in range(Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)):
-        var r = idx // a_chunks
-        var chunk = idx - r * a_chunks
-        var kk = chunk * 4
-        var global_row = row0 + r
-        var global_k = kk
-
-        if global_row < seg_end and global_row < P and global_k + 3 < D:
-            var tok = Int(token_ids_s[r][0])
-            if tok < T:
-                var p64 = rebind[UnsafePointer[UInt64, MutAnyOrigin]](
-                    x_ptr + (tok * D + global_k)
-                )
-                var v4 = bitcast[DType.bfloat16, 4](p64[0])
-                A_s0[r, kk + 0] = v4[0]
-                A_s0[r, kk + 1] = v4[1]
-                A_s0[r, kk + 2] = v4[2]
-                A_s0[r, kk + 3] = v4[3]
+    for row0 in range(row_base, seg_end, row_stride):
+        for r in range(Int(thread_idx.x), BM, Int(block_dim.x)):
+            var global_row = row0 + r
+            if global_row < seg_end and global_row < P:
+                var pair_idx = Int(token_expert_order_ptr[global_row])
+                token_ids_s[r] = UInt32(pair_idx // TOPK)
             else:
-                A_s0[r, kk + 0] = 0
-                A_s0[r, kk + 1] = 0
-                A_s0[r, kk + 2] = 0
-                A_s0[r, kk + 3] = 0
-        else:
+                token_ids_s[r] = UInt32(0)
+        barrier()
 
-            @parameter
-            for i in range(4):
-                var k_i = global_k + i
-                if global_row < seg_end and global_row < P and k_i < D:
-                    var tok = Int(token_ids_s[r][0])
-                    if tok < T:
-                        A_s0[r, kk + i] = x_ptr[tok * D + k_i]
-                    else:
-                        A_s0[r, kk + i] = 0
+        _ = c_reg_tile.fill(0.0)
+
+        # Preload first K tile into buffer 0.
+        var kb0 = 0
+        for idx in range(
+            Int(thread_idx.x),
+            BN_RAW * blocks_per_tile,
+            Int(block_dim.x),
+        ):
+            var c = idx // blocks_per_tile
+            var block_in_tile = idx - c * blocks_per_tile
+            var n_raw = n_raw0 + c
+            var kb = kb0 + block_in_tile
+
+            if n_raw < N_raw_total and kb < Kblocks:
+                var packed_base = (
+                    (expert_id * N_raw_total + n_raw) * Kblocks + kb
+                ) * BYTES_PER_BLOCK
+                async_copy[16](
+                    w_blocks_u8 + packed_base,
+                    B_pack0 + idx * BYTES_PER_BLOCK,
+                )
+            else:
+                var base_u64 = idx * 2
+                B_pack0_u64.store[alignment=8](base_u64 + 0, Scalar[U64](0))
+                B_pack0_u64.store[alignment=8](base_u64 + 1, Scalar[U64](0))
+
+        async_copy_commit_group()
+
+        for idx in range(Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)):
+            var r = idx // a_chunks
+            var chunk = idx - r * a_chunks
+            var kk = chunk * 4
+            var global_row = row0 + r
+            var global_k = kk
+
+            if global_row < seg_end and global_row < P and global_k + 3 < D:
+                var tok = Int(token_ids_s[r][0])
+                if tok < T:
+                    var p64 = rebind[UnsafePointer[UInt64, MutAnyOrigin]](
+                        x_ptr + (tok * D + global_k)
+                    )
+                    var v4 = bitcast[DType.bfloat16, 4](p64[0])
+                    A_s0[r, kk + 0] = v4[0]
+                    A_s0[r, kk + 1] = v4[1]
+                    A_s0[r, kk + 2] = v4[2]
+                    A_s0[r, kk + 3] = v4[3]
                 else:
-                    A_s0[r, kk + i] = 0
-
-    async_copy_wait_all()
-
-    for idx in range(
-        Int(thread_idx.x),
-        BN_RAW * blocks_per_tile,
-        Int(block_dim.x),
-    ):
-        var c = idx // blocks_per_tile
-        var block_in_tile = idx - c * blocks_per_tile
-        var n_raw = n_raw0 + c
-        var kb = kb0 + block_in_tile
-        var scale_exp = UInt8(0)
-        if n_raw < N_raw_total and kb < Kblocks:
-            scale_exp = w_scales_ptr[
-                ((expert_id * N_raw_total + n_raw) * Kblocks) + kb
-            ]
-        var scale = e8m0_to_f32(scale_exp)
-
-        var base_u64 = idx * 2
-        var packed0 = bitcast[DType.uint8, 8](
-            UInt64(B_pack0_u64.load[alignment=8](base_u64 + 0))
-        )
-        var packed1 = bitcast[DType.uint8, 8](
-            UInt64(B_pack0_u64.load[alignment=8](base_u64 + 1))
-        )
-
-        @parameter
-        for byte_in_block in range(8):
-            var r0 = block_in_tile * VALUES_PER_BLOCK + byte_in_block * 2
-            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                packed0[byte_in_block], scale
-            )
-            B_s0[c, r0 + 0] = v2[0]
-            B_s0[c, r0 + 1] = v2[1]
-
-        @parameter
-        for byte_in_block in range(8):
-            var byte = byte_in_block + 8
-            var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
-            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                packed1[byte_in_block], scale
-            )
-            B_s0[c, r0 + 0] = v2[0]
-            B_s0[c, r0 + 1] = v2[1]
-
-    barrier()
-
-    var num_k_tiles = ceildiv(D, BK)
-    for k_tile in range(num_k_tiles):
-        var use_buf0 = (k_tile & 1) == 0
-
-        warpgroup_fence(c_reg_tile)
-        wgmma.arrive()
-        if use_buf0:
-            wgmma.wgmma[num_warp_groups=NUM_WARP_GROUPS](
-                a_smem_tile=A_s0,
-                b_smem_tile=B_s0,
-                c_reg_tile=c_reg_tile,
-                wg_idx=wg_idx,
-            )
-        else:
-            wgmma.wgmma[num_warp_groups=NUM_WARP_GROUPS](
-                a_smem_tile=A_s1,
-                b_smem_tile=B_s1,
-                c_reg_tile=c_reg_tile,
-                wg_idx=wg_idx,
-            )
-        wgmma.commit_group()
-        warpgroup_fence(c_reg_tile)
-
-        if k_tile + 1 < num_k_tiles:
-            # Allow at most one group to remain pending before overwriting the
-            # next buffer (2-stage pipeline).
-            wgmma.wait_group[1]()
-
-            var k0_next = (k_tile + 1) * BK
-            var kb0_next = k0_next // VALUES_PER_BLOCK
-
-            if use_buf0:
-                # Load next tile into buffer 1.
-                for idx in range(
-                    Int(thread_idx.x),
-                    BN_RAW * blocks_per_tile,
-                    Int(block_dim.x),
-                ):
-                    var c = idx // blocks_per_tile
-                    var block_in_tile = idx - c * blocks_per_tile
-                    var n_raw = n_raw0 + c
-                    var kb = kb0_next + block_in_tile
-
-                    if n_raw < N_raw_total and kb < Kblocks:
-                        var packed_base = (
-                            (expert_id * N_raw_total + n_raw) * Kblocks + kb
-                        ) * BYTES_PER_BLOCK
-                        async_copy[16](
-                            w_blocks_u8 + packed_base,
-                            B_pack1 + idx * BYTES_PER_BLOCK,
-                        )
-                    else:
-                        var base_u64 = idx * 2
-                        B_pack1_u64.store[alignment=8](
-                            base_u64 + 0, Scalar[U64](0)
-                        )
-                        B_pack1_u64.store[alignment=8](
-                            base_u64 + 1, Scalar[U64](0)
-                        )
-
-                async_copy_commit_group()
-
-                for idx in range(
-                    Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)
-                ):
-                    var r = idx // a_chunks
-                    var chunk = idx - r * a_chunks
-                    var kk = chunk * 4
-                    var global_row = row0 + r
-                    var global_k = k0_next + kk
-
-                    if (
-                        global_row < seg_end
-                        and global_row < P
-                        and global_k + 3 < D
-                    ):
-                        var tok = Int(token_ids_s[r][0])
-                        if tok < T:
-                            var p64 = rebind[
-                                UnsafePointer[UInt64, MutAnyOrigin]
-                            ](x_ptr + (tok * D + global_k))
-                            var v4 = bitcast[DType.bfloat16, 4](p64[0])
-                            A_s1[r, kk + 0] = v4[0]
-                            A_s1[r, kk + 1] = v4[1]
-                            A_s1[r, kk + 2] = v4[2]
-                            A_s1[r, kk + 3] = v4[3]
-                        else:
-                            A_s1[r, kk + 0] = 0
-                            A_s1[r, kk + 1] = 0
-                            A_s1[r, kk + 2] = 0
-                            A_s1[r, kk + 3] = 0
-                    else:
-
-                        @parameter
-                        for i in range(4):
-                            var k_i = global_k + i
-                            if (
-                                global_row < seg_end
-                                and global_row < P
-                                and k_i < D
-                            ):
-                                var tok = Int(token_ids_s[r][0])
-                                if tok < T:
-                                    A_s1[r, kk + i] = x_ptr[tok * D + k_i]
-                                else:
-                                    A_s1[r, kk + i] = 0
-                            else:
-                                A_s1[r, kk + i] = 0
-
-                async_copy_wait_all()
-
-                for idx in range(
-                    Int(thread_idx.x),
-                    BN_RAW * blocks_per_tile,
-                    Int(block_dim.x),
-                ):
-                    var c = idx // blocks_per_tile
-                    var block_in_tile = idx - c * blocks_per_tile
-                    var n_raw = n_raw0 + c
-                    var kb = kb0_next + block_in_tile
-                    var scale_exp = UInt8(0)
-                    if n_raw < N_raw_total and kb < Kblocks:
-                        scale_exp = w_scales_ptr[
-                            ((expert_id * N_raw_total + n_raw) * Kblocks) + kb
-                        ]
-                    var scale = e8m0_to_f32(scale_exp)
-
-                    var base_u64 = idx * 2
-                    var packed0 = bitcast[DType.uint8, 8](
-                        UInt64(B_pack1_u64.load[alignment=8](base_u64 + 0))
-                    )
-                    var packed1 = bitcast[DType.uint8, 8](
-                        UInt64(B_pack1_u64.load[alignment=8](base_u64 + 1))
-                    )
-
-                    @parameter
-                    for byte_in_block in range(8):
-                        var r0 = (
-                            block_in_tile * VALUES_PER_BLOCK + byte_in_block * 2
-                        )
-                        var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                            packed0[byte_in_block], scale
-                        )
-                        B_s1[c, r0 + 0] = v2[0]
-                        B_s1[c, r0 + 1] = v2[1]
-
-                    @parameter
-                    for byte_in_block in range(8):
-                        var byte = byte_in_block + 8
-                        var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
-                        var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                            packed1[byte_in_block], scale
-                        )
-                        B_s1[c, r0 + 0] = v2[0]
-                        B_s1[c, r0 + 1] = v2[1]
-                barrier()
+                    A_s0[r, kk + 0] = 0
+                    A_s0[r, kk + 1] = 0
+                    A_s0[r, kk + 2] = 0
+                    A_s0[r, kk + 3] = 0
             else:
-                # Load next tile into buffer 0.
-                for idx in range(
-                    Int(thread_idx.x),
-                    BN_RAW * blocks_per_tile,
-                    Int(block_dim.x),
-                ):
-                    var c = idx // blocks_per_tile
-                    var block_in_tile = idx - c * blocks_per_tile
-                    var n_raw = n_raw0 + c
-                    var kb = kb0_next + block_in_tile
-
-                    if n_raw < N_raw_total and kb < Kblocks:
-                        var packed_base = (
-                            (expert_id * N_raw_total + n_raw) * Kblocks + kb
-                        ) * BYTES_PER_BLOCK
-                        async_copy[16](
-                            w_blocks_u8 + packed_base,
-                            B_pack0 + idx * BYTES_PER_BLOCK,
-                        )
-                    else:
-                        var base_u64 = idx * 2
-                        B_pack0_u64.store[alignment=8](
-                            base_u64 + 0, Scalar[U64](0)
-                        )
-                        B_pack0_u64.store[alignment=8](
-                            base_u64 + 1, Scalar[U64](0)
-                        )
-
-                async_copy_commit_group()
-
-                for idx in range(
-                    Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)
-                ):
-                    var r = idx // a_chunks
-                    var chunk = idx - r * a_chunks
-                    var kk = chunk * 4
-                    var global_row = row0 + r
-                    var global_k = k0_next + kk
-
-                    if (
-                        global_row < seg_end
-                        and global_row < P
-                        and global_k + 3 < D
-                    ):
-                        var tok = Int(token_ids_s[r][0])
-                        if tok < T:
-                            var p64 = rebind[
-                                UnsafePointer[UInt64, MutAnyOrigin]
-                            ](x_ptr + (tok * D + global_k))
-                            var v4 = bitcast[DType.bfloat16, 4](p64[0])
-                            A_s0[r, kk + 0] = v4[0]
-                            A_s0[r, kk + 1] = v4[1]
-                            A_s0[r, kk + 2] = v4[2]
-                            A_s0[r, kk + 3] = v4[3]
-                        else:
-                            A_s0[r, kk + 0] = 0
-                            A_s0[r, kk + 1] = 0
-                            A_s0[r, kk + 2] = 0
-                            A_s0[r, kk + 3] = 0
-                    else:
-
-                        @parameter
-                        for i in range(4):
-                            var k_i = global_k + i
-                            if (
-                                global_row < seg_end
-                                and global_row < P
-                                and k_i < D
-                            ):
-                                var tok = Int(token_ids_s[r][0])
-                                if tok < T:
-                                    A_s0[r, kk + i] = x_ptr[tok * D + k_i]
-                                else:
-                                    A_s0[r, kk + i] = 0
-                            else:
-                                A_s0[r, kk + i] = 0
-
-                async_copy_wait_all()
-
-                for idx in range(
-                    Int(thread_idx.x),
-                    BN_RAW * blocks_per_tile,
-                    Int(block_dim.x),
-                ):
-                    var c = idx // blocks_per_tile
-                    var block_in_tile = idx - c * blocks_per_tile
-                    var n_raw = n_raw0 + c
-                    var kb = kb0_next + block_in_tile
-                    var scale_exp = UInt8(0)
-                    if n_raw < N_raw_total and kb < Kblocks:
-                        scale_exp = w_scales_ptr[
-                            ((expert_id * N_raw_total + n_raw) * Kblocks) + kb
-                        ]
-                    var scale = e8m0_to_f32(scale_exp)
-
-                    var base_u64 = idx * 2
-                    var packed0 = bitcast[DType.uint8, 8](
-                        UInt64(B_pack0_u64.load[alignment=8](base_u64 + 0))
-                    )
-                    var packed1 = bitcast[DType.uint8, 8](
-                        UInt64(B_pack0_u64.load[alignment=8](base_u64 + 1))
-                    )
-
-                    @parameter
-                    for byte_in_block in range(8):
-                        var r0 = (
-                            block_in_tile * VALUES_PER_BLOCK + byte_in_block * 2
-                        )
-                        var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                            packed0[byte_in_block], scale
-                        )
-                        B_s0[c, r0 + 0] = v2[0]
-                        B_s0[c, r0 + 1] = v2[1]
-
-                    @parameter
-                    for byte_in_block in range(8):
-                        var byte = byte_in_block + 8
-                        var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
-                        var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                            packed1[byte_in_block], scale
-                        )
-                        B_s0[c, r0 + 0] = v2[0]
-                        B_s0[c, r0 + 1] = v2[1]
-                barrier()
-
-            # Next iteration can proceed after B_s0/B_s1 is decoded.
-
-    # Ensure all WGMMA groups are complete before the epilogue.
-    wgmma.wait_group()
-
-    # Epilogue: bias + SwiGLU directly from register fragments.
-    var lane = Int(thread_idx.x & 31)
-    var lane_row = lane // 4
-    var lane_col = lane - lane_row * 4
-
-    comptime warp_rows = WGMMA_M // 4
-    comptime row_iters = warp_rows // 8
-    comptime col_iters = (WGMMA_N // 2) // 4
-
-    @parameter
-    for m_mma in range(num_m_mmas):
-
-        @parameter
-        for n_mma in range(num_n_mmas):
-            comptime mma_id = n_mma * num_m_mmas + m_mma
-            var c_frag = c_reg_tile.tile[1, c_frag_size](mma_id, 0)
-            var c_pairs = c_frag.vectorize[1, 2]()
-
-            @parameter
-            for r_it in range(row_iters):
-                var row_in_warp = lane_row + r_it * 8
-                var row_in_cta = (
-                    wg_idx * (num_m_mmas * WGMMA_M)
-                    + m_mma * WGMMA_M
-                    + warp_in_wg * warp_rows
-                    + row_in_warp
-                )
-                var global_row = row0 + row_in_cta
-                if global_row >= seg_end or global_row >= P:
-                    continue
 
                 @parameter
-                for c_it in range(col_iters):
-                    var col_pair = lane_col + c_it * 4
-                    var out_col = n_act0 + n_mma * (WGMMA_N // 2) + col_pair
-                    if out_col >= I:
+                for i in range(4):
+                    var k_i = global_k + i
+                    if global_row < seg_end and global_row < P and k_i < D:
+                        var tok = Int(token_ids_s[r][0])
+                        if tok < T:
+                            A_s0[r, kk + i] = x_ptr[tok * D + k_i]
+                        else:
+                            A_s0[r, kk + i] = 0
+                    else:
+                        A_s0[r, kk + i] = 0
+
+        async_copy_wait_all()
+
+        for idx in range(
+            Int(thread_idx.x),
+            BN_RAW * blocks_per_tile,
+            Int(block_dim.x),
+        ):
+            var c = idx // blocks_per_tile
+            var block_in_tile = idx - c * blocks_per_tile
+            var n_raw = n_raw0 + c
+            var kb = kb0 + block_in_tile
+            var scale_exp = UInt8(0)
+            if n_raw < N_raw_total and kb < Kblocks:
+                scale_exp = w_scales_ptr[
+                    ((expert_id * N_raw_total + n_raw) * Kblocks) + kb
+                ]
+            var scale = e8m0_to_f32(scale_exp)
+
+            var base_u64 = idx * 2
+            var packed0 = bitcast[DType.uint8, 8](
+                UInt64(B_pack0_u64.load[alignment=8](base_u64 + 0))
+            )
+            var packed1 = bitcast[DType.uint8, 8](
+                UInt64(B_pack0_u64.load[alignment=8](base_u64 + 1))
+            )
+
+            @parameter
+            for byte_in_block in range(8):
+                var r0 = block_in_tile * VALUES_PER_BLOCK + byte_in_block * 2
+                var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                    packed0[byte_in_block], scale
+                )
+                B_s0[c, r0 + 0] = v2[0]
+                B_s0[c, r0 + 1] = v2[1]
+
+            @parameter
+            for byte_in_block in range(8):
+                var byte = byte_in_block + 8
+                var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
+                var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                    packed1[byte_in_block], scale
+                )
+                B_s0[c, r0 + 0] = v2[0]
+                B_s0[c, r0 + 1] = v2[1]
+
+        barrier()
+
+        var num_k_tiles = ceildiv(D, BK)
+        for k_tile in range(num_k_tiles):
+            var use_buf0 = (k_tile & 1) == 0
+
+            warpgroup_fence(c_reg_tile)
+            wgmma.arrive()
+            if use_buf0:
+                wgmma.wgmma[num_warp_groups=NUM_WARP_GROUPS](
+                    a_smem_tile=A_s0,
+                    b_smem_tile=B_s0,
+                    c_reg_tile=c_reg_tile,
+                    wg_idx=wg_idx,
+                )
+            else:
+                wgmma.wgmma[num_warp_groups=NUM_WARP_GROUPS](
+                    a_smem_tile=A_s1,
+                    b_smem_tile=B_s1,
+                    c_reg_tile=c_reg_tile,
+                    wg_idx=wg_idx,
+                )
+            wgmma.commit_group()
+            warpgroup_fence(c_reg_tile)
+
+            if k_tile + 1 < num_k_tiles:
+                # Allow at most one group to remain pending before overwriting the
+                # next buffer (2-stage pipeline).
+                wgmma.wait_group[1]()
+
+                var k0_next = (k_tile + 1) * BK
+                var kb0_next = k0_next // VALUES_PER_BLOCK
+
+                if use_buf0:
+                    # Load next tile into buffer 1.
+                    for idx in range(
+                        Int(thread_idx.x),
+                        BN_RAW * blocks_per_tile,
+                        Int(block_dim.x),
+                    ):
+                        var c = idx // blocks_per_tile
+                        var block_in_tile = idx - c * blocks_per_tile
+                        var n_raw = n_raw0 + c
+                        var kb = kb0_next + block_in_tile
+
+                        if n_raw < N_raw_total and kb < Kblocks:
+                            var packed_base = (
+                                (expert_id * N_raw_total + n_raw) * Kblocks + kb
+                            ) * BYTES_PER_BLOCK
+                            async_copy[16](
+                                w_blocks_u8 + packed_base,
+                                B_pack1 + idx * BYTES_PER_BLOCK,
+                            )
+                        else:
+                            var base_u64 = idx * 2
+                            B_pack1_u64.store[alignment=8](
+                                base_u64 + 0, Scalar[U64](0)
+                            )
+                            B_pack1_u64.store[alignment=8](
+                                base_u64 + 1, Scalar[U64](0)
+                            )
+
+                    async_copy_commit_group()
+
+                    for idx in range(
+                        Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)
+                    ):
+                        var r = idx // a_chunks
+                        var chunk = idx - r * a_chunks
+                        var kk = chunk * 4
+                        var global_row = row0 + r
+                        var global_k = k0_next + kk
+
+                        if (
+                            global_row < seg_end
+                            and global_row < P
+                            and global_k + 3 < D
+                        ):
+                            var tok = Int(token_ids_s[r][0])
+                            if tok < T:
+                                var p64 = rebind[
+                                    UnsafePointer[UInt64, MutAnyOrigin]
+                                ](x_ptr + (tok * D + global_k))
+                                var v4 = bitcast[DType.bfloat16, 4](p64[0])
+                                A_s1[r, kk + 0] = v4[0]
+                                A_s1[r, kk + 1] = v4[1]
+                                A_s1[r, kk + 2] = v4[2]
+                                A_s1[r, kk + 3] = v4[3]
+                            else:
+                                A_s1[r, kk + 0] = 0
+                                A_s1[r, kk + 1] = 0
+                                A_s1[r, kk + 2] = 0
+                                A_s1[r, kk + 3] = 0
+                        else:
+
+                            @parameter
+                            for i in range(4):
+                                var k_i = global_k + i
+                                if (
+                                    global_row < seg_end
+                                    and global_row < P
+                                    and k_i < D
+                                ):
+                                    var tok = Int(token_ids_s[r][0])
+                                    if tok < T:
+                                        A_s1[r, kk + i] = x_ptr[tok * D + k_i]
+                                    else:
+                                        A_s1[r, kk + i] = 0
+                                else:
+                                    A_s1[r, kk + i] = 0
+
+                    async_copy_wait_all()
+
+                    for idx in range(
+                        Int(thread_idx.x),
+                        BN_RAW * blocks_per_tile,
+                        Int(block_dim.x),
+                    ):
+                        var c = idx // blocks_per_tile
+                        var block_in_tile = idx - c * blocks_per_tile
+                        var n_raw = n_raw0 + c
+                        var kb = kb0_next + block_in_tile
+                        var scale_exp = UInt8(0)
+                        if n_raw < N_raw_total and kb < Kblocks:
+                            scale_exp = w_scales_ptr[
+                                ((expert_id * N_raw_total + n_raw) * Kblocks)
+                                + kb
+                            ]
+                        var scale = e8m0_to_f32(scale_exp)
+
+                        var base_u64 = idx * 2
+                        var packed0 = bitcast[DType.uint8, 8](
+                            UInt64(B_pack1_u64.load[alignment=8](base_u64 + 0))
+                        )
+                        var packed1 = bitcast[DType.uint8, 8](
+                            UInt64(B_pack1_u64.load[alignment=8](base_u64 + 1))
+                        )
+
+                        @parameter
+                        for byte_in_block in range(8):
+                            var r0 = (
+                                block_in_tile * VALUES_PER_BLOCK
+                                + byte_in_block * 2
+                            )
+                            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                                packed0[byte_in_block], scale
+                            )
+                            B_s1[c, r0 + 0] = v2[0]
+                            B_s1[c, r0 + 1] = v2[1]
+
+                        @parameter
+                        for byte_in_block in range(8):
+                            var byte = byte_in_block + 8
+                            var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
+                            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                                packed1[byte_in_block], scale
+                            )
+                            B_s1[c, r0 + 0] = v2[0]
+                            B_s1[c, r0 + 1] = v2[1]
+                    barrier()
+                else:
+                    # Load next tile into buffer 0.
+                    for idx in range(
+                        Int(thread_idx.x),
+                        BN_RAW * blocks_per_tile,
+                        Int(block_dim.x),
+                    ):
+                        var c = idx // blocks_per_tile
+                        var block_in_tile = idx - c * blocks_per_tile
+                        var n_raw = n_raw0 + c
+                        var kb = kb0_next + block_in_tile
+
+                        if n_raw < N_raw_total and kb < Kblocks:
+                            var packed_base = (
+                                (expert_id * N_raw_total + n_raw) * Kblocks + kb
+                            ) * BYTES_PER_BLOCK
+                            async_copy[16](
+                                w_blocks_u8 + packed_base,
+                                B_pack0 + idx * BYTES_PER_BLOCK,
+                            )
+                        else:
+                            var base_u64 = idx * 2
+                            B_pack0_u64.store[alignment=8](
+                                base_u64 + 0, Scalar[U64](0)
+                            )
+                            B_pack0_u64.store[alignment=8](
+                                base_u64 + 1, Scalar[U64](0)
+                            )
+
+                    async_copy_commit_group()
+
+                    for idx in range(
+                        Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)
+                    ):
+                        var r = idx // a_chunks
+                        var chunk = idx - r * a_chunks
+                        var kk = chunk * 4
+                        var global_row = row0 + r
+                        var global_k = k0_next + kk
+
+                        if (
+                            global_row < seg_end
+                            and global_row < P
+                            and global_k + 3 < D
+                        ):
+                            var tok = Int(token_ids_s[r][0])
+                            if tok < T:
+                                var p64 = rebind[
+                                    UnsafePointer[UInt64, MutAnyOrigin]
+                                ](x_ptr + (tok * D + global_k))
+                                var v4 = bitcast[DType.bfloat16, 4](p64[0])
+                                A_s0[r, kk + 0] = v4[0]
+                                A_s0[r, kk + 1] = v4[1]
+                                A_s0[r, kk + 2] = v4[2]
+                                A_s0[r, kk + 3] = v4[3]
+                            else:
+                                A_s0[r, kk + 0] = 0
+                                A_s0[r, kk + 1] = 0
+                                A_s0[r, kk + 2] = 0
+                                A_s0[r, kk + 3] = 0
+                        else:
+
+                            @parameter
+                            for i in range(4):
+                                var k_i = global_k + i
+                                if (
+                                    global_row < seg_end
+                                    and global_row < P
+                                    and k_i < D
+                                ):
+                                    var tok = Int(token_ids_s[r][0])
+                                    if tok < T:
+                                        A_s0[r, kk + i] = x_ptr[tok * D + k_i]
+                                    else:
+                                        A_s0[r, kk + i] = 0
+                                else:
+                                    A_s0[r, kk + i] = 0
+
+                    async_copy_wait_all()
+
+                    for idx in range(
+                        Int(thread_idx.x),
+                        BN_RAW * blocks_per_tile,
+                        Int(block_dim.x),
+                    ):
+                        var c = idx // blocks_per_tile
+                        var block_in_tile = idx - c * blocks_per_tile
+                        var n_raw = n_raw0 + c
+                        var kb = kb0_next + block_in_tile
+                        var scale_exp = UInt8(0)
+                        if n_raw < N_raw_total and kb < Kblocks:
+                            scale_exp = w_scales_ptr[
+                                ((expert_id * N_raw_total + n_raw) * Kblocks)
+                                + kb
+                            ]
+                        var scale = e8m0_to_f32(scale_exp)
+
+                        var base_u64 = idx * 2
+                        var packed0 = bitcast[DType.uint8, 8](
+                            UInt64(B_pack0_u64.load[alignment=8](base_u64 + 0))
+                        )
+                        var packed1 = bitcast[DType.uint8, 8](
+                            UInt64(B_pack0_u64.load[alignment=8](base_u64 + 1))
+                        )
+
+                        @parameter
+                        for byte_in_block in range(8):
+                            var r0 = (
+                                block_in_tile * VALUES_PER_BLOCK
+                                + byte_in_block * 2
+                            )
+                            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                                packed0[byte_in_block], scale
+                            )
+                            B_s0[c, r0 + 0] = v2[0]
+                            B_s0[c, r0 + 1] = v2[1]
+
+                        @parameter
+                        for byte_in_block in range(8):
+                            var byte = byte_in_block + 8
+                            var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
+                            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                                packed1[byte_in_block], scale
+                            )
+                            B_s0[c, r0 + 0] = v2[0]
+                            B_s0[c, r0 + 1] = v2[1]
+                    barrier()
+
+                # Next iteration can proceed after B_s0/B_s1 is decoded.
+
+        # Ensure all WGMMA groups are complete before the epilogue.
+        wgmma.wait_group()
+
+        # Epilogue: bias + SwiGLU directly from register fragments.
+        var lane = Int(thread_idx.x & 31)
+        var lane_row = lane // 4
+        var lane_col = lane - lane_row * 4
+
+        comptime warp_rows = WGMMA_M // 4
+        comptime row_iters = warp_rows // 8
+        comptime col_iters = (WGMMA_N // 2) // 4
+
+        @parameter
+        for m_mma in range(num_m_mmas):
+
+            @parameter
+            for n_mma in range(num_n_mmas):
+                comptime mma_id = n_mma * num_m_mmas + m_mma
+                var c_frag = c_reg_tile.tile[1, c_frag_size](mma_id, 0)
+                var c_pairs = c_frag.vectorize[1, 2]()
+
+                @parameter
+                for r_it in range(row_iters):
+                    var row_in_warp = lane_row + r_it * 8
+                    var row_in_cta = (
+                        wg_idx * (num_m_mmas * WGMMA_M)
+                        + m_mma * WGMMA_M
+                        + warp_in_wg * warp_rows
+                        + row_in_warp
+                    )
+                    var global_row = row0 + row_in_cta
+                    if global_row >= seg_end or global_row >= P:
                         continue
 
-                    var raw0 = n_raw0 + n_mma * WGMMA_N + col_pair * 2
-                    var raw1 = raw0 + 1
+                    @parameter
+                    for c_it in range(col_iters):
+                        var col_pair = lane_col + c_it * 4
+                        var out_col = n_act0 + n_mma * (WGMMA_N // 2) + col_pair
+                        if out_col >= I:
+                            continue
 
-                    var pair_idx = c_it * row_iters + r_it
-                    var v2 = c_pairs[0, pair_idx]
+                        var raw0 = n_raw0 + n_mma * WGMMA_N + col_pair * 2
+                        var raw1 = raw0 + 1
 
-                    var glu = v2[0] + b_ptr[expert_id * N_raw_total + raw0]
-                    var lin = v2[1] + b_ptr[expert_id * N_raw_total + raw1]
-                    var y = swiglu_pair(glu, lin, alpha, limit)
-                    h_ptr.store(global_row * I + out_col, y.cast[BF16]())
+                        var pair_idx = c_it * row_iters + r_it
+                        var v2 = c_pairs[0, pair_idx]
+
+                        var glu = v2[0] + b_ptr[expert_id * N_raw_total + raw0]
+                        var lin = v2[1] + b_ptr[expert_id * N_raw_total + raw1]
+                        var y = swiglu_pair(glu, lin, alpha, limit)
+                        h_ptr.store(global_row * I + out_col, y.cast[BF16]())
 
 
 @parameter
@@ -1105,7 +1117,7 @@ fn moe_w2_mxfp4_scatter_wgmma[
     token_expert_order_ptr: UnsafePointer[UInt32, MutAnyOrigin],
     expert_start_ptr: UnsafePointer[UInt32, MutAnyOrigin],
     expert_ids_ptr: UnsafePointer[Int32, MutAnyOrigin],
-    num_active_experts: Int,
+    expert_usage_stats_ptr: UnsafePointer[UInt32, MutAnyOrigin],
     gate_w_ptr: UnsafePointer[Float32, MutAnyOrigin],
     w_blocks_ptr: UnsafePointer[UInt8, MutAnyOrigin],
     w_scales_ptr: UnsafePointer[UInt8, MutAnyOrigin],
@@ -1124,6 +1136,7 @@ fn moe_w2_mxfp4_scatter_wgmma[
     constrained[BM % (WGMMA_M * NUM_WARP_GROUPS) == 0]()
 
     var expert_idx = Int(block_idx.z)
+    var num_active_experts = Int(expert_usage_stats_ptr[1])
     if expert_idx >= num_active_experts:
         return
 
@@ -1138,7 +1151,10 @@ fn moe_w2_mxfp4_scatter_wgmma[
 
     var seg_start = Int(expert_start_ptr[expert_idx])
     var seg_end = Int(expert_start_ptr[expert_idx + 1])
-    var row0 = seg_start + Int(block_idx.y) * BM
+    var row_base = seg_start + Int(block_idx.y) * BM
+    if row_base >= seg_end or row_base >= P:
+        return
+    var row_stride = BM * Int(grid_dim.y)
 
     var pair_idx_s = stack_allocation[
         BM, Scalar[U32], address_space = AddressSpace.SHARED
@@ -1146,18 +1162,6 @@ fn moe_w2_mxfp4_scatter_wgmma[
     var gamma_s = stack_allocation[
         BM, Scalar[F32], address_space = AddressSpace.SHARED
     ]()
-
-    # Precompute original pair indices + gamma for the BM rows.
-    for r in range(Int(thread_idx.x), BM, Int(block_dim.x)):
-        var global_row = row0 + r
-        if global_row < seg_end and global_row < P:
-            var pair_idx = UInt32(token_expert_order_ptr[global_row])
-            pair_idx_s[r] = pair_idx
-            gamma_s[r] = gate_w_ptr[Int(pair_idx)]
-        else:
-            pair_idx_s[r] = UInt32(0)
-            gamma_s[r] = 0.0
-    barrier()
 
     # Shared tiles in WGMMA-friendly layouts.
     #
@@ -1265,365 +1269,7 @@ fn moe_w2_mxfp4_scatter_wgmma[
 
     comptime a_chunks = BK // 4
 
-    # Preload first K tile into buffer 0.
-    var kb0 = 0
-    for idx in range(
-        Int(thread_idx.x),
-        BN * blocks_per_tile,
-        Int(block_dim.x),
-    ):
-        var c = idx // blocks_per_tile
-        var block_in_tile = idx - c * blocks_per_tile
-        var col = n0 + c
-        var kb = kb0 + block_in_tile
-
-        if col < D and kb < Kblocks:
-            var packed_base = (((expert_id * D + col) * Kblocks) + kb) * (
-                BYTES_PER_BLOCK
-            )
-            async_copy[16](
-                w_blocks_u8 + packed_base,
-                B_pack0 + idx * BYTES_PER_BLOCK,
-            )
-        else:
-            var base_u64 = idx * 2
-            B_pack0_u64.store[alignment=8](base_u64 + 0, Scalar[U64](0))
-            B_pack0_u64.store[alignment=8](base_u64 + 1, Scalar[U64](0))
-
-    async_copy_commit_group()
-
-    for idx in range(Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)):
-        var r = idx // a_chunks
-        var chunk = idx - r * a_chunks
-        var kk = chunk * 4
-        var global_row = row0 + r
-        var global_k = kk
-        if global_row < seg_end and global_row < P and global_k + 3 < I:
-            var p64 = rebind[UnsafePointer[UInt64, MutAnyOrigin]](
-                h_ptr + (global_row * I + global_k)
-            )
-            var v4 = bitcast[DType.bfloat16, 4](p64[0])
-            A_s0[r, kk + 0] = v4[0]
-            A_s0[r, kk + 1] = v4[1]
-            A_s0[r, kk + 2] = v4[2]
-            A_s0[r, kk + 3] = v4[3]
-        else:
-
-            @parameter
-            for i in range(4):
-                var k_i = global_k + i
-                if global_row < seg_end and global_row < P and k_i < I:
-                    A_s0[r, kk + i] = h_ptr[global_row * I + k_i]
-                else:
-                    A_s0[r, kk + i] = 0
-
-    async_copy_wait_all()
-
-    for idx in range(
-        Int(thread_idx.x),
-        BN * blocks_per_tile,
-        Int(block_dim.x),
-    ):
-        var c = idx // blocks_per_tile
-        var block_in_tile = idx - c * blocks_per_tile
-        var col = n0 + c
-        var kb = kb0 + block_in_tile
-        var scale_exp = UInt8(0)
-        if col < D and kb < Kblocks:
-            scale_exp = w_scales_ptr[((expert_id * D + col) * Kblocks) + kb]
-        var scale = e8m0_to_f32(scale_exp)
-
-        var base_u64 = idx * 2
-        var packed0 = bitcast[DType.uint8, 8](
-            UInt64(B_pack0_u64.load[alignment=8](base_u64 + 0))
-        )
-        var packed1 = bitcast[DType.uint8, 8](
-            UInt64(B_pack0_u64.load[alignment=8](base_u64 + 1))
-        )
-
-        @parameter
-        for byte_in_block in range(8):
-            var r0 = block_in_tile * VALUES_PER_BLOCK + byte_in_block * 2
-            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                packed0[byte_in_block], scale
-            )
-            B_s0[c, r0 + 0] = v2[0]
-            B_s0[c, r0 + 1] = v2[1]
-
-        @parameter
-        for byte_in_block in range(8):
-            var byte = byte_in_block + 8
-            var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
-            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                packed1[byte_in_block], scale
-            )
-            B_s0[c, r0 + 0] = v2[0]
-            B_s0[c, r0 + 1] = v2[1]
-    barrier()
-
-    var num_k_tiles = ceildiv(I, BK)
-    for k_tile in range(num_k_tiles):
-        var use_buf0 = (k_tile & 1) == 0
-
-        warpgroup_fence(c_reg_tile)
-        wgmma.arrive()
-        if use_buf0:
-            wgmma.wgmma[num_warp_groups=NUM_WARP_GROUPS](
-                a_smem_tile=A_s0,
-                b_smem_tile=B_s0,
-                c_reg_tile=c_reg_tile,
-                wg_idx=wg_idx,
-            )
-        else:
-            wgmma.wgmma[num_warp_groups=NUM_WARP_GROUPS](
-                a_smem_tile=A_s1,
-                b_smem_tile=B_s1,
-                c_reg_tile=c_reg_tile,
-                wg_idx=wg_idx,
-            )
-        wgmma.commit_group()
-        warpgroup_fence(c_reg_tile)
-
-        if k_tile + 1 < num_k_tiles:
-            wgmma.wait_group[1]()
-
-            var k0_next = (k_tile + 1) * BK
-            var kb0_next = k0_next // VALUES_PER_BLOCK
-
-            if use_buf0:
-                # Load next tile into buffer 1.
-                for idx in range(
-                    Int(thread_idx.x),
-                    BN * blocks_per_tile,
-                    Int(block_dim.x),
-                ):
-                    var c = idx // blocks_per_tile
-                    var block_in_tile = idx - c * blocks_per_tile
-                    var col = n0 + c
-                    var kb = kb0_next + block_in_tile
-
-                    if col < D and kb < Kblocks:
-                        var packed_base = (
-                            (expert_id * D + col) * Kblocks + kb
-                        ) * BYTES_PER_BLOCK
-                        async_copy[16](
-                            w_blocks_u8 + packed_base,
-                            B_pack1 + idx * BYTES_PER_BLOCK,
-                        )
-                    else:
-                        var base_u64 = idx * 2
-                        B_pack1_u64.store[alignment=8](
-                            base_u64 + 0, Scalar[U64](0)
-                        )
-                        B_pack1_u64.store[alignment=8](
-                            base_u64 + 1, Scalar[U64](0)
-                        )
-
-                async_copy_commit_group()
-
-                for idx in range(
-                    Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)
-                ):
-                    var r = idx // a_chunks
-                    var chunk = idx - r * a_chunks
-                    var kk = chunk * 4
-                    var global_row = row0 + r
-                    var global_k = k0_next + kk
-                    if (
-                        global_row < seg_end
-                        and global_row < P
-                        and global_k + 3 < I
-                    ):
-                        var p64 = rebind[UnsafePointer[UInt64, MutAnyOrigin]](
-                            h_ptr + (global_row * I + global_k)
-                        )
-                        var v4 = bitcast[DType.bfloat16, 4](p64[0])
-                        A_s1[r, kk + 0] = v4[0]
-                        A_s1[r, kk + 1] = v4[1]
-                        A_s1[r, kk + 2] = v4[2]
-                        A_s1[r, kk + 3] = v4[3]
-                    else:
-
-                        @parameter
-                        for i in range(4):
-                            var k_i = global_k + i
-                            if (
-                                global_row < seg_end
-                                and global_row < P
-                                and k_i < I
-                            ):
-                                A_s1[r, kk + i] = h_ptr[global_row * I + k_i]
-                            else:
-                                A_s1[r, kk + i] = 0
-
-                async_copy_wait_all()
-
-                for idx in range(
-                    Int(thread_idx.x),
-                    BN * blocks_per_tile,
-                    Int(block_dim.x),
-                ):
-                    var c = idx // blocks_per_tile
-                    var block_in_tile = idx - c * blocks_per_tile
-                    var col = n0 + c
-                    var kb = kb0_next + block_in_tile
-                    var scale_exp = UInt8(0)
-                    if col < D and kb < Kblocks:
-                        scale_exp = w_scales_ptr[
-                            ((expert_id * D + col) * Kblocks) + kb
-                        ]
-                    var scale = e8m0_to_f32(scale_exp)
-
-                    var base_u64 = idx * 2
-                    var packed0 = bitcast[DType.uint8, 8](
-                        UInt64(B_pack1_u64.load[alignment=8](base_u64 + 0))
-                    )
-                    var packed1 = bitcast[DType.uint8, 8](
-                        UInt64(B_pack1_u64.load[alignment=8](base_u64 + 1))
-                    )
-
-                    @parameter
-                    for byte_in_block in range(8):
-                        var r0 = (
-                            block_in_tile * VALUES_PER_BLOCK + byte_in_block * 2
-                        )
-                        var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                            packed0[byte_in_block], scale
-                        )
-                        B_s1[c, r0 + 0] = v2[0]
-                        B_s1[c, r0 + 1] = v2[1]
-
-                    @parameter
-                    for byte_in_block in range(8):
-                        var byte = byte_in_block + 8
-                        var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
-                        var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                            packed1[byte_in_block], scale
-                        )
-                        B_s1[c, r0 + 0] = v2[0]
-                        B_s1[c, r0 + 1] = v2[1]
-            else:
-                # Load next tile into buffer 0.
-                for idx in range(
-                    Int(thread_idx.x),
-                    BN * blocks_per_tile,
-                    Int(block_dim.x),
-                ):
-                    var c = idx // blocks_per_tile
-                    var block_in_tile = idx - c * blocks_per_tile
-                    var col = n0 + c
-                    var kb = kb0_next + block_in_tile
-
-                    if col < D and kb < Kblocks:
-                        var packed_base = (
-                            (expert_id * D + col) * Kblocks + kb
-                        ) * BYTES_PER_BLOCK
-                        async_copy[16](
-                            w_blocks_u8 + packed_base,
-                            B_pack0 + idx * BYTES_PER_BLOCK,
-                        )
-                    else:
-                        var base_u64 = idx * 2
-                        B_pack0_u64.store[alignment=8](
-                            base_u64 + 0, Scalar[U64](0)
-                        )
-                        B_pack0_u64.store[alignment=8](
-                            base_u64 + 1, Scalar[U64](0)
-                        )
-
-                async_copy_commit_group()
-
-                for idx in range(
-                    Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)
-                ):
-                    var r = idx // a_chunks
-                    var chunk = idx - r * a_chunks
-                    var kk = chunk * 4
-                    var global_row = row0 + r
-                    var global_k = k0_next + kk
-                    if (
-                        global_row < seg_end
-                        and global_row < P
-                        and global_k + 3 < I
-                    ):
-                        var p64 = rebind[UnsafePointer[UInt64, MutAnyOrigin]](
-                            h_ptr + (global_row * I + global_k)
-                        )
-                        var v4 = bitcast[DType.bfloat16, 4](p64[0])
-                        A_s0[r, kk + 0] = v4[0]
-                        A_s0[r, kk + 1] = v4[1]
-                        A_s0[r, kk + 2] = v4[2]
-                        A_s0[r, kk + 3] = v4[3]
-                    else:
-
-                        @parameter
-                        for i in range(4):
-                            var k_i = global_k + i
-                            if (
-                                global_row < seg_end
-                                and global_row < P
-                                and k_i < I
-                            ):
-                                A_s0[r, kk + i] = h_ptr[global_row * I + k_i]
-                            else:
-                                A_s0[r, kk + i] = 0
-
-                async_copy_wait_all()
-
-                for idx in range(
-                    Int(thread_idx.x),
-                    BN * blocks_per_tile,
-                    Int(block_dim.x),
-                ):
-                    var c = idx // blocks_per_tile
-                    var block_in_tile = idx - c * blocks_per_tile
-                    var col = n0 + c
-                    var kb = kb0_next + block_in_tile
-                    var scale_exp = UInt8(0)
-                    if col < D and kb < Kblocks:
-                        scale_exp = w_scales_ptr[
-                            ((expert_id * D + col) * Kblocks) + kb
-                        ]
-                    var scale = e8m0_to_f32(scale_exp)
-
-                    var base_u64 = idx * 2
-                    var packed0 = bitcast[DType.uint8, 8](
-                        UInt64(B_pack0_u64.load[alignment=8](base_u64 + 0))
-                    )
-                    var packed1 = bitcast[DType.uint8, 8](
-                        UInt64(B_pack0_u64.load[alignment=8](base_u64 + 1))
-                    )
-
-                    @parameter
-                    for byte_in_block in range(8):
-                        var r0 = (
-                            block_in_tile * VALUES_PER_BLOCK + byte_in_block * 2
-                        )
-                        var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                            packed0[byte_in_block], scale
-                        )
-                        B_s0[c, r0 + 0] = v2[0]
-                        B_s0[c, r0 + 1] = v2[1]
-
-                    @parameter
-                    for byte_in_block in range(8):
-                        var byte = byte_in_block + 8
-                        var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
-                        var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
-                            packed1[byte_in_block], scale
-                        )
-                        B_s0[c, r0 + 0] = v2[0]
-                        B_s0[c, r0 + 1] = v2[1]
-
-            barrier()
-
-    wgmma.wait_group()
-
-    # Epilogue: bias + gamma scaling.
-    #
-    # - Scatter mode (WRITE_PAIRS=False): atomic scatter-add into Y[token, n]
-    # - Pair-buffer mode (WRITE_PAIRS=True): write one row per pair into Y_pairs[pair_idx, n]
-    #   for a later TOPK reduction kernel.
+    # Epilogue thread mapping for the register fragments.
     var lane = Int(thread_idx.x & 31)
     var lane_row = lane // 4
     var lane_col = lane - lane_row * 4
@@ -1632,65 +1278,452 @@ fn moe_w2_mxfp4_scatter_wgmma[
     comptime row_iters = warp_rows // 8
     comptime col_iters = (WGMMA_N // 2) // 4
 
-    @parameter
-    for m_mma in range(num_m_mmas):
+    for row0 in range(row_base, seg_end, row_stride):
+        # Precompute original pair indices + gamma for the BM rows.
+        for r in range(Int(thread_idx.x), BM, Int(block_dim.x)):
+            var global_row = row0 + r
+            if global_row < seg_end and global_row < P:
+                var pair_idx = UInt32(token_expert_order_ptr[global_row])
+                pair_idx_s[r] = pair_idx
+                gamma_s[r] = gate_w_ptr[Int(pair_idx)]
+            else:
+                pair_idx_s[r] = UInt32(0)
+                gamma_s[r] = 0.0
+        barrier()
 
-        @parameter
-        for n_mma in range(num_n_mmas):
-            comptime mma_id = n_mma * num_m_mmas + m_mma
-            var c_frag = c_reg_tile.tile[1, c_frag_size](mma_id, 0)
-            var c_pairs = c_frag.vectorize[1, 2]()
+        _ = c_reg_tile.fill(0.0)
+
+        # Preload first K tile into buffer 0.
+        var kb0 = 0
+        for idx in range(
+            Int(thread_idx.x),
+            BN * blocks_per_tile,
+            Int(block_dim.x),
+        ):
+            var c = idx // blocks_per_tile
+            var block_in_tile = idx - c * blocks_per_tile
+            var col = n0 + c
+            var kb = kb0 + block_in_tile
+
+            if col < D and kb < Kblocks:
+                var packed_base = (((expert_id * D + col) * Kblocks) + kb) * (
+                    BYTES_PER_BLOCK
+                )
+                async_copy[16](
+                    w_blocks_u8 + packed_base,
+                    B_pack0 + idx * BYTES_PER_BLOCK,
+                )
+            else:
+                var base_u64 = idx * 2
+                B_pack0_u64.store[alignment=8](base_u64 + 0, Scalar[U64](0))
+                B_pack0_u64.store[alignment=8](base_u64 + 1, Scalar[U64](0))
+
+        async_copy_commit_group()
+
+        for idx in range(Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)):
+            var r = idx // a_chunks
+            var chunk = idx - r * a_chunks
+            var kk = chunk * 4
+            var global_row = row0 + r
+            var global_k = kk
+            if global_row < seg_end and global_row < P and global_k + 3 < I:
+                var p64 = rebind[UnsafePointer[UInt64, MutAnyOrigin]](
+                    h_ptr + (global_row * I + global_k)
+                )
+                var v4 = bitcast[DType.bfloat16, 4](p64[0])
+                A_s0[r, kk + 0] = v4[0]
+                A_s0[r, kk + 1] = v4[1]
+                A_s0[r, kk + 2] = v4[2]
+                A_s0[r, kk + 3] = v4[3]
+            else:
+
+                @parameter
+                for i in range(4):
+                    var k_i = global_k + i
+                    if global_row < seg_end and global_row < P and k_i < I:
+                        A_s0[r, kk + i] = h_ptr[global_row * I + k_i]
+                    else:
+                        A_s0[r, kk + i] = 0
+
+        async_copy_wait_all()
+
+        for idx in range(
+            Int(thread_idx.x),
+            BN * blocks_per_tile,
+            Int(block_dim.x),
+        ):
+            var c = idx // blocks_per_tile
+            var block_in_tile = idx - c * blocks_per_tile
+            var col = n0 + c
+            var kb = kb0 + block_in_tile
+            var scale_exp = UInt8(0)
+            if col < D and kb < Kblocks:
+                scale_exp = w_scales_ptr[((expert_id * D + col) * Kblocks) + kb]
+            var scale = e8m0_to_f32(scale_exp)
+
+            var base_u64 = idx * 2
+            var packed0 = bitcast[DType.uint8, 8](
+                UInt64(B_pack0_u64.load[alignment=8](base_u64 + 0))
+            )
+            var packed1 = bitcast[DType.uint8, 8](
+                UInt64(B_pack0_u64.load[alignment=8](base_u64 + 1))
+            )
 
             @parameter
-            for r_it in range(row_iters):
-                var row_in_warp = lane_row + r_it * 8
-                var row_in_cta = (
-                    wg_idx * (num_m_mmas * WGMMA_M)
-                    + m_mma * WGMMA_M
-                    + warp_in_wg * warp_rows
-                    + row_in_warp
+            for byte_in_block in range(8):
+                var r0 = block_in_tile * VALUES_PER_BLOCK + byte_in_block * 2
+                var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                    packed0[byte_in_block], scale
                 )
-                var global_row = row0 + row_in_cta
-                if global_row >= seg_end or global_row >= P:
-                    continue
+                B_s0[c, r0 + 0] = v2[0]
+                B_s0[c, r0 + 1] = v2[1]
 
-                var pair_id = Int(pair_idx_s[row_in_cta][0])
-                var gamma = gamma_s[row_in_cta][0]
-                var tok = 0
+            @parameter
+            for byte_in_block in range(8):
+                var byte = byte_in_block + 8
+                var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
+                var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                    packed1[byte_in_block], scale
+                )
+                B_s0[c, r0 + 0] = v2[0]
+                B_s0[c, r0 + 1] = v2[1]
+        barrier()
+
+        var num_k_tiles = ceildiv(I, BK)
+        for k_tile in range(num_k_tiles):
+            var use_buf0 = (k_tile & 1) == 0
+
+            warpgroup_fence(c_reg_tile)
+            wgmma.arrive()
+            if use_buf0:
+                wgmma.wgmma[num_warp_groups=NUM_WARP_GROUPS](
+                    a_smem_tile=A_s0,
+                    b_smem_tile=B_s0,
+                    c_reg_tile=c_reg_tile,
+                    wg_idx=wg_idx,
+                )
+            else:
+                wgmma.wgmma[num_warp_groups=NUM_WARP_GROUPS](
+                    a_smem_tile=A_s1,
+                    b_smem_tile=B_s1,
+                    c_reg_tile=c_reg_tile,
+                    wg_idx=wg_idx,
+                )
+            wgmma.commit_group()
+            warpgroup_fence(c_reg_tile)
+
+            if k_tile + 1 < num_k_tiles:
+                wgmma.wait_group[1]()
+
+                var k0_next = (k_tile + 1) * BK
+                var kb0_next = k0_next // VALUES_PER_BLOCK
+
+                if use_buf0:
+                    # Load next tile into buffer 1.
+                    for idx in range(
+                        Int(thread_idx.x),
+                        BN * blocks_per_tile,
+                        Int(block_dim.x),
+                    ):
+                        var c = idx // blocks_per_tile
+                        var block_in_tile = idx - c * blocks_per_tile
+                        var col = n0 + c
+                        var kb = kb0_next + block_in_tile
+
+                        if col < D and kb < Kblocks:
+                            var packed_base = (
+                                (expert_id * D + col) * Kblocks + kb
+                            ) * BYTES_PER_BLOCK
+                            async_copy[16](
+                                w_blocks_u8 + packed_base,
+                                B_pack1 + idx * BYTES_PER_BLOCK,
+                            )
+                        else:
+                            var base_u64 = idx * 2
+                            B_pack1_u64.store[alignment=8](
+                                base_u64 + 0, Scalar[U64](0)
+                            )
+                            B_pack1_u64.store[alignment=8](
+                                base_u64 + 1, Scalar[U64](0)
+                            )
+
+                    async_copy_commit_group()
+
+                    for idx in range(
+                        Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)
+                    ):
+                        var r = idx // a_chunks
+                        var chunk = idx - r * a_chunks
+                        var kk = chunk * 4
+                        var global_row = row0 + r
+                        var global_k = k0_next + kk
+                        if (
+                            global_row < seg_end
+                            and global_row < P
+                            and global_k + 3 < I
+                        ):
+                            var p64 = rebind[
+                                UnsafePointer[UInt64, MutAnyOrigin]
+                            ](h_ptr + (global_row * I + global_k))
+                            var v4 = bitcast[DType.bfloat16, 4](p64[0])
+                            A_s1[r, kk + 0] = v4[0]
+                            A_s1[r, kk + 1] = v4[1]
+                            A_s1[r, kk + 2] = v4[2]
+                            A_s1[r, kk + 3] = v4[3]
+                        else:
+
+                            @parameter
+                            for i in range(4):
+                                var k_i = global_k + i
+                                if (
+                                    global_row < seg_end
+                                    and global_row < P
+                                    and k_i < I
+                                ):
+                                    A_s1[r, kk + i] = h_ptr[
+                                        global_row * I + k_i
+                                    ]
+                                else:
+                                    A_s1[r, kk + i] = 0
+
+                    async_copy_wait_all()
+
+                    for idx in range(
+                        Int(thread_idx.x),
+                        BN * blocks_per_tile,
+                        Int(block_dim.x),
+                    ):
+                        var c = idx // blocks_per_tile
+                        var block_in_tile = idx - c * blocks_per_tile
+                        var col = n0 + c
+                        var kb = kb0_next + block_in_tile
+                        var scale_exp = UInt8(0)
+                        if col < D and kb < Kblocks:
+                            scale_exp = w_scales_ptr[
+                                ((expert_id * D + col) * Kblocks) + kb
+                            ]
+                        var scale = e8m0_to_f32(scale_exp)
+
+                        var base_u64 = idx * 2
+                        var packed0 = bitcast[DType.uint8, 8](
+                            UInt64(B_pack1_u64.load[alignment=8](base_u64 + 0))
+                        )
+                        var packed1 = bitcast[DType.uint8, 8](
+                            UInt64(B_pack1_u64.load[alignment=8](base_u64 + 1))
+                        )
+
+                        @parameter
+                        for byte_in_block in range(8):
+                            var r0 = (
+                                block_in_tile * VALUES_PER_BLOCK
+                                + byte_in_block * 2
+                            )
+                            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                                packed0[byte_in_block], scale
+                            )
+                            B_s1[c, r0 + 0] = v2[0]
+                            B_s1[c, r0 + 1] = v2[1]
+
+                        @parameter
+                        for byte_in_block in range(8):
+                            var byte = byte_in_block + 8
+                            var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
+                            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                                packed1[byte_in_block], scale
+                            )
+                            B_s1[c, r0 + 0] = v2[0]
+                            B_s1[c, r0 + 1] = v2[1]
+                else:
+                    # Load next tile into buffer 0.
+                    for idx in range(
+                        Int(thread_idx.x),
+                        BN * blocks_per_tile,
+                        Int(block_dim.x),
+                    ):
+                        var c = idx // blocks_per_tile
+                        var block_in_tile = idx - c * blocks_per_tile
+                        var col = n0 + c
+                        var kb = kb0_next + block_in_tile
+
+                        if col < D and kb < Kblocks:
+                            var packed_base = (
+                                (expert_id * D + col) * Kblocks + kb
+                            ) * BYTES_PER_BLOCK
+                            async_copy[16](
+                                w_blocks_u8 + packed_base,
+                                B_pack0 + idx * BYTES_PER_BLOCK,
+                            )
+                        else:
+                            var base_u64 = idx * 2
+                            B_pack0_u64.store[alignment=8](
+                                base_u64 + 0, Scalar[U64](0)
+                            )
+                            B_pack0_u64.store[alignment=8](
+                                base_u64 + 1, Scalar[U64](0)
+                            )
+
+                    async_copy_commit_group()
+
+                    for idx in range(
+                        Int(thread_idx.x), BM * a_chunks, Int(block_dim.x)
+                    ):
+                        var r = idx // a_chunks
+                        var chunk = idx - r * a_chunks
+                        var kk = chunk * 4
+                        var global_row = row0 + r
+                        var global_k = k0_next + kk
+                        if (
+                            global_row < seg_end
+                            and global_row < P
+                            and global_k + 3 < I
+                        ):
+                            var p64 = rebind[
+                                UnsafePointer[UInt64, MutAnyOrigin]
+                            ](h_ptr + (global_row * I + global_k))
+                            var v4 = bitcast[DType.bfloat16, 4](p64[0])
+                            A_s0[r, kk + 0] = v4[0]
+                            A_s0[r, kk + 1] = v4[1]
+                            A_s0[r, kk + 2] = v4[2]
+                            A_s0[r, kk + 3] = v4[3]
+                        else:
+
+                            @parameter
+                            for i in range(4):
+                                var k_i = global_k + i
+                                if (
+                                    global_row < seg_end
+                                    and global_row < P
+                                    and k_i < I
+                                ):
+                                    A_s0[r, kk + i] = h_ptr[
+                                        global_row * I + k_i
+                                    ]
+                                else:
+                                    A_s0[r, kk + i] = 0
+
+                    async_copy_wait_all()
+
+                    for idx in range(
+                        Int(thread_idx.x),
+                        BN * blocks_per_tile,
+                        Int(block_dim.x),
+                    ):
+                        var c = idx // blocks_per_tile
+                        var block_in_tile = idx - c * blocks_per_tile
+                        var col = n0 + c
+                        var kb = kb0_next + block_in_tile
+                        var scale_exp = UInt8(0)
+                        if col < D and kb < Kblocks:
+                            scale_exp = w_scales_ptr[
+                                ((expert_id * D + col) * Kblocks) + kb
+                            ]
+                        var scale = e8m0_to_f32(scale_exp)
+
+                        var base_u64 = idx * 2
+                        var packed0 = bitcast[DType.uint8, 8](
+                            UInt64(B_pack0_u64.load[alignment=8](base_u64 + 0))
+                        )
+                        var packed1 = bitcast[DType.uint8, 8](
+                            UInt64(B_pack0_u64.load[alignment=8](base_u64 + 1))
+                        )
+
+                        @parameter
+                        for byte_in_block in range(8):
+                            var r0 = (
+                                block_in_tile * VALUES_PER_BLOCK
+                                + byte_in_block * 2
+                            )
+                            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                                packed0[byte_in_block], scale
+                            )
+                            B_s0[c, r0 + 0] = v2[0]
+                            B_s0[c, r0 + 1] = v2[1]
+
+                        @parameter
+                        for byte_in_block in range(8):
+                            var byte = byte_in_block + 8
+                            var r0 = block_in_tile * VALUES_PER_BLOCK + byte * 2
+                            var v2 = decode_mxfp4_byte_to_2xbf16_scaled(
+                                packed1[byte_in_block], scale
+                            )
+                            B_s0[c, r0 + 0] = v2[0]
+                            B_s0[c, r0 + 1] = v2[1]
+
+                barrier()
+
+        wgmma.wait_group()
+
+        # Epilogue: bias + gamma scaling.
+        #
+        # - Scatter mode (WRITE_PAIRS=False): atomic scatter-add into Y[token, n]
+        # - Pair-buffer mode (WRITE_PAIRS=True): write one row per pair into Y_pairs[pair_idx, n]
+        #   for a later TOPK reduction kernel.
+        @parameter
+        for m_mma in range(num_m_mmas):
+
+            @parameter
+            for n_mma in range(num_n_mmas):
+                comptime mma_id = n_mma * num_m_mmas + m_mma
+                var c_frag = c_reg_tile.tile[1, c_frag_size](mma_id, 0)
+                var c_pairs = c_frag.vectorize[1, 2]()
 
                 @parameter
-                if not WRITE_PAIRS:
-                    tok = pair_id // TOPK
-                    if tok >= T:
+                for r_it in range(row_iters):
+                    var row_in_warp = lane_row + r_it * 8
+                    var row_in_cta = (
+                        wg_idx * (num_m_mmas * WGMMA_M)
+                        + m_mma * WGMMA_M
+                        + warp_in_wg * warp_rows
+                        + row_in_warp
+                    )
+                    var global_row = row0 + row_in_cta
+                    if global_row >= seg_end or global_row >= P:
                         continue
 
-                @parameter
-                for c_it in range(col_iters):
-                    var col_pair = lane_col + c_it * 4
-                    var col0 = n0 + n_mma * WGMMA_N + col_pair * 2
-                    var col1 = col0 + 1
-                    var frag_idx = c_it * row_iters + r_it
-                    var v2 = c_pairs[0, frag_idx]
+                    var pair_id = Int(pair_idx_s[row_in_cta][0])
+                    var gamma = gamma_s[row_in_cta][0]
+                    var tok = 0
 
-                    if col0 < D:
-                        var v0 = v2[0] + b_ptr[expert_id * D + col0]
-                        v0 *= gamma
+                    @parameter
+                    if not WRITE_PAIRS:
+                        tok = pair_id // TOPK
+                        if tok >= T:
+                            continue
 
-                        @parameter
-                        if WRITE_PAIRS:
-                            y_ptr.store(pair_id * D + col0, v0)
-                        else:
-                            _ = Atomic.fetch_add(y_ptr + (tok * D + col0), v0)
+                    @parameter
+                    for c_it in range(col_iters):
+                        var col_pair = lane_col + c_it * 4
+                        var col0 = n0 + n_mma * WGMMA_N + col_pair * 2
+                        var col1 = col0 + 1
+                        var frag_idx = c_it * row_iters + r_it
+                        var v2 = c_pairs[0, frag_idx]
 
-                    if col1 < D:
-                        var v1 = v2[1] + b_ptr[expert_id * D + col1]
-                        v1 *= gamma
+                        if col0 < D:
+                            var v0 = v2[0] + b_ptr[expert_id * D + col0]
+                            v0 *= gamma
 
-                        @parameter
-                        if WRITE_PAIRS:
-                            y_ptr.store(pair_id * D + col1, v1)
-                        else:
-                            _ = Atomic.fetch_add(y_ptr + (tok * D + col1), v1)
+                            @parameter
+                            if WRITE_PAIRS:
+                                y_ptr.store(pair_id * D + col0, v0)
+                            else:
+                                _ = Atomic.fetch_add(
+                                    y_ptr + (tok * D + col0), v0
+                                )
+
+                        if col1 < D:
+                            var v1 = v2[1] + b_ptr[expert_id * D + col1]
+                            v1 *= gamma
+
+                            @parameter
+                            if WRITE_PAIRS:
+                                y_ptr.store(pair_id * D + col1, v1)
+                            else:
+                                _ = Atomic.fetch_add(
+                                    y_ptr + (tok * D + col1), v1
+                                )
+
+        # Synchronize before reusing the shared routing buffers in the next loop iteration.
+        barrier()
 
 
 @compiler.register("mxfp4_moe_w1_swiglu")
@@ -1704,8 +1737,7 @@ struct MXFP4MoEW1SwiGlu:
         token_expert_order: InputTensor[dtype=U32, rank=1],
         expert_start_indices: InputTensor[dtype=U32, rank=1],
         expert_ids: InputTensor[dtype=I32, rank=1],
-        max_num_tokens_per_expert: UInt32,
-        num_active_experts: UInt32,
+        expert_usage_stats: InputTensor[dtype=U32, rank=1],
         w_blocks: InputTensor[dtype=U8, rank=4],
         w_scales: InputTensor[dtype=U8, rank=3],
         bias: InputTensor[dtype=F32, rank=2],
@@ -1721,20 +1753,18 @@ struct MXFP4MoEW1SwiGlu:
         var D = x.dim_size(1)
         var P = token_expert_order.dim_size(0)
 
-        var num_active_experts_i = Int(num_active_experts)
-        var max_tokens_i = Int(max_num_tokens_per_expert)
         var num_experts = w_blocks.dim_size(0)
         var kblocks = w_blocks.dim_size(2)
 
         var n_raw_total = bias.dim_size(1)
         var I = n_raw_total // 2
 
-        if P == 0 or num_active_experts_i == 0 or max_tokens_i == 0:
+        if P == 0:
             return
 
         var grid_x = ceildiv(I, 64)  # BN_ACT = 64 (BN_RAW = 128)
-        var grid_y = ceildiv(max_tokens_i, 128)  # BM = 128
-        var grid_z = num_active_experts_i
+        var grid_y = 2
+        var grid_z = num_experts
 
         var gpu_ctx = ctx.get_device_context()
 
@@ -1757,6 +1787,12 @@ struct MXFP4MoEW1SwiGlu:
             gpu_ctx,
             expert_ids.unsafe_ptr(),
             expert_ids.size(),
+            owning=False,
+        )
+        var expert_usage_stats_dev = DeviceBuffer[expert_usage_stats.dtype](
+            gpu_ctx,
+            expert_usage_stats.unsafe_ptr(),
+            expert_usage_stats.size(),
             owning=False,
         )
         var w_blocks_dev = DeviceBuffer[w_blocks.dtype](
@@ -1804,7 +1840,7 @@ struct MXFP4MoEW1SwiGlu:
             P,
             expert_start_indices_dev,
             expert_ids_dev,
-            num_active_experts_i,
+            expert_usage_stats_dev,
             w_blocks_dev,
             w_scales_dev,
             kblocks,
@@ -1834,8 +1870,7 @@ struct MXFP4MoEW2Scatter:
         token_expert_order: InputTensor[dtype=U32, rank=1],
         expert_start_indices: InputTensor[dtype=U32, rank=1],
         expert_ids: InputTensor[dtype=I32, rank=1],
-        max_num_tokens_per_expert: UInt32,
-        num_active_experts: UInt32,
+        expert_usage_stats: InputTensor[dtype=U32, rank=1],
         gate_weights: InputTensor[dtype=F32, rank=1],
         w_blocks: InputTensor[dtype=U8, rank=4],
         w_scales: InputTensor[dtype=U8, rank=3],
@@ -1851,14 +1886,12 @@ struct MXFP4MoEW2Scatter:
         var D = y.dim_size(1)
 
         var T = y.dim_size(0)
-        var num_active_experts_i = Int(num_active_experts)
-        var max_tokens_i = Int(max_num_tokens_per_expert)
         var num_experts = w_blocks.dim_size(0)
         var kblocks = w_blocks.dim_size(2)
 
         var grid_x = ceildiv(D, 128)  # BN = 128
-        var grid_y = ceildiv(max_tokens_i, 128)  # BM = 128
-        var grid_z = num_active_experts_i
+        var grid_y = 2
+        var grid_z = num_experts
 
         var gpu_ctx = ctx.get_device_context()
 
@@ -1883,6 +1916,12 @@ struct MXFP4MoEW2Scatter:
             expert_ids.size(),
             owning=False,
         )
+        var expert_usage_stats_dev = DeviceBuffer[expert_usage_stats.dtype](
+            gpu_ctx,
+            expert_usage_stats.unsafe_ptr(),
+            expert_usage_stats.size(),
+            owning=False,
+        )
         var gate_weights_dev = DeviceBuffer[gate_weights.dtype](
             gpu_ctx,
             gate_weights.unsafe_ptr(),
@@ -1905,7 +1944,7 @@ struct MXFP4MoEW2Scatter:
         # Zero-initialize output (kernel scatter-adds into Y).
         gpu_ctx.enqueue_memset(y_dev, 0)
 
-        if P == 0 or num_active_experts_i == 0 or max_tokens_i == 0:
+        if P == 0:
             return
 
         comptime w2_kernel = moe_w2_mxfp4_scatter_wgmma[
@@ -1939,7 +1978,7 @@ struct MXFP4MoEW2Scatter:
             token_expert_order_dev,
             expert_start_indices_dev,
             expert_ids_dev,
-            num_active_experts_i,
+            expert_usage_stats_dev,
             gate_weights_dev,
             w_blocks_dev,
             w_scales_dev,
@@ -1968,8 +2007,7 @@ struct MXFP4MoEW2Pairs:
         token_expert_order: InputTensor[dtype=U32, rank=1],
         expert_start_indices: InputTensor[dtype=U32, rank=1],
         expert_ids: InputTensor[dtype=I32, rank=1],
-        max_num_tokens_per_expert: UInt32,
-        num_active_experts: UInt32,
+        expert_usage_stats: InputTensor[dtype=U32, rank=1],
         gate_weights: InputTensor[dtype=F32, rank=1],
         w_blocks: InputTensor[dtype=U8, rank=4],
         w_scales: InputTensor[dtype=U8, rank=3],
@@ -1985,13 +2023,11 @@ struct MXFP4MoEW2Pairs:
         var D = y_pairs.dim_size(1)
         var P_out = y_pairs.dim_size(0)
 
-        var num_active_experts_i = Int(num_active_experts)
-        var max_tokens_i = Int(max_num_tokens_per_expert)
         var kblocks = w_blocks.dim_size(2)
 
         var grid_x = ceildiv(D, 128)  # BN = 128
-        var grid_y = ceildiv(max_tokens_i, 128)  # BM = 128
-        var grid_z = num_active_experts_i
+        var grid_y = 2
+        var grid_z = w_blocks.dim_size(0)
 
         var gpu_ctx = ctx.get_device_context()
 
@@ -2016,6 +2052,12 @@ struct MXFP4MoEW2Pairs:
             expert_ids.size(),
             owning=False,
         )
+        var expert_usage_stats_dev = DeviceBuffer[expert_usage_stats.dtype](
+            gpu_ctx,
+            expert_usage_stats.unsafe_ptr(),
+            expert_usage_stats.size(),
+            owning=False,
+        )
         var gate_weights_dev = DeviceBuffer[gate_weights.dtype](
             gpu_ctx,
             gate_weights.unsafe_ptr(),
@@ -2035,12 +2077,7 @@ struct MXFP4MoEW2Pairs:
             gpu_ctx, y_pairs.unsafe_ptr(), y_pairs.size(), owning=False
         )
 
-        if (
-            P == 0
-            or P_out == 0
-            or num_active_experts_i == 0
-            or max_tokens_i == 0
-        ):
+        if P == 0 or P_out == 0:
             return
 
         comptime w2_kernel = moe_w2_mxfp4_scatter_wgmma[
@@ -2075,7 +2112,7 @@ struct MXFP4MoEW2Pairs:
             token_expert_order_dev,
             expert_start_indices_dev,
             expert_ids_dev,
-            num_active_experts_i,
+            expert_usage_stats_dev,
             gate_weights_dev,
             w_blocks_dev,
             w_scales_dev,

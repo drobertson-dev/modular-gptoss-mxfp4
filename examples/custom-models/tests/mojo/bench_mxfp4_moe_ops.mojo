@@ -159,6 +159,10 @@ fn run_bench[
     comptime gamma_spec = StaticTensorSpec[DType.float32, 1](DimList(P))
     var gate_weights = Tensor[Input, gamma_spec](ctx)
 
+    # Mirrors `moe_create_indices` output: [max_tokens_per_expert, num_active_experts].
+    comptime stats_spec = StaticTensorSpec[DType.uint32, 1](DimList(2))
+    var expert_usage_stats = Tensor[Input, stats_spec](ctx)
+
     var max_tokens_per_expert = _fill_routing_buffers[
         TOKENS, TOPK, NUM_EXPERTS
     ](
@@ -167,6 +171,10 @@ fn run_bench[
         expert_ids.buffer,
         gate_weights.buffer,
     )
+    with expert_usage_stats.buffer.map_to_host() as host:
+        var ptr = host.unsafe_ptr()
+        ptr[0] = UInt32(max_tokens_per_expert)
+        ptr[1] = UInt32(NUM_EXPERTS)
 
     # W1 weights: [E, 2I, D/32, 16] blocks + [E, 2I, D/32] scales, plus FP32 bias.
     comptime kblocks_w1 = HIDDEN // 32
@@ -245,8 +253,7 @@ fn run_bench[
         token_expert_order.slice,
         expert_start.slice,
         expert_ids.slice,
-        UInt32(max_tokens_per_expert),
-        UInt32(NUM_EXPERTS),
+        expert_usage_stats.slice,
         w1_blocks.slice,
         w1_scales.slice,
         w1_bias.slice,
@@ -260,8 +267,7 @@ fn run_bench[
         token_expert_order.slice,
         expert_start.slice,
         expert_ids.slice,
-        UInt32(max_tokens_per_expert),
-        UInt32(NUM_EXPERTS),
+        expert_usage_stats.slice,
         gate_weights.slice,
         w2_blocks.slice,
         w2_scales.slice,
@@ -279,8 +285,7 @@ fn run_bench[
         token_expert_order.slice,
         expert_start.slice,
         expert_ids.slice,
-        UInt32(max_tokens_per_expert),
-        UInt32(NUM_EXPERTS),
+        expert_usage_stats.slice,
         gate_weights.slice,
         w2_blocks.slice,
         w2_scales.slice,
@@ -310,8 +315,7 @@ fn run_bench[
                 token_expert_order.slice,
                 expert_start.slice,
                 expert_ids.slice,
-                UInt32(max_tokens_per_expert),
-                UInt32(NUM_EXPERTS),
+                expert_usage_stats.slice,
                 w1_blocks.slice,
                 w1_scales.slice,
                 w1_bias.slice,
@@ -334,8 +338,7 @@ fn run_bench[
                 token_expert_order.slice,
                 expert_start.slice,
                 expert_ids.slice,
-                UInt32(max_tokens_per_expert),
-                UInt32(NUM_EXPERTS),
+                expert_usage_stats.slice,
                 gate_weights.slice,
                 w2_blocks.slice,
                 w2_scales.slice,
@@ -357,8 +360,7 @@ fn run_bench[
                 token_expert_order.slice,
                 expert_start.slice,
                 expert_ids.slice,
-                UInt32(max_tokens_per_expert),
-                UInt32(NUM_EXPERTS),
+                expert_usage_stats.slice,
                 gate_weights.slice,
                 w2_blocks.slice,
                 w2_scales.slice,
@@ -380,8 +382,7 @@ fn run_bench[
                 token_expert_order.slice,
                 expert_start.slice,
                 expert_ids.slice,
-                UInt32(max_tokens_per_expert),
-                UInt32(NUM_EXPERTS),
+                expert_usage_stats.slice,
                 gate_weights.slice,
                 w2_blocks.slice,
                 w2_scales.slice,
