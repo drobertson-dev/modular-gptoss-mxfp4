@@ -1,7 +1,7 @@
 """GPT-OSS Mixture of Experts Layer (MXFP4 custom ops).
 
 This matches the Triton MoE structure:
-  router -> routing indices -> W1 MXFP4 GEMM + fused SwiGLU -> W2 MXFP4 GEMM + gamma scatter-add
+  router -> routing indices -> W1 MXFP4 GEMM + fused SwiGLU -> W2 MXFP4 GEMM (per-pair) -> TOPK reduce
 
 Python is responsible for producing routing tensors and passing weights in the
 exact layout expected by the Mojo custom ops. Kernel optimization (SM90 wgmma)
@@ -22,7 +22,8 @@ from max.nn.moe import MoE, MoEGate
 from ..kernels import (
     MXFP4_VALUES_PER_BLOCK,
     mxfp4_moe_w1_swiglu,
-    mxfp4_moe_w2_scatter,
+    mxfp4_moe_topk_reduce,
+    mxfp4_moe_w2_pairs,
 )
 from ..model_config import GptOssConfig
 
@@ -118,11 +119,11 @@ class GptOssMoE(MoE, Shardable):
             dtype=DType.uint8,
             device=self.devices[0],
         )
-        # Biases are BF16 in the checkpoint; cast to FP32 before calling the op.
+        # Keep biases as FP32 so we don't do per-step graph casts on the hot path.
         self._experts_gate_up_proj_bias = Weight(
             "_experts_gate_up_proj_bias",
             shape=[self.num_experts, 2 * self.moe_dim],
-            dtype=self.dtype,
+            dtype=DType.float32,
             device=self.devices[0],
         )
 
@@ -142,7 +143,7 @@ class GptOssMoE(MoE, Shardable):
         self._experts_down_proj_bias = Weight(
             "_experts_down_proj_bias",
             shape=[self.num_experts, self.hidden_dim],
-            dtype=self.dtype,
+            dtype=DType.float32,
             device=self.devices[0],
         )
 
@@ -176,8 +177,8 @@ class GptOssMoE(MoE, Shardable):
         # Mojo kernels expect BF16 activations and FP32 biases/gate weights.
         x_bf16 = ops.cast(x, DType.bfloat16) if x.dtype != DType.bfloat16 else x
         gate_weights_f32 = ops.cast(gate_weights_flat, DType.float32)
-        w1_bias_f32 = ops.cast(self._experts_gate_up_proj_bias, DType.float32)
-        w2_bias_f32 = ops.cast(self._experts_down_proj_bias, DType.float32)
+        w1_bias_f32 = self._experts_gate_up_proj_bias
+        w2_bias_f32 = self._experts_down_proj_bias
 
         h_sorted = mxfp4_moe_w1_swiglu(
             x_bf16,
@@ -193,7 +194,7 @@ class GptOssMoE(MoE, Shardable):
             limit=self.limit,
             target="gpu",
         )
-        y_f32 = mxfp4_moe_w2_scatter(
+        y_pairs_f32 = mxfp4_moe_w2_pairs(
             x_bf16,
             h_sorted,
             token_expert_order,
@@ -207,6 +208,7 @@ class GptOssMoE(MoE, Shardable):
             w2_bias_f32,
             target="gpu",
         )
+        y_f32 = mxfp4_moe_topk_reduce(x_bf16, y_pairs_f32, target="gpu")
 
         return ops.cast(y_f32, x.dtype)
 

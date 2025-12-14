@@ -3,7 +3,9 @@
 #
 # Uses Mojo's benchmark runner + DeviceContext GPU timers to measure:
 #   - `mxfp4_moe_w1_swiglu` (W1 GEMM + fused SwiGLU)
-#   - `mxfp4_moe_w2_scatter` (W2 GEMM + gamma scatter-add)
+#   - `mxfp4_moe_w2_scatter` (W2 GEMM + gamma scatter-add; baseline w/ atomics)
+#   - `mxfp4_moe_w2_pairs` (W2 GEMM writing y_pairs[P, D] with no atomics)
+#   - `mxfp4_moe_topk_reduce` (tiny TOPK reduction: y[token, :] = sum_k y_pairs[token*TOPK+k, :])
 #
 # Run (from `examples/custom-models/`):
 #   pixi run mxfp4-moe-bench
@@ -18,7 +20,12 @@ from benchmark import (
 )
 from buffer.dimlist import DimList
 from gpu.host import DeviceBuffer, DeviceContext
-from kernels import MXFP4MoEW1SwiGlu, MXFP4MoEW2Scatter
+from kernels import (
+    MXFP4MoETopKReduce,
+    MXFP4MoEW1SwiGlu,
+    MXFP4MoEW2Pairs,
+    MXFP4MoEW2Scatter,
+)
 from sys import argv, has_nvidia_gpu_accelerator
 from tensor import Input, IOSpec, ManagedTensorSlice, Output, StaticTensorSpec
 
@@ -62,27 +69,39 @@ fn _skip_if_no_sm90(ctx: DeviceContext) -> Bool:
 
 
 fn _fill_routing_buffers[
-    P: Int,
+    TOKENS: Int,
+    TOPK: Int,
     num_experts: Int,
-    max_tokens_per_expert: Int,
 ](
     token_expert_order: DeviceBuffer[DType.uint32],
     expert_start_indices: DeviceBuffer[DType.uint32],
     expert_ids: DeviceBuffer[DType.int32],
     gate_weights: DeviceBuffer[DType.float32],
-) raises:
+) raises -> Int:
     # Fill on host: routing arrays are small; costs are dominated by GEMM anyway.
-    with token_expert_order.map_to_host() as host:
-        var ptr = host.unsafe_ptr()
-        for i in range(P):
-            ptr[i] = UInt32(i)
+    comptime P = TOKENS * TOPK
+    var max_tokens_per_expert = 0
+    with token_expert_order.map_to_host() as order_host:
+        with expert_start_indices.map_to_host() as start_host:
+            var order_ptr = order_host.unsafe_ptr()
+            var start_ptr = start_host.unsafe_ptr()
 
-    with expert_start_indices.map_to_host() as host:
-        var ptr = host.unsafe_ptr()
-        ptr[0] = UInt32(0)
-        for e in range(num_experts):
-            ptr[e] = UInt32(e * max_tokens_per_expert)
-        ptr[num_experts] = UInt32(P)
+            var offset = 0
+            for e in range(num_experts):
+                start_ptr[e] = UInt32(offset)
+                var expert_start = offset
+                for t in range(TOKENS):
+                    for k in range(TOPK):
+                        var pair = t * TOPK + k
+                        # Deterministic "realistic" routing: each token hits TOPK different experts.
+                        var expert = (t + k) % num_experts
+                        if expert == e:
+                            order_ptr[offset] = UInt32(pair)
+                            offset += 1
+                var expert_len = offset - expert_start
+                if expert_len > max_tokens_per_expert:
+                    max_tokens_per_expert = expert_len
+            start_ptr[num_experts] = UInt32(offset)
 
     with expert_ids.map_to_host() as host:
         var ptr = host.unsafe_ptr()
@@ -93,6 +112,8 @@ fn _fill_routing_buffers[
         var ptr = host.unsafe_ptr()
         for i in range(P):
             ptr[i] = 1.0
+
+    return max_tokens_per_expert
 
 
 fn run_bench[
@@ -112,7 +133,6 @@ fn run_bench[
     ]()
 
     comptime P = TOKENS * TOPK
-    comptime max_tokens_per_expert = P // NUM_EXPERTS
     constrained[
         P % NUM_EXPERTS == 0,
         "Default bench expects uniform expert segments (P % NUM_EXPERTS == 0)",
@@ -135,7 +155,7 @@ fn run_bench[
     comptime gamma_spec = StaticTensorSpec[DType.float32, 1](DimList(P))
     var gate_weights = Tensor[Input, gamma_spec](ctx)
 
-    _fill_routing_buffers[P, NUM_EXPERTS, max_tokens_per_expert](
+    var max_tokens_per_expert = _fill_routing_buffers[TOKENS, TOPK, NUM_EXPERTS](
         token_expert_order.buffer,
         expert_start.buffer,
         expert_ids.buffer,
@@ -195,6 +215,17 @@ fn run_bench[
     comptime y_spec = StaticTensorSpec[DType.float32, 2](DimList(TOKENS, HIDDEN))
     var y = Tensor[Output, y_spec](ctx)
 
+    # Pair-buffer output for W2 (Triton-style "compute then reduce TOPK").
+    comptime y_pairs_spec = StaticTensorSpec[DType.float32, 2](DimList(P, HIDDEN))
+    var y_pairs = Tensor[Output, y_pairs_spec](ctx)
+    var y_pairs_in = ManagedTensorSlice[
+        io_spec = Input, static_spec = y_pairs_spec
+    ](
+        y_pairs.buffer.unsafe_ptr(),
+        y_pairs_spec.shape.into_index_list[2](),
+        y_pairs_spec.strides.into_index_list[2](),
+    )
+
     # Warmup (jit/compile + first-run caches).
     MXFP4MoEW1SwiGlu.execute[target="gpu"](
         h_sorted.slice,
@@ -209,6 +240,25 @@ fn run_bench[
         w1_bias.slice,
         1.702,
         7.0,
+        ctx,
+    )
+    MXFP4MoEW2Pairs.execute[target="gpu"](
+        y_pairs.slice,
+        h_sorted_in,
+        token_expert_order.slice,
+        expert_start.slice,
+        expert_ids.slice,
+        UInt32(max_tokens_per_expert),
+        UInt32(NUM_EXPERTS),
+        gate_weights.slice,
+        w2_blocks.slice,
+        w2_scales.slice,
+        w2_bias.slice,
+        ctx,
+    )
+    MXFP4MoETopKReduce.execute[target="gpu"](
+        y.slice,
+        y_pairs_in,
         ctx,
     )
     MXFP4MoEW2Scatter.execute[target="gpu"](
@@ -283,8 +333,63 @@ fn run_bench[
 
         b.iter_custom[kernel_launch](ctx)
 
+    @parameter
+    @always_inline
+    fn bench_w2_pairs(mut b: Bencher) raises:
+        @parameter
+        @always_inline
+        fn kernel_launch(ctx: DeviceContext) raises:
+            MXFP4MoEW2Pairs.execute[target="gpu"](
+                y_pairs.slice,
+                h_sorted_in,
+                token_expert_order.slice,
+                expert_start.slice,
+                expert_ids.slice,
+                UInt32(max_tokens_per_expert),
+                UInt32(NUM_EXPERTS),
+                gate_weights.slice,
+                w2_blocks.slice,
+                w2_scales.slice,
+                w2_bias.slice,
+                ctx,
+            )
+
+        b.iter_custom[kernel_launch](ctx)
+
+    @parameter
+    @always_inline
+    fn bench_w2_pairs_reduce(mut b: Bencher) raises:
+        @parameter
+        @always_inline
+        fn kernel_launch(ctx: DeviceContext) raises:
+            MXFP4MoEW2Pairs.execute[target="gpu"](
+                y_pairs.slice,
+                h_sorted_in,
+                token_expert_order.slice,
+                expert_start.slice,
+                expert_ids.slice,
+                UInt32(max_tokens_per_expert),
+                UInt32(NUM_EXPERTS),
+                gate_weights.slice,
+                w2_blocks.slice,
+                w2_scales.slice,
+                w2_bias.slice,
+                ctx,
+            )
+            MXFP4MoETopKReduce.execute[target="gpu"](
+                y.slice,
+                y_pairs_in,
+                ctx,
+            )
+
+        b.iter_custom[kernel_launch](ctx)
+
     bench.bench_function[bench_w1](BenchId("mxfp4_moe_w1_swiglu", "gpu"), w1_metrics)
     bench.bench_function[bench_w2](BenchId("mxfp4_moe_w2_scatter", "gpu"), w2_metrics)
+    bench.bench_function[bench_w2_pairs](BenchId("mxfp4_moe_w2_pairs", "gpu"), w2_metrics)
+    bench.bench_function[bench_w2_pairs_reduce](
+        BenchId("mxfp4_moe_w2_pairs_reduce", "gpu"), w2_metrics
+    )
 
     print(bench)
 

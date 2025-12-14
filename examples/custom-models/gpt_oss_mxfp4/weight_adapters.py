@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 
+from max.dtype import DType
 from max.graph.weights import WeightData, Weights
 
 # Ordered so that bias mappings happen before similarly-prefixed weights.
@@ -39,9 +40,14 @@ def convert_safetensor_state_dict(
         mapped = weight_name
         for before, after in GPT_OSS_SAFETENSOR_MAP.items():
             mapped = mapped.replace(before, after)
-        new_state_dict[mapped] = (
-            value.data() if hasattr(value, "data") else value
-        )
+        data = value.data() if hasattr(value, "data") else value
+        # MoE expert biases are BF16 in the checkpoint but the Mojo custom ops expect FP32.
+        # Cast once at load time so we don't insert per-step casts into the graph.
+        if mapped.endswith(
+            ("_experts_gate_up_proj_bias", "_experts_down_proj_bias")
+        ):
+            data = data.astype(DType.float32)
+        new_state_dict[mapped] = data
     return new_state_dict
 
 

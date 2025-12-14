@@ -221,6 +221,89 @@ def mxfp4_moe_w2_scatter(
     )[0].tensor
 
 
+def mxfp4_moe_w2_pairs(
+    x_like: Any,
+    h_sorted: Any,
+    token_expert_order: Any,
+    expert_start_indices: Any,
+    expert_ids: Any,
+    max_num_tokens_per_expert: Any,
+    num_active_experts: Any,
+    gate_weights_f32: Any,
+    w_blocks: Any,
+    w_scales: Any,
+    bias_f32: Any,
+    *,
+    target: str = "gpu",
+) -> TensorValue:
+    """Call `mxfp4_moe_w2_pairs` (GPU-only MoE W2 that writes one row per pair)."""
+
+    x_t = _as_tensor(x_like)
+    h_sorted_t = _as_tensor(h_sorted)
+    token_expert_order_t = _as_tensor(token_expert_order)
+    expert_start_indices_t = _as_tensor(expert_start_indices)
+    expert_ids_t = _as_tensor(expert_ids)
+    max_tokens_t = _as_tensor(max_num_tokens_per_expert)
+    num_active_t = _as_tensor(num_active_experts)
+    gate_weights_t = _as_tensor(gate_weights_f32)
+    w_blocks_t = _as_tensor(w_blocks)
+    w_scales_t = _as_tensor(w_scales)
+    bias_t = _as_tensor(bias_f32)
+
+    p_pairs = token_expert_order_t.shape[0]
+    d_hidden = x_t.shape[1]
+
+    out_type = TensorType(
+        dtype=DType.float32, shape=[p_pairs, d_hidden], device=x_t.device
+    )
+
+    return ops.custom(
+        "mxfp4_moe_w2_pairs",
+        device=x_t.device,
+        values=[
+            h_sorted_t,
+            token_expert_order_t,
+            expert_start_indices_t,
+            expert_ids_t,
+            max_tokens_t,
+            num_active_t,
+            gate_weights_t,
+            w_blocks_t,
+            w_scales_t,
+            bias_t,
+        ],
+        out_types=[out_type],
+        parameters={"target": target},
+    )[0].tensor
+
+
+def mxfp4_moe_topk_reduce(
+    x_like: Any,
+    y_pairs: Any,
+    *,
+    target: str = "gpu",
+) -> TensorValue:
+    """Call `mxfp4_moe_topk_reduce` (GPU-only TOPK reduction from pair-buffer)."""
+
+    x_t = _as_tensor(x_like)
+    y_pairs_t = _as_tensor(y_pairs)
+
+    t_tokens = x_t.shape[0]
+    d_hidden = x_t.shape[1]
+
+    out_type = TensorType(
+        dtype=DType.float32, shape=[t_tokens, d_hidden], device=x_t.device
+    )
+
+    return ops.custom(
+        "mxfp4_moe_topk_reduce",
+        device=x_t.device,
+        values=[y_pairs_t],
+        out_types=[out_type],
+        parameters={"target": target},
+    )[0].tensor
+
+
 __all__ = [
     "MXFP4_BYTES_PER_BLOCK",
     "MXFP4_TOPK",
@@ -229,4 +312,6 @@ __all__ = [
     "mxfp4_matmul_swiglu",
     "mxfp4_moe_w1_swiglu",
     "mxfp4_moe_w2_scatter",
+    "mxfp4_moe_w2_pairs",
+    "mxfp4_moe_topk_reduce",
 ]
