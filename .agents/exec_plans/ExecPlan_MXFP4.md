@@ -19,7 +19,11 @@ Pre-flight checks refreshed 2025-12-10 02:26Z: `nvidia-smi` shows an H100 80GB (
 
 Current repo state (audited 2025-12-13):
 - Mojo custom ops live under `examples/custom_ops/kernels/`:
-  - `examples/custom_ops/kernels/moe_mxfp4_ops.mojo` registers the MoE ops `mxfp4_moe_w1_swiglu` and `mxfp4_moe_w2_scatter` (GPU-only, correctness-first).
+  - `examples/custom_ops/kernels/moe_mxfp4_ops.mojo` registers the MoE ops:
+    - `mxfp4_moe_w1_swiglu` (W1 GEMM + fused SwiGLU)
+    - `mxfp4_moe_w2_scatter` (baseline scatter-add; atomics)
+    - `mxfp4_moe_w2_pairs` (Triton-style per-pair output; no atomics)
+    - `mxfp4_moe_topk_reduce` (TOPK reduction from per-pair buffer)
   - `examples/custom_ops/kernels/mxfp4_matmul_sm90.mojo` registers `gpt_oss.mxfp4.matmul.sm90` as a **CPU-only** correctness/debug op (not a performance path).
 - Python custom architecture scaffolding lives under `examples/custom-models/gpt_oss_mxfp4/`; the remaining work is to ensure Python weights + routing tensors match the Mojo op interfaces exactly (Python must adapt to Mojo, not vice versa).
 - Integration tests exist under `examples/custom-models/tests/` (Python) and `examples/custom-models/tests/mojo/` (Mojo).
@@ -37,11 +41,12 @@ Risks:
 - [x] (2025-12-10 02:40Z) Added Python env scaffold under `examples/custom-models/pixi.toml` (deps + tasks) and initial integration tests under `examples/custom-models/tests/`.
 - [x] (2025-12-12 05:27Z) Reviewed `examples/custom_ops/kernels/moe_mxfp4_ops.mojo` against the Triton MoE path; confirmed high-level contracts match (remaining gaps are perf-only internals).
 - [x] (2025-12-13) Updated this ExecPlan to incorporate per-subdir pixi usage, the “Python adapts to Mojo” rule, and the actual registered Mojo op signatures/weight layouts in the current tree.
-- [x] (2025-12-13) Wired Python to the Mojo contracts: added wrappers (`gpt_oss_mxfp4/kernels.py`), switched MoE to call `mxfp4_moe_w1_swiglu`/`mxfp4_moe_w2_scatter`, added MXFP4 weight adapter, and ensured the pipeline graph loads custom ops via `custom_extensions`.
+- [x] (2025-12-13) Wired Python to the Mojo contracts: added wrappers (`gpt_oss_mxfp4/kernels.py`), switched MoE to call `mxfp4_moe_w1_swiglu`/`mxfp4_moe_w2_pairs` + `mxfp4_moe_topk_reduce` (Triton-style “compute then reduce TOPK”), added MXFP4 weight adapter, and ensured the pipeline graph loads custom ops via `custom_extensions`.
 - [x] (2025-12-13) Implemented SM90 `wgmma` paths inside the MoE ops (`examples/custom_ops/kernels/moe_mxfp4_ops.mojo`) **without changing the Python-visible op signatures** (initial correctness-first WGMMA; perf work continues).
 - [x] (2025-12-13) Added pixi tasks + ran smoke validations (Mojo runner for Mojo tests; Python tests for integration).
 - [x] (2025-12-13) Vectorized activation (A) global loads (UInt64 -> 4x BF16) for W1/W2 WGMMA preload + prefetch, improving the `mxfp4-moe-bench` microbench substantially.
 - [x] (2025-12-13) Reduced MXFP4 decode overhead by converting E8M0 scale once per 32-value block and reusing it for all 16 packed bytes during B-tile decode (Triton-like K-loop behavior).
+- [x] (2025-12-14) Removed MoE CPU sync by passing `expert_usage_stats` as a GPU tensor into W1/W2 ops; updated W1/W2 kernels to use persistent-y loops with fixed launch geometry and no host-derived scalars.
 - [x] (2025-12-14) Triton-like packed staging refactor: stage packed `w_blocks` + `w_scales` into shared (cp.async), then decode from staged packed blocks into BF16 tiles immediately before WGMMA for both W1 and W2; updated dynamic shared memory sizing; validated via `pixi run mxfp4-moe-bench`, `pixi run mxfp4-moe-reference-test`, and `pixi run mxfp4-mojo-sm90-moe-test`.
 - [x] (2025-12-13) Switched MoE WGMMA kernels to an `.agents/OVERVIEW.md`-style CTA: `BM=128`, `BN/BN_RAW=128`, `BK=64`, `WGMMA_N=128`, `NUM_WARP_GROUPS=2` (`block_dim=(256,1,1)`), and updated host launch grids accordingly; validated via `mxfp4-moe-reference-test` + `mxfp4-moe-bench`.
 - [x] (2025-12-13) Tried increasing CTA K (`BK=128`) for W1/W2 while keeping the OVErVIEW CTA; correctness passed but `mxfp4-moe-bench` regressed, so kept `BK=64`.
@@ -51,7 +56,7 @@ Risks:
 
 - `pixi shell` is disruptive in this repo (can reset CWD to `/workspace`); use `pixi run --manifest-path <dir> ...` (or run from that directory) instead.
 - The dense debug op `gpt_oss.mxfp4.matmul.sm90` is CPU-only today; performance work must land in the GPU MoE ops and later the SM90 `wgmma` implementation.
-- The MoE ops already implement the correct *high-level* Triton behavior (routing → W1+SwiGLU → W2 scatter-add with gammas); the remaining work is internal performance engineering and Python architecture wiring.
+- The MoE ops already implement the correct *high-level* Triton behavior (routing → W1+SwiGLU → W2 per-pair output + TOPK reduce); the remaining work is internal performance engineering and Python architecture wiring.
 - Mojo test helpers in `examples/custom-models/tests/mojo/` used outdated `internal_utils.HostNDBuffer`/`DeviceNDBuffer`; replaced with a local `ndbuffer_utils.mojo` wrapper so tests run via `mojo run`.
 - In Mojo GPU tests, keep tiny routing metadata like `stats = [max_tokens, num_active_experts]` on the host; reading device-resident LayoutTensor scalars on the host can crash under KGEN.
 - The current MAX/Mojo CUDA toolchain is enforcing a **48KB static shared-memory cap** for these kernels (`0xc000 max` in `ptxas`). The `BM=128, BN=128` WGMMA path needs ~64KB of A/B shared tiles for a 2-stage pipeline, so A/B buffers are allocated in **dynamic shared memory** (`external_memory`) and the host launch sets `shared_mem_bytes` + `FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(...)`.
@@ -61,7 +66,7 @@ Risks:
 
 ## Decision Log
 
-- Decision: Keep MoE custom op signatures stable (`mxfp4_moe_w1_swiglu`, `mxfp4_moe_w2_scatter`) and make Python adapt to those contracts.
+- Decision: Keep MoE custom op signatures stable (`mxfp4_moe_w1_swiglu`, `mxfp4_moe_w2_pairs`, `mxfp4_moe_topk_reduce`) and make Python adapt to those contracts.
   Rationale: Enables iterative kernel optimization (including the SM90 `wgmma` path) without repeated Python churn.
   Date/Author: 2025-12-13 Codex
 - Decision: Use dynamic shared memory (`external_memory`) for WGMMA A/B ping-pong buffers at `BM=128, BN=128`.
@@ -184,8 +189,7 @@ Evidence from pre-flight (historical):
       - `token_expert_order`: `[P]` `uint32`
       - `expert_start_indices`: `[num_experts + 1]` `uint32` (compacted; only first `num_active_experts+1` entries are used)
       - `expert_ids`: `[num_experts]` `int32` (compacted; first `num_active_experts` entries are active expert ids)
-      - `max_num_tokens_per_expert`: scalar `uint32` (host; from `expert_usage_stats[0]`)
-      - `num_active_experts`: scalar `uint32` (host; from `expert_usage_stats[1]`)
+      - `expert_usage_stats`: `[2]` `uint32` (device; `expert_usage_stats[1]` is `num_active_experts`)
       - `w_blocks`: `[num_experts, 2*I, D/32, 16]` `uint8`
       - `w_scales`: `[num_experts, 2*I, D/32]` `uint8` (E8M0 exponent bytes)
       - `bias`: `[num_experts, 2*I]` `float32`
@@ -197,17 +201,25 @@ Evidence from pre-flight (historical):
       - `token_expert_order`: `[P]` `uint32`
       - `expert_start_indices`: `[num_experts + 1]` `uint32` (compacted; only first `num_active_experts+1` entries are used)
       - `expert_ids`: `[num_experts]` `int32` (compacted; first `num_active_experts` entries are active expert ids)
-      - `max_num_tokens_per_expert`: scalar `uint32` (host; from `expert_usage_stats[0]`)
-      - `num_active_experts`: scalar `uint32` (host; from `expert_usage_stats[1]`)
+      - `expert_usage_stats`: `[2]` `uint32` (device; `expert_usage_stats[1]` is `num_active_experts`)
       - `gate_weights`: `[P]` `float32` (original pair order; the op uses `pair_idx` to index it)
       - `w_blocks`: `[num_experts, D, I/32, 16]` `uint8`
       - `w_scales`: `[num_experts, D, I/32]` `uint8` (E8M0 exponent bytes)
       - `bias`: `[num_experts, D]` `float32`
     - Output: `y`: `[T, D]` `float32` (the op zero-initializes output and scatter-adds into it)
+  - Op name: `mxfp4_moe_w2_pairs`
+    - Inputs: same as `mxfp4_moe_w2_scatter`
+    - Output: `y_pairs`: `[P, D]` `float32` (written in original pair order; no atomics)
+  - Op name: `mxfp4_moe_topk_reduce`
+    - Inputs:
+      - `y_pairs`: `[P, D]` `float32`
+    - Output:
+      - `y`: `[T, D]` `float32` (sums TOPK rows per token: `y[t] = sum_k y_pairs[t*TOPK+k]`)
 
 Internal kernel notes (implementation detail; not part of the Python contract):
 - `examples/custom_ops/kernels/moe_mxfp4_ops.mojo` WGMMA kernels currently launch with `block_dim=(256,1,1)` (2 warpgroups) and tile params `BM=128`, `BN=128`/`BN_RAW=128`, `BK=64`, `wgmma_shape=(64,128,16)`, `NUM_WARP_GROUPS=2`.
-- A/B BF16 tiles and packed staging buffers (`B_pack{0,1}`, `B_scale{0,1}`) are in dynamic shared memory; `w_blocks` is staged via `gpu.memory.async_copy` and decoded to BF16 in shared immediately before WGMMA (host launch sets `shared_mem_bytes`).
+- A/B BF16 tiles and packed staging buffers (`B_pack{0,1}`) are in dynamic shared memory; packed `w_blocks` are staged via `gpu.memory.async_copy` and decoded to BF16 in shared immediately before WGMMA (host launch sets `shared_mem_bytes`); `w_scales` scale bytes are loaded directly and kept in registers during decode.
+- Note on “full fusion”: a naïve fused W1→SwiGLU→W2 kernel would recompute W1 activations for each W2 output tile (N-tiling), so true fusion likely needs a different mapping (e.g., cluster/DSM reuse) and should be approached after closing simpler bandwidth gaps.
 
 **Python wrappers (must match Mojo):**
 - `examples/custom-models/gpt_oss_mxfp4/kernels.py` defines `get_mxfp4_kernels_path()` and thin wrappers around `ops.custom(...)` for the ops above.

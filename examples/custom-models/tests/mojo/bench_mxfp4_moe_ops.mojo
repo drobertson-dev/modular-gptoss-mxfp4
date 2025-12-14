@@ -22,8 +22,10 @@ from buffer.dimlist import DimList
 from gpu.host import DeviceBuffer, DeviceContext
 from kernels import (
     MXFP4MoETopKReduce,
+    MXFP4MoETopKReduceBF16,
     MXFP4MoEW1SwiGlu,
     MXFP4MoEW2Pairs,
+    MXFP4MoEW2PairsBF16,
     MXFP4MoEW2Scatter,
 )
 from sys import argv, has_nvidia_gpu_accelerator
@@ -246,6 +248,24 @@ fn run_bench[
         y_pairs_spec.strides.into_index_list[2](),
     )
 
+    # BF16 pair-buffer variant (cuts y_pairs traffic in half).
+    comptime y_pairs_bf16_spec = StaticTensorSpec[DType.bfloat16, 2](
+        DimList(P, HIDDEN)
+    )
+    var y_pairs_bf16 = Tensor[Output, y_pairs_bf16_spec](ctx)
+    var y_pairs_bf16_in = ManagedTensorSlice[
+        io_spec=Input, static_spec=y_pairs_bf16_spec
+    ](
+        y_pairs_bf16.buffer.unsafe_ptr(),
+        y_pairs_bf16_spec.shape.into_index_list[2](),
+        y_pairs_bf16_spec.strides.into_index_list[2](),
+    )
+
+    comptime y_bf16_spec = StaticTensorSpec[DType.bfloat16, 2](
+        DimList(TOKENS, HIDDEN)
+    )
+    var y_bf16 = Tensor[Output, y_bf16_spec](ctx)
+
     # Warmup (jit/compile + first-run caches).
     MXFP4MoEW1SwiGlu.execute[target="gpu"](
         h_sorted.slice,
@@ -277,6 +297,24 @@ fn run_bench[
     MXFP4MoETopKReduce.execute[target="gpu"](
         y.slice,
         y_pairs_in,
+        ctx,
+    )
+    MXFP4MoEW2PairsBF16.execute[target="gpu"](
+        y_pairs_bf16.slice,
+        h_sorted_in,
+        token_expert_order.slice,
+        expert_start.slice,
+        expert_ids.slice,
+        expert_usage_stats.slice,
+        gate_weights.slice,
+        w2_blocks.slice,
+        w2_scales.slice,
+        w2_bias.slice,
+        ctx,
+    )
+    MXFP4MoETopKReduceBF16.execute[target="gpu"](
+        y_bf16.slice,
+        y_pairs_bf16_in,
         ctx,
     )
     MXFP4MoEW2Scatter.execute[target="gpu"](
@@ -397,6 +435,55 @@ fn run_bench[
 
         b.iter_custom[kernel_launch](ctx)
 
+    @parameter
+    @always_inline
+    fn bench_w2_pairs_bf16(mut b: Bencher) raises:
+        @parameter
+        @always_inline
+        fn kernel_launch(ctx: DeviceContext) raises:
+            MXFP4MoEW2PairsBF16.execute[target="gpu"](
+                y_pairs_bf16.slice,
+                h_sorted_in,
+                token_expert_order.slice,
+                expert_start.slice,
+                expert_ids.slice,
+                expert_usage_stats.slice,
+                gate_weights.slice,
+                w2_blocks.slice,
+                w2_scales.slice,
+                w2_bias.slice,
+                ctx,
+            )
+
+        b.iter_custom[kernel_launch](ctx)
+
+    @parameter
+    @always_inline
+    fn bench_w2_pairs_bf16_reduce(mut b: Bencher) raises:
+        @parameter
+        @always_inline
+        fn kernel_launch(ctx: DeviceContext) raises:
+            MXFP4MoEW2PairsBF16.execute[target="gpu"](
+                y_pairs_bf16.slice,
+                h_sorted_in,
+                token_expert_order.slice,
+                expert_start.slice,
+                expert_ids.slice,
+                expert_usage_stats.slice,
+                gate_weights.slice,
+                w2_blocks.slice,
+                w2_scales.slice,
+                w2_bias.slice,
+                ctx,
+            )
+            MXFP4MoETopKReduceBF16.execute[target="gpu"](
+                y_bf16.slice,
+                y_pairs_bf16_in,
+                ctx,
+            )
+
+        b.iter_custom[kernel_launch](ctx)
+
     bench.bench_function[bench_w1](
         BenchId("mxfp4_moe_w1_swiglu", "gpu"), w1_metrics
     )
@@ -408,6 +495,12 @@ fn run_bench[
     )
     bench.bench_function[bench_w2_pairs_reduce](
         BenchId("mxfp4_moe_w2_pairs_reduce", "gpu"), w2_metrics
+    )
+    bench.bench_function[bench_w2_pairs_bf16](
+        BenchId("mxfp4_moe_w2_pairs_bf16", "gpu"), w2_metrics
+    )
+    bench.bench_function[bench_w2_pairs_bf16_reduce](
+        BenchId("mxfp4_moe_w2_pairs_bf16_reduce", "gpu"), w2_metrics
     )
 
     print(bench)

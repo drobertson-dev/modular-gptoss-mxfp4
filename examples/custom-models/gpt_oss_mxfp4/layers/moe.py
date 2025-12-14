@@ -22,8 +22,10 @@ from max.nn.moe import MoE, MoEGate
 from ..kernels import (
     MXFP4_VALUES_PER_BLOCK,
     mxfp4_moe_topk_reduce,
+    mxfp4_moe_topk_reduce_bf16,
     mxfp4_moe_w1_swiglu,
     mxfp4_moe_w2_pairs,
+    mxfp4_moe_w2_pairs_bf16,
 )
 from ..model_config import GptOssConfig
 
@@ -188,22 +190,39 @@ class GptOssMoE(MoE, Shardable):
             limit=self.limit,
             target="gpu",
         )
-        y_pairs_f32 = mxfp4_moe_w2_pairs(
-            x_bf16,
-            h_sorted,
-            token_expert_order,
-            expert_start_indices,
-            expert_ids,
-            expert_usage_stats,
-            gate_weights_f32,
-            self._experts_down_proj_weight_blocks,
-            self._experts_down_proj_weight_scales,
-            w2_bias_f32,
-            target="gpu",
-        )
-        y_f32 = mxfp4_moe_topk_reduce(x_bf16, y_pairs_f32, target="gpu")
+        use_bf16_pairs = bool(getattr(self.config, "mxfp4_moe_bf16_pairs", False))
+        if use_bf16_pairs:
+            y_pairs = mxfp4_moe_w2_pairs_bf16(
+                x_bf16,
+                h_sorted,
+                token_expert_order,
+                expert_start_indices,
+                expert_ids,
+                expert_usage_stats,
+                gate_weights_f32,
+                self._experts_down_proj_weight_blocks,
+                self._experts_down_proj_weight_scales,
+                w2_bias_f32,
+                target="gpu",
+            )
+            y = mxfp4_moe_topk_reduce_bf16(x_bf16, y_pairs, target="gpu")
+        else:
+            y_pairs = mxfp4_moe_w2_pairs(
+                x_bf16,
+                h_sorted,
+                token_expert_order,
+                expert_start_indices,
+                expert_ids,
+                expert_usage_stats,
+                gate_weights_f32,
+                self._experts_down_proj_weight_blocks,
+                self._experts_down_proj_weight_scales,
+                w2_bias_f32,
+                target="gpu",
+            )
+            y = mxfp4_moe_topk_reduce(x_bf16, y_pairs, target="gpu")
 
-        return ops.cast(y_f32, x.dtype)
+        return y if y.dtype == x.dtype else ops.cast(y, x.dtype)
 
     @property
     def sharding_strategy(self) -> ShardingStrategy | None:

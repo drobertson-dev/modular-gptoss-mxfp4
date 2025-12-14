@@ -8,6 +8,8 @@ contract, and only override graph construction to:
 
 from __future__ import annotations
 
+import os
+
 from max.dtype import DType
 from max.graph import DeviceRef, Graph, TensorType
 from max.nn import Signals
@@ -66,6 +68,10 @@ class GptOssModel(_BaseGptOssModel):
             cache_dtype=self.encoding.cache_dtype,
             kv_cache_config=self.kv_cache_config,
             return_logits=self.return_logits,
+        )
+        model_config.mxfp4_moe_bf16_pairs = (
+            os.environ.get("MXFP4_MOE_BF16_PAIRS", "0").strip().lower()
+            in {"1", "true", "yes", "on"}
         )
         nn_model = GptOss(model_config)
         nn_model.load_state_dict(

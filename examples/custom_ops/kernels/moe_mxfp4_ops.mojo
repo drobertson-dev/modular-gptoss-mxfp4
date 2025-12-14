@@ -140,11 +140,8 @@ fn moe_w1_mxfp4_swiglu_wgmma[
     comptime b0_off = ((a1_off + a_bytes + 255) // 256) * 256
     comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
     comptime pack_bytes = BN_RAW * blocks_per_tile * BYTES_PER_BLOCK
-    comptime scale_bytes = BN_RAW * blocks_per_tile
     comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
     comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
-    comptime scale0_off = ((pack1_off + pack_bytes + 255) // 256) * 256
-    comptime scale1_off = ((scale0_off + scale_bytes + 255) // 256) * 256
 
     var smem = external_memory[
         Scalar[U8],
@@ -190,8 +187,6 @@ fn moe_w1_mxfp4_swiglu_wgmma[
     # Packed MXFP4 staging buffers: [BN_RAW * (BK/32) blocks] * 16 bytes.
     var B_pack0 = smem_ptr + pack0_off
     var B_pack1 = smem_ptr + pack1_off
-    var B_scale0 = smem_ptr + scale0_off
-    var B_scale1 = smem_ptr + scale1_off
 
     var w_blocks_u8 = w_blocks_ptr.address_space_cast[
         AddressSpace.GLOBAL
@@ -1110,6 +1105,7 @@ fn moe_w2_mxfp4_scatter_wgmma[
     WGMMA_K: Int = 16,
     NUM_WARP_GROUPS: Int = 1,
     WRITE_PAIRS: Bool = False,
+    PAIR_OUT_BF16: Bool = False,
 ](
     h_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
     P: Int,
@@ -1134,6 +1130,10 @@ fn moe_w2_mxfp4_scatter_wgmma[
     constrained[BK % WGMMA_K == 0]()
     constrained[BK % VALUES_PER_BLOCK == 0, "BK must be a multiple of 32"]()
     constrained[BM % (WGMMA_M * NUM_WARP_GROUPS) == 0]()
+    constrained[
+        not PAIR_OUT_BF16 or WRITE_PAIRS,
+        "PAIR_OUT_BF16 is only supported when WRITE_PAIRS=True",
+    ]()
 
     var expert_idx = Int(block_idx.z)
     var num_active_experts = Int(expert_usage_stats_ptr[1])
@@ -1177,11 +1177,8 @@ fn moe_w2_mxfp4_scatter_wgmma[
     comptime b0_off = ((a1_off + a_bytes + 255) // 256) * 256
     comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
     comptime pack_bytes = BN * blocks_per_tile * BYTES_PER_BLOCK
-    comptime scale_bytes = BN * blocks_per_tile
     comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
     comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
-    comptime scale0_off = ((pack1_off + pack_bytes + 255) // 256) * 256
-    comptime scale1_off = ((scale0_off + scale_bytes + 255) // 256) * 256
 
     var smem = external_memory[
         Scalar[U8],
@@ -1226,8 +1223,6 @@ fn moe_w2_mxfp4_scatter_wgmma[
     # Packed MXFP4 staging buffers: [BN * (BK/32) blocks] * 16 bytes.
     var B_pack0 = smem_ptr + pack0_off
     var B_pack1 = smem_ptr + pack1_off
-    var B_scale0 = smem_ptr + scale0_off
-    var B_scale1 = smem_ptr + scale1_off
 
     var w_blocks_u8 = w_blocks_ptr.address_space_cast[
         AddressSpace.GLOBAL
@@ -1704,7 +1699,16 @@ fn moe_w2_mxfp4_scatter_wgmma[
 
                             @parameter
                             if WRITE_PAIRS:
-                                y_ptr.store(pair_id * D + col0, v0)
+                                @parameter
+                                if PAIR_OUT_BF16:
+                                    var y_bf16_ptr = rebind[
+                                        UnsafePointer[BFloat16, MutAnyOrigin]
+                                    ](y_ptr)
+                                    y_bf16_ptr.store(
+                                        pair_id * D + col0, v0.cast[BF16]()
+                                    )
+                                else:
+                                    y_ptr.store(pair_id * D + col0, v0)
                             else:
                                 _ = Atomic.fetch_add(
                                     y_ptr + (tok * D + col0), v0
@@ -1716,7 +1720,16 @@ fn moe_w2_mxfp4_scatter_wgmma[
 
                             @parameter
                             if WRITE_PAIRS:
-                                y_ptr.store(pair_id * D + col1, v1)
+                                @parameter
+                                if PAIR_OUT_BF16:
+                                    var y_bf16_ptr = rebind[
+                                        UnsafePointer[BFloat16, MutAnyOrigin]
+                                    ](y_ptr)
+                                    y_bf16_ptr.store(
+                                        pair_id * D + col1, v1.cast[BF16]()
+                                    )
+                                else:
+                                    y_ptr.store(pair_id * D + col1, v1)
                             else:
                                 _ = Atomic.fetch_add(
                                     y_ptr + (tok * D + col1), v1
@@ -1826,12 +1839,9 @@ struct MXFP4MoEW1SwiGlu:
         comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
         comptime blocks_per_tile = 64 // VALUES_PER_BLOCK
         comptime pack_bytes = 128 * blocks_per_tile * BYTES_PER_BLOCK
-        comptime scale_bytes = 128 * blocks_per_tile
         comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
         comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
-        comptime scale0_off = ((pack1_off + pack_bytes + 255) // 256) * 256
-        comptime scale1_off = ((scale0_off + scale_bytes + 255) // 256) * 256
-        comptime smem_use = scale1_off + scale_bytes
+        comptime smem_use = pack1_off + pack_bytes
         gpu_ctx.enqueue_function_checked[w1_kernel, w1_kernel](
             x_dev,
             T,
@@ -1965,12 +1975,9 @@ struct MXFP4MoEW2Scatter:
         comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
         comptime blocks_per_tile = 64 // VALUES_PER_BLOCK
         comptime pack_bytes = 128 * blocks_per_tile * BYTES_PER_BLOCK
-        comptime scale_bytes = 128 * blocks_per_tile
         comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
         comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
-        comptime scale0_off = ((pack1_off + pack_bytes + 255) // 256) * 256
-        comptime scale1_off = ((scale0_off + scale_bytes + 255) // 256) * 256
-        comptime smem_use = scale1_off + scale_bytes
+        comptime smem_use = pack1_off + pack_bytes
         gpu_ctx.enqueue_function_checked[w2_kernel, w2_kernel](
             h_sorted_dev,
             P,
@@ -2099,12 +2106,150 @@ struct MXFP4MoEW2Pairs:
         comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
         comptime blocks_per_tile = 64 // VALUES_PER_BLOCK
         comptime pack_bytes = 128 * blocks_per_tile * BYTES_PER_BLOCK
-        comptime scale_bytes = 128 * blocks_per_tile
         comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
         comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
-        comptime scale0_off = ((pack1_off + pack_bytes + 255) // 256) * 256
-        comptime scale1_off = ((scale0_off + scale_bytes + 255) // 256) * 256
-        comptime smem_use = scale1_off + scale_bytes
+        comptime smem_use = pack1_off + pack_bytes
+        gpu_ctx.enqueue_function_checked[w2_kernel, w2_kernel](
+            h_sorted_dev,
+            P,
+            I,
+            token_expert_order_dev,
+            expert_start_indices_dev,
+            expert_ids_dev,
+            expert_usage_stats_dev,
+            gate_weights_dev,
+            w_blocks_dev,
+            w_scales_dev,
+            kblocks,
+            bias_dev,
+            y_pairs_dev,
+            P_out,
+            D,
+            grid_dim=(grid_x, grid_y, grid_z),
+            block_dim=(256, 1, 1),
+            shared_mem_bytes=Int(smem_use),
+            func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
+                smem_use
+            ),
+        )
+
+
+@compiler.register("mxfp4_moe_w2_pairs_bf16")
+struct MXFP4MoEW2PairsBF16:
+    @staticmethod
+    fn execute[
+        target: StaticString,
+    ](
+        y_pairs: OutputTensor[dtype=BF16, rank=2],
+        h_sorted: InputTensor[dtype=BF16, rank=2],
+        token_expert_order: InputTensor[dtype=U32, rank=1],
+        expert_start_indices: InputTensor[dtype=U32, rank=1],
+        expert_ids: InputTensor[dtype=I32, rank=1],
+        expert_usage_stats: InputTensor[dtype=U32, rank=1],
+        gate_weights: InputTensor[dtype=F32, rank=1],
+        w_blocks: InputTensor[dtype=U8, rank=4],
+        w_scales: InputTensor[dtype=U8, rank=3],
+        bias: InputTensor[dtype=F32, rank=2],
+        ctx: DeviceContextPtr,
+    ) raises:
+        @parameter
+        if is_cpu[target]():
+            raise Error("mxfp4_moe_w2_pairs_bf16: GPU only")
+
+        var P = h_sorted.dim_size(0)
+        var I = h_sorted.dim_size(1)
+        var D = y_pairs.dim_size(1)
+        var P_out = y_pairs.dim_size(0)
+
+        var kblocks = w_blocks.dim_size(2)
+
+        var grid_x = ceildiv(D, 128)  # BN = 128
+        var grid_y = 2
+        var grid_z = w_blocks.dim_size(0)
+
+        var gpu_ctx = ctx.get_device_context()
+
+        var h_sorted_dev = DeviceBuffer[h_sorted.dtype](
+            gpu_ctx, h_sorted.unsafe_ptr(), h_sorted.size(), owning=False
+        )
+        var token_expert_order_dev = DeviceBuffer[token_expert_order.dtype](
+            gpu_ctx,
+            token_expert_order.unsafe_ptr(),
+            token_expert_order.size(),
+            owning=False,
+        )
+        var expert_start_indices_dev = DeviceBuffer[expert_start_indices.dtype](
+            gpu_ctx,
+            expert_start_indices.unsafe_ptr(),
+            expert_start_indices.size(),
+            owning=False,
+        )
+        var expert_ids_dev = DeviceBuffer[expert_ids.dtype](
+            gpu_ctx,
+            expert_ids.unsafe_ptr(),
+            expert_ids.size(),
+            owning=False,
+        )
+        var expert_usage_stats_dev = DeviceBuffer[expert_usage_stats.dtype](
+            gpu_ctx,
+            expert_usage_stats.unsafe_ptr(),
+            expert_usage_stats.size(),
+            owning=False,
+        )
+        var gate_weights_dev = DeviceBuffer[gate_weights.dtype](
+            gpu_ctx,
+            gate_weights.unsafe_ptr(),
+            gate_weights.size(),
+            owning=False,
+        )
+        var w_blocks_dev = DeviceBuffer[w_blocks.dtype](
+            gpu_ctx, w_blocks.unsafe_ptr(), w_blocks.size(), owning=False
+        )
+        var w_scales_dev = DeviceBuffer[w_scales.dtype](
+            gpu_ctx, w_scales.unsafe_ptr(), w_scales.size(), owning=False
+        )
+        var bias_dev = DeviceBuffer[bias.dtype](
+            gpu_ctx, bias.unsafe_ptr(), bias.size(), owning=False
+        )
+
+        if y_pairs.size() % 2 != 0:
+            raise Error(
+                "mxfp4_moe_w2_pairs_bf16: y_pairs size must be even to alias as f32"
+            )
+
+        var y_pairs_ptr_f32 = rebind[UnsafePointer[Float32, MutAnyOrigin]](
+            y_pairs.unsafe_ptr()
+        )
+        var y_pairs_dev = DeviceBuffer[F32](
+            gpu_ctx, y_pairs_ptr_f32, y_pairs.size() // 2, owning=False
+        )
+
+        if P == 0 or P_out == 0:
+            return
+
+        comptime w2_kernel = moe_w2_mxfp4_scatter_wgmma[
+            BM=128,
+            BN=128,
+            BK=64,
+            WGMMA_M=64,
+            WGMMA_N=128,
+            WGMMA_K=16,
+            NUM_WARP_GROUPS=2,
+            WRITE_PAIRS=True,
+            PAIR_OUT_BF16=True,
+        ]
+        comptime a_smem_layout = tile_layout_k_major[BF16, 128, 64]()
+        comptime b_smem_layout = tile_layout_k_major[BF16, 128, 64]()
+        comptime a_bytes = a_smem_layout.size() * 2
+        comptime b_bytes = b_smem_layout.size() * 2
+        comptime a1_off = ((a_bytes + 255) // 256) * 256
+        comptime b0_off = ((a1_off + a_bytes + 255) // 256) * 256
+        comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
+        comptime blocks_per_tile = 64 // VALUES_PER_BLOCK
+        comptime pack_bytes = 128 * blocks_per_tile * BYTES_PER_BLOCK
+        comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
+        comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
+        comptime smem_use = pack1_off + pack_bytes
         gpu_ctx.enqueue_function_checked[w2_kernel, w2_kernel](
             h_sorted_dev,
             P,
@@ -2190,6 +2335,77 @@ struct MXFP4MoETopKReduce:
         )
 
         comptime reduce_kernel = moe_topk_reduce_pairs[BN=256]
+        gpu_ctx.enqueue_function_checked[reduce_kernel, reduce_kernel](
+            y_pairs_dev,
+            P,
+            y_dev,
+            T,
+            D,
+            grid_dim=(ceildiv(D, 256), T, 1),
+            block_dim=(256, 1, 1),
+        )
+
+
+@parameter
+fn moe_topk_reduce_pairs_bf16[
+    BN: Int = 256,
+](
+    y_pairs_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
+    P: Int,
+    y_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
+    T: Int,
+    D: Int,
+):
+    var tok = Int(block_idx.y)
+    if tok >= T:
+        return
+
+    var pair0 = tok * TOPK
+    if pair0 + (TOPK - 1) >= P:
+        return
+
+    var col = Int(block_idx.x) * BN + Int(thread_idx.x)
+    if col >= D:
+        return
+
+    var base = pair0 * D + col
+    var s = y_pairs_ptr[base].cast[F32]()
+    s += y_pairs_ptr[base + D].cast[F32]()
+    s += y_pairs_ptr[base + 2 * D].cast[F32]()
+    s += y_pairs_ptr[base + 3 * D].cast[F32]()
+    y_ptr.store(tok * D + col, s.cast[BF16]())
+
+
+@compiler.register("mxfp4_moe_topk_reduce_bf16")
+struct MXFP4MoETopKReduceBF16:
+    @staticmethod
+    fn execute[
+        target: StaticString,
+    ](
+        y: OutputTensor[dtype=BF16, rank=2],
+        y_pairs: InputTensor[dtype=BF16, rank=2],
+        ctx: DeviceContextPtr,
+    ) raises:
+        @parameter
+        if is_cpu[target]():
+            raise Error("mxfp4_moe_topk_reduce_bf16: GPU only")
+
+        var P = y_pairs.dim_size(0)
+        var T = y.dim_size(0)
+        var D = y.dim_size(1)
+
+        if T == 0 or D == 0 or P == 0:
+            return
+
+        var gpu_ctx = ctx.get_device_context()
+        var y_pairs_dev = DeviceBuffer[y_pairs.dtype](
+            gpu_ctx, y_pairs.unsafe_ptr(), y_pairs.size(), owning=False
+        )
+        var y_dev = DeviceBuffer[y.dtype](
+            gpu_ctx, y.unsafe_ptr(), y.size(), owning=False
+        )
+
+        comptime reduce_kernel = moe_topk_reduce_pairs_bf16[BN=256]
         gpu_ctx.enqueue_function_checked[reduce_kernel, reduce_kernel](
             y_pairs_dev,
             P,
