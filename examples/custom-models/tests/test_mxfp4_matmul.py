@@ -16,7 +16,9 @@ from max.engine import InferenceSession
 from max.graph import DeviceRef, Graph, TensorType
 
 
-def _fused_swiglu_ref(mat: np.ndarray, bias: np.ndarray, alpha: float, limit: float) -> np.ndarray:
+def _fused_swiglu_ref(
+    mat: np.ndarray, bias: np.ndarray, alpha: float, limit: float
+) -> np.ndarray:
     """Reference fused SwiGLU for interleaved gate/up columns."""
     gate = mat[:, 0::2]
     up = mat[:, 1::2]
@@ -42,7 +44,9 @@ def test_mxfp4_matmul_swiglu_cpu(M: int, K: int, N_full: int) -> None:
     # Reference dense path
     dense = decode_mxfp4(w_blocks, w_scales)
     ref = a_np @ dense
-    ref = _fused_swiglu_ref(ref, bias, alpha=1.702, limit=7.0).astype(np.float32)
+    ref = _fused_swiglu_ref(ref, bias, alpha=1.702, limit=7.0).astype(
+        np.float32
+    )
 
     # Build graph
     with Graph(
@@ -80,4 +84,6 @@ def test_mxfp4_matmul_swiglu_cpu(M: int, K: int, N_full: int) -> None:
     assert got.shape == ref.shape
     atol = 1e-2
     rtol = 1e-2
-    assert np.allclose(got, ref, atol=atol, rtol=rtol), f"max diff {np.max(np.abs(got - ref))}"
+    assert np.allclose(got, ref, atol=atol, rtol=rtol), (
+        f"max diff {np.max(np.abs(got - ref))}"
+    )

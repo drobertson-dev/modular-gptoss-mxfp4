@@ -310,8 +310,8 @@ __all__ = [
     "MXFP4_VALUES_PER_BLOCK",
     "get_mxfp4_kernels_path",
     "mxfp4_matmul_swiglu",
-    "mxfp4_moe_w1_swiglu",
-    "mxfp4_moe_w2_scatter",
-    "mxfp4_moe_w2_pairs",
     "mxfp4_moe_topk_reduce",
+    "mxfp4_moe_w1_swiglu",
+    "mxfp4_moe_w2_pairs",
+    "mxfp4_moe_w2_scatter",
 ]

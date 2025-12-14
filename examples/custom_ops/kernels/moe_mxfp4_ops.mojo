@@ -1675,6 +1675,7 @@ fn moe_w2_mxfp4_scatter_wgmma[
                     if col0 < D:
                         var v0 = v2[0] + b_ptr[expert_id * D + col0]
                         v0 *= gamma
+
                         @parameter
                         if WRITE_PAIRS:
                             y_ptr.store(pair_id * D + col0, v0)
@@ -1684,6 +1685,7 @@ fn moe_w2_mxfp4_scatter_wgmma[
                     if col1 < D:
                         var v1 = v2[1] + b_ptr[expert_id * D + col1]
                         v1 *= gamma
+
                         @parameter
                         if WRITE_PAIRS:
                             y_ptr.store(pair_id * D + col1, v1)

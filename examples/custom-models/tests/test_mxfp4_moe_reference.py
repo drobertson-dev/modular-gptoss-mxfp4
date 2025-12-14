@@ -52,7 +52,9 @@ def _bf16_round_to_f32(x: np.ndarray) -> np.ndarray:
     return rounded.view(np.float32)
 
 
-def _decode_mxfp4_rows(blocks: np.ndarray, scales_exp: np.ndarray) -> np.ndarray:
+def _decode_mxfp4_rows(
+    blocks: np.ndarray, scales_exp: np.ndarray
+) -> np.ndarray:
     """Decode MXFP4 rows into dense float32.
 
     Args:
@@ -66,7 +68,9 @@ def _decode_mxfp4_rows(blocks: np.ndarray, scales_exp: np.ndarray) -> np.ndarray
     if scales_exp.ndim != 2:
         raise ValueError(f"Expected scales rank-2, got {scales_exp.shape}")
     if blocks.shape[:2] != scales_exp.shape:
-        raise ValueError(f"blocks/scales mismatch: {blocks.shape[:2]} vs {scales_exp.shape}")
+        raise ValueError(
+            f"blocks/scales mismatch: {blocks.shape[:2]} vs {scales_exp.shape}"
+        )
     if blocks.shape[-1] != 16:
         raise ValueError(f"Expected 16 bytes per block, got {blocks.shape[-1]}")
 
@@ -117,7 +121,10 @@ def _load_safetensor_bf16_as_f32(path: Path, key: str) -> np.ndarray:
 
 def _find_gpt_oss_20b_file() -> Path | None:
     """Find the first shard that contains layer0 MoE weights."""
-    hub_root = Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface")) / "hub"
+    hub_root = (
+        Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface"))
+        / "hub"
+    )
     snapshots = hub_root / "models--openai--gpt-oss-20b" / "snapshots"
     if not snapshots.exists():
         return None
@@ -129,7 +136,9 @@ def _find_gpt_oss_20b_file() -> Path | None:
     return None
 
 
-def _swiglu_interleaved(x: np.ndarray, bias: np.ndarray, *, alpha: float, limit: float) -> np.ndarray:
+def _swiglu_interleaved(
+    x: np.ndarray, bias: np.ndarray, *, alpha: float, limit: float
+) -> np.ndarray:
     """Interleaved SwiGLU reference: even=gate, odd=linear."""
     gate = x[:, 0::2] + bias[0::2]
     lin = x[:, 1::2] + bias[1::2]
@@ -147,7 +156,9 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
 
     ckpt = _find_gpt_oss_20b_file()
     if ckpt is None:
-        pytest.skip("GPT-OSS checkpoint not found in HF cache; run `pixi run generate` once")
+        pytest.skip(
+            "GPT-OSS checkpoint not found in HF cache; run `pixi run generate` once"
+        )
 
     # Small slice sizes (must respect MXFP4 32-value blocks and kernel tile constraints).
     num_experts = 2
@@ -160,13 +171,25 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
 
     # Load checkpoint tensors (uint8 blocks/scales via safetensors; BF16 bias via raw bytes).
     with safe_open(str(ckpt), framework="numpy") as f:
-        w1_blocks_all = f.get_tensor("model.layers.0.mlp.experts.gate_up_proj_blocks")
-        w1_scales_all = f.get_tensor("model.layers.0.mlp.experts.gate_up_proj_scales")
-        w2_blocks_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_blocks")
-        w2_scales_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_scales")
+        w1_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.gate_up_proj_blocks"
+        )
+        w1_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.gate_up_proj_scales"
+        )
+        w2_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w2_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
 
-    w1_bias_all = _load_safetensor_bf16_as_f32(ckpt, "model.layers.0.mlp.experts.gate_up_proj_bias")
-    w2_bias_all = _load_safetensor_bf16_as_f32(ckpt, "model.layers.0.mlp.experts.down_proj_bias")
+    w1_bias_all = _load_safetensor_bf16_as_f32(
+        ckpt, "model.layers.0.mlp.experts.gate_up_proj_bias"
+    )
+    w2_bias_all = _load_safetensor_bf16_as_f32(
+        ckpt, "model.layers.0.mlp.experts.down_proj_bias"
+    )
 
     w1_blocks = w1_blocks_all[:num_experts, :n_raw, :kblocks_w1, :].copy()
     w1_scales = w1_scales_all[:num_experts, :n_raw, :kblocks_w1].copy()
@@ -201,10 +224,18 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
     with Graph(
         "mxfp4_moe_reference",
         input_types=[
-            TensorType(DType.float32, shape=[t_tokens, d_hidden], device=devref),
-            TensorType(DType.uint32, shape=[1], device=devref),  # token_expert_order
-            TensorType(DType.uint32, shape=[num_experts + 1], device=devref),  # expert_start
-            TensorType(DType.int32, shape=[num_experts], device=devref),  # expert_ids
+            TensorType(
+                DType.float32, shape=[t_tokens, d_hidden], device=devref
+            ),
+            TensorType(
+                DType.uint32, shape=[1], device=devref
+            ),  # token_expert_order
+            TensorType(
+                DType.uint32, shape=[num_experts + 1], device=devref
+            ),  # expert_start
+            TensorType(
+                DType.int32, shape=[num_experts], device=devref
+            ),  # expert_ids
             TensorType(
                 DType.uint8,
                 shape=[num_experts, n_raw, kblocks_w1, 16],
@@ -254,9 +285,15 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
         ) = graph.inputs
 
         x_bf16_in = ops.cast(x_in.tensor, DType.bfloat16)
-        alpha_val = ops.constant(1.702, dtype=DType.float32, device=DeviceRef.CPU())
-        limit_val = ops.constant(7.0, dtype=DType.float32, device=DeviceRef.CPU())
-        max_tokens_val = ops.constant(1, dtype=DType.uint32, device=DeviceRef.CPU())
+        alpha_val = ops.constant(
+            1.702, dtype=DType.float32, device=DeviceRef.CPU()
+        )
+        limit_val = ops.constant(
+            7.0, dtype=DType.float32, device=DeviceRef.CPU()
+        )
+        max_tokens_val = ops.constant(
+            1, dtype=DType.uint32, device=DeviceRef.CPU()
+        )
         num_active_experts_val = ops.constant(
             1, dtype=DType.uint32, device=DeviceRef.CPU()
         )
@@ -334,4 +371,6 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
     assert got.shape == ref.shape
     atol = 5e-2
     rtol = 5e-2
-    assert np.allclose(got, ref, atol=atol, rtol=rtol), f"max abs diff {np.max(np.abs(got - ref))}"
+    assert np.allclose(got, ref, atol=atol, rtol=rtol), (
+        f"max abs diff {np.max(np.abs(got - ref))}"
+    )

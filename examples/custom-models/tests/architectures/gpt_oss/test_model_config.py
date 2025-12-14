@@ -211,7 +211,9 @@ def test_generate_layer_types_fallback_when_missing():
     )
 
     assert len(cfg.layer_types) == hf.num_hidden_layers
-    assert all(t in ("sliding_attention", "full_attention") for t in cfg.layer_types)
+    assert all(
+        t in ("sliding_attention", "full_attention") for t in cfg.layer_types
+    )
 
 
 @pytest.mark.parametrize(

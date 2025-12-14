@@ -139,14 +139,18 @@ fn run_bench[
     ]()
 
     # Tensors (allocate once, reuse across measurements).
-    comptime x_spec = StaticTensorSpec[DType.bfloat16, 2](DimList(TOKENS, HIDDEN))
+    comptime x_spec = StaticTensorSpec[DType.bfloat16, 2](
+        DimList(TOKENS, HIDDEN)
+    )
     var x = Tensor[Input, x_spec](ctx)
     ctx.enqueue_memset(x.buffer, 0)
 
     comptime order_spec = StaticTensorSpec[DType.uint32, 1](DimList(P))
     var token_expert_order = Tensor[Input, order_spec](ctx)
 
-    comptime start_spec = StaticTensorSpec[DType.uint32, 1](DimList(NUM_EXPERTS + 1))
+    comptime start_spec = StaticTensorSpec[DType.uint32, 1](
+        DimList(NUM_EXPERTS + 1)
+    )
     var expert_start = Tensor[Input, start_spec](ctx)
 
     comptime ids_spec = StaticTensorSpec[DType.int32, 1](DimList(NUM_EXPERTS))
@@ -155,7 +159,9 @@ fn run_bench[
     comptime gamma_spec = StaticTensorSpec[DType.float32, 1](DimList(P))
     var gate_weights = Tensor[Input, gamma_spec](ctx)
 
-    var max_tokens_per_expert = _fill_routing_buffers[TOKENS, TOPK, NUM_EXPERTS](
+    var max_tokens_per_expert = _fill_routing_buffers[
+        TOKENS, TOPK, NUM_EXPERTS
+    ](
         token_expert_order.buffer,
         expert_start.buffer,
         expert_ids.buffer,
@@ -196,30 +202,36 @@ fn run_bench[
     var w2_scales = Tensor[Input, w2_scales_spec](ctx)
     ctx.enqueue_memset(w2_scales.buffer, 0)
 
-    comptime w2_bias_spec = StaticTensorSpec[DType.float32, 2](DimList(NUM_EXPERTS, HIDDEN))
+    comptime w2_bias_spec = StaticTensorSpec[DType.float32, 2](
+        DimList(NUM_EXPERTS, HIDDEN)
+    )
     var w2_bias = Tensor[Input, w2_bias_spec](ctx)
     ctx.enqueue_memset(w2_bias.buffer, 0)
 
     # Outputs.
-    comptime h_spec = StaticTensorSpec[DType.bfloat16, 2](DimList(P, INTERMEDIATE))
+    comptime h_spec = StaticTensorSpec[DType.bfloat16, 2](
+        DimList(P, INTERMEDIATE)
+    )
     var h_sorted = Tensor[Output, h_spec](ctx)
     ctx.enqueue_memset(h_sorted.buffer, 0)
-    var h_sorted_in = ManagedTensorSlice[
-        io_spec = Input, static_spec = h_spec
-    ](
+    var h_sorted_in = ManagedTensorSlice[io_spec=Input, static_spec=h_spec](
         h_sorted.buffer.unsafe_ptr(),
         h_spec.shape.into_index_list[2](),
         h_spec.strides.into_index_list[2](),
     )
 
-    comptime y_spec = StaticTensorSpec[DType.float32, 2](DimList(TOKENS, HIDDEN))
+    comptime y_spec = StaticTensorSpec[DType.float32, 2](
+        DimList(TOKENS, HIDDEN)
+    )
     var y = Tensor[Output, y_spec](ctx)
 
     # Pair-buffer output for W2 (Triton-style "compute then reduce TOPK").
-    comptime y_pairs_spec = StaticTensorSpec[DType.float32, 2](DimList(P, HIDDEN))
+    comptime y_pairs_spec = StaticTensorSpec[DType.float32, 2](
+        DimList(P, HIDDEN)
+    )
     var y_pairs = Tensor[Output, y_pairs_spec](ctx)
     var y_pairs_in = ManagedTensorSlice[
-        io_spec = Input, static_spec = y_pairs_spec
+        io_spec=Input, static_spec=y_pairs_spec
     ](
         y_pairs.buffer.unsafe_ptr(),
         y_pairs_spec.shape.into_index_list[2](),
@@ -384,9 +396,15 @@ fn run_bench[
 
         b.iter_custom[kernel_launch](ctx)
 
-    bench.bench_function[bench_w1](BenchId("mxfp4_moe_w1_swiglu", "gpu"), w1_metrics)
-    bench.bench_function[bench_w2](BenchId("mxfp4_moe_w2_scatter", "gpu"), w2_metrics)
-    bench.bench_function[bench_w2_pairs](BenchId("mxfp4_moe_w2_pairs", "gpu"), w2_metrics)
+    bench.bench_function[bench_w1](
+        BenchId("mxfp4_moe_w1_swiglu", "gpu"), w1_metrics
+    )
+    bench.bench_function[bench_w2](
+        BenchId("mxfp4_moe_w2_scatter", "gpu"), w2_metrics
+    )
+    bench.bench_function[bench_w2_pairs](
+        BenchId("mxfp4_moe_w2_pairs", "gpu"), w2_metrics
+    )
     bench.bench_function[bench_w2_pairs_reduce](
         BenchId("mxfp4_moe_w2_pairs_reduce", "gpu"), w2_metrics
     )

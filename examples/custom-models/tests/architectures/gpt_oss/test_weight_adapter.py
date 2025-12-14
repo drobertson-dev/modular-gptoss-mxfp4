@@ -509,4 +509,6 @@ def test_bias_mapping_precedes_weight_mapping():
 def test_unknown_keys_raise():
     assert hasattr(weight_adapters, "convert_safetensor_state_dict")
     with pytest.raises((KeyError, ValueError)):
-        weight_adapters.convert_safetensor_state_dict({"weird.layer.foo": object()})
+        weight_adapters.convert_safetensor_state_dict(
+            {"weird.layer.foo": object()}
+        )

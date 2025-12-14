@@ -32,6 +32,7 @@ fn _nibble_from_k_mod16(expert: Int, out_col: Int, k: Int) -> UInt8:
 
 fn _skip_if_no_sm90(ctx: DeviceContext) -> Bool:
     from sys import has_nvidia_gpu_accelerator
+
     if not has_nvidia_gpu_accelerator():
         print("Skipping clean SM90 test (no NVIDIA GPU detected)")
         return True
@@ -50,8 +51,8 @@ fn test_mxfp4_sm90_clean_tile_wgmma() raises:
         return
     alias num_experts = 1
     alias tokens = 64
-    alias K = 64   # k_dim spans 4 CTA_K tiles (CTA_K=16)
-    alias N = 64   # matches CTA_N
+    alias K = 64  # k_dim spans 4 CTA_K tiles (CTA_K=16)
+    alias N = 64  # matches CTA_N
 
     # Activations: simple pattern
     alias a_shape = DimList(tokens, K)
@@ -60,7 +61,9 @@ fn test_mxfp4_sm90_clean_tile_wgmma() raises:
     for m in range(tokens):
         for k in range(K):
             var val = Float32(m + k)
-            a_tensor_host[m, k] = SIMD[DType.bfloat16, 1](val.cast[DType.bfloat16]())
+            a_tensor_host[m, k] = SIMD[DType.bfloat16, 1](
+                val.cast[DType.bfloat16]()
+            )
 
     # Packed weights: k % 16 nibble pattern
     alias packed_shape = DimList(
@@ -68,19 +71,26 @@ fn test_mxfp4_sm90_clean_tile_wgmma() raises:
     )
     var w_host = HostNDBuffer[DType.uint8, 4, packed_shape](packed_shape)
     var w_tensor_host = from_ndbuffer_row_major(w_host.tensor)
-    fill_packed_by_nibble(w_tensor_host, K // MXFP4_BLOCK_K, _nibble_from_k_mod16)
+    fill_packed_by_nibble(
+        w_tensor_host, K // MXFP4_BLOCK_K, _nibble_from_k_mod16
+    )
 
     # Scales: all ones
     alias row_groups = 1
     alias col_groups = 1
-    alias scale_shape = DimList(Dim(row_groups), Dim(col_groups), Dim(32), Dim(4), Dim(4))
+    alias scale_shape = DimList(
+        Dim(row_groups), Dim(col_groups), Dim(32), Dim(4), Dim(4)
+    )
     var s_host = HostNDBuffer[MXFP4_SF_DTYPE, 5, scale_shape](scale_shape)
     zero(s_host.tensor)
     var s_tensor = from_ndbuffer_row_major(s_host.tensor)
+
     @parameter
     for kb in range(K // MXFP4_BLOCK_K):
         for row in range(N):
-            set_mxfp4_scale(s_tensor, row, kb * MXFP4_BLOCK_K, float32_to_e8m0(1.0))
+            set_mxfp4_scale(
+                s_tensor, row, kb * MXFP4_BLOCK_K, float32_to_e8m0(1.0)
+            )
 
     # Bias: zeros
     alias bias_shape = DimList(num_experts, N)
@@ -91,7 +101,9 @@ fn test_mxfp4_sm90_clean_tile_wgmma() raises:
     alias offsets_shape = DimList(num_experts + 1)
     alias ids_shape = DimList(num_experts)
     alias stats_shape = DimList(2)
-    var offsets_host = HostNDBuffer[DType.uint32, 1, offsets_shape](offsets_shape)
+    var offsets_host = HostNDBuffer[DType.uint32, 1, offsets_shape](
+        offsets_shape
+    )
     var ids_host = HostNDBuffer[DType.int32, 1, ids_shape](ids_shape)
     var stats_host = HostNDBuffer[DType.uint32, 1, stats_shape](stats_shape)
     offsets_host.tensor.data[0] = UInt32(0)
@@ -118,17 +130,27 @@ fn test_mxfp4_sm90_clean_tile_wgmma() raises:
     # Device copies
     var a_dev = DeviceNDBuffer[DType.bfloat16, 2, a_shape](a_shape, ctx=ctx)
     ctx.enqueue_copy(a_dev.buffer, a_host.tensor.data)
-    var w_dev = DeviceNDBuffer[DType.uint8, 4, packed_shape](packed_shape, ctx=ctx)
+    var w_dev = DeviceNDBuffer[DType.uint8, 4, packed_shape](
+        packed_shape, ctx=ctx
+    )
     ctx.enqueue_copy(w_dev.buffer, w_host.tensor.data)
-    var s_dev = DeviceNDBuffer[MXFP4_SF_DTYPE, 5, scale_shape](scale_shape, ctx=ctx)
+    var s_dev = DeviceNDBuffer[MXFP4_SF_DTYPE, 5, scale_shape](
+        scale_shape, ctx=ctx
+    )
     ctx.enqueue_copy(s_dev.buffer, s_host.tensor.data)
-    var bias_dev = DeviceNDBuffer[DType.bfloat16, 2, bias_shape](bias_shape, ctx=ctx)
+    var bias_dev = DeviceNDBuffer[DType.bfloat16, 2, bias_shape](
+        bias_shape, ctx=ctx
+    )
     ctx.enqueue_copy(bias_dev.buffer, bias_host.tensor.data)
-    var offsets_dev = DeviceNDBuffer[DType.uint32, 1, offsets_shape](offsets_shape, ctx=ctx)
+    var offsets_dev = DeviceNDBuffer[DType.uint32, 1, offsets_shape](
+        offsets_shape, ctx=ctx
+    )
     ctx.enqueue_copy(offsets_dev.buffer, offsets_host.tensor.data)
     var ids_dev = DeviceNDBuffer[DType.int32, 1, ids_shape](ids_shape, ctx=ctx)
     ctx.enqueue_copy(ids_dev.buffer, ids_host.tensor.data)
-    var out_dev = DeviceNDBuffer[DType.bfloat16, 2, out_shape](out_shape, ctx=ctx)
+    var out_dev = DeviceNDBuffer[DType.bfloat16, 2, out_shape](
+        out_shape, ctx=ctx
+    )
     ctx.enqueue_memset(out_dev.buffer, 0)
 
     GroupedMXFP4Matmul.execute(

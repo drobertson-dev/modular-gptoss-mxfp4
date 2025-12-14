@@ -22,7 +22,9 @@ struct HostNDBuffer[
     shape: DimList,
 ](Movable):
     var _ptr: LegacyUnsafePointer[Scalar[Self.dtype]]
-    var tensor: NDBuffer[mut=True, Self.dtype, Self.rank, MutAnyOrigin, Self.shape]
+    var tensor: NDBuffer[
+        mut=True, Self.dtype, Self.rank, MutAnyOrigin, Self.shape
+    ]
 
     fn __init__(out self, dynamic_shape: DimList):
         var numel = Int(dynamic_shape.product())
@@ -50,7 +52,9 @@ struct DeviceNDBuffer[
     shape: DimList,
 ]:
     var buffer: DeviceBuffer[Self.dtype]
-    var tensor: NDBuffer[mut=True, Self.dtype, Self.rank, MutAnyOrigin, Self.shape]
+    var tensor: NDBuffer[
+        mut=True, Self.dtype, Self.rank, MutAnyOrigin, Self.shape
+    ]
 
     fn __init__(out self, dynamic_shape: DimList, ctx: DeviceContext) raises:
         var numel = Int(dynamic_shape.product())

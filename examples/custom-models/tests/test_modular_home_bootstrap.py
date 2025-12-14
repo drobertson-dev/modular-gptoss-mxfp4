@@ -45,8 +45,12 @@ def test_modular_home_bootstrap_allows_loading_custom_ops() -> None:
             "bootstrap_custom_ops",
             input_types=[
                 TensorType(DType.float32, shape=[m, k], device=device_ref),
-                TensorType(DType.uint8, shape=[k // 32, n_full, 16], device=device_ref),
-                TensorType(DType.float32, shape=[k // 32, n_full], device=device_ref),
+                TensorType(
+                    DType.uint8, shape=[k // 32, n_full, 16], device=device_ref
+                ),
+                TensorType(
+                    DType.float32, shape=[k // 32, n_full], device=device_ref
+                ),
                 TensorType(DType.float32, shape=[n_full], device=device_ref),
             ],
             custom_extensions=[get_mxfp4_kernels_path()],
@@ -59,4 +63,3 @@ def test_modular_home_bootstrap_allows_loading_custom_ops() -> None:
             os.environ.pop("MODULAR_HOME", None)
         else:
             os.environ["MODULAR_HOME"] = old_modular_home
-

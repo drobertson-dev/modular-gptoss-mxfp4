@@ -135,8 +135,8 @@ fn test_mxfp4_block_addressing_and_scales() raises:
         dequant_row_cpu(
             packed_tensor,
             scales_tensor,
-            0,       # expert
-            n,       # row/out_col
+            0,  # expert
+            n,  # row/out_col
             K,
             MXFP4_BLOCK_K,
             out_tensor,

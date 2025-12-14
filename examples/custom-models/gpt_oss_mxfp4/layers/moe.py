@@ -21,8 +21,8 @@ from max.nn.moe import MoE, MoEGate
 
 from ..kernels import (
     MXFP4_VALUES_PER_BLOCK,
-    mxfp4_moe_w1_swiglu,
     mxfp4_moe_topk_reduce,
+    mxfp4_moe_w1_swiglu,
     mxfp4_moe_w2_pairs,
 )
 from ..model_config import GptOssConfig

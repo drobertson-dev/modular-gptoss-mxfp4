@@ -19,7 +19,9 @@ def test_arch_registration_contract():
     assert hasattr(arch, "default_encoding")
     assert hasattr(arch, "supported_encodings")
     assert arch.default_encoding in arch.supported_encodings
-    assert arch.supported_encodings[arch.default_encoding], "Default encoding must have KV strategies"
+    assert arch.supported_encodings[arch.default_encoding], (
+        "Default encoding must have KV strategies"
+    )
 
     # Weight adapter registration.
     assert hasattr(arch, "weight_adapters")
