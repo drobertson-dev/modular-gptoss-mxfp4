@@ -120,11 +120,13 @@ fn _fill_routing_buffers[
 
 fn run_bench[
     TOKENS: Int = 256,
-    HIDDEN: Int = 4096,
-    INTERMEDIATE: Int = 4096,
-    NUM_EXPERTS: Int = 8,
+    # GPT-OSS (20B/120B) uses hidden_size=2880 and intermediate_size=2880.
+    HIDDEN: Int = 2880,
+    INTERMEDIATE: Int = 2880,
+    # 20B uses 32 experts; 120B uses 128. The CLI selects the preset.
+    NUM_EXPERTS: Int = 32,
     TOPK: Int = 4,
-]() raises:
+](run_w1: Bool = True, run_w2_scatter: Bool = True, run_w2_pairs: Bool = True, run_reduce: Bool = True) raises:
     var ctx = DeviceContext()
     if _skip_if_no_sm90(ctx):
         return
@@ -484,29 +486,97 @@ fn run_bench[
 
         b.iter_custom[kernel_launch](ctx)
 
-    bench.bench_function[bench_w1](
-        BenchId("mxfp4_moe_w1_swiglu", "gpu"), w1_metrics
-    )
-    bench.bench_function[bench_w2](
-        BenchId("mxfp4_moe_w2_scatter", "gpu"), w2_metrics
-    )
-    bench.bench_function[bench_w2_pairs](
-        BenchId("mxfp4_moe_w2_pairs", "gpu"), w2_metrics
-    )
-    bench.bench_function[bench_w2_pairs_reduce](
-        BenchId("mxfp4_moe_w2_pairs_reduce", "gpu"), w2_metrics
-    )
-    bench.bench_function[bench_w2_pairs_bf16](
-        BenchId("mxfp4_moe_w2_pairs_bf16", "gpu"), w2_metrics
-    )
-    bench.bench_function[bench_w2_pairs_bf16_reduce](
-        BenchId("mxfp4_moe_w2_pairs_bf16_reduce", "gpu"), w2_metrics
-    )
+    if run_w1:
+        bench.bench_function[bench_w1](
+            BenchId("mxfp4_moe_w1_swiglu", "gpu"), w1_metrics
+        )
+    if run_w2_scatter:
+        bench.bench_function[bench_w2](
+            BenchId("mxfp4_moe_w2_scatter", "gpu"), w2_metrics
+        )
+    if run_w2_pairs:
+        bench.bench_function[bench_w2_pairs](
+            BenchId("mxfp4_moe_w2_pairs", "gpu"), w2_metrics
+        )
+    if run_w2_pairs and run_reduce:
+        bench.bench_function[bench_w2_pairs_reduce](
+            BenchId("mxfp4_moe_w2_pairs_reduce", "gpu"), w2_metrics
+        )
+    if run_w2_pairs:
+        bench.bench_function[bench_w2_pairs_bf16](
+            BenchId("mxfp4_moe_w2_pairs_bf16", "gpu"), w2_metrics
+        )
+    if run_w2_pairs and run_reduce:
+        bench.bench_function[bench_w2_pairs_bf16_reduce](
+            BenchId("mxfp4_moe_w2_pairs_bf16_reduce", "gpu"), w2_metrics
+        )
 
     print(bench)
 
 
 def main():
-    # Placeholder for future shape selection via CLI; keep defaults for now.
-    _ = argv()
-    run_bench[]()
+    # Presets:
+    #   --20b (default): hidden=2880, intermediate=2880, experts=32
+    #   --120b          : hidden=2880, intermediate=2880, experts=128
+    #
+    # Kernel selection:
+    #   --w1-only
+    #   --w2-only
+    #   --no-reduce
+    #
+    # Token-count presets (compile-time specializations):
+    #   --tokens64
+    #   --tokens256 (default)
+    var use_120b = False
+    var tokens64 = False
+    var run_w1 = True
+    var run_w2_scatter = True
+    var run_w2_pairs = True
+    var run_reduce = True
+
+    for arg in argv():
+        if arg == "--120b":
+            use_120b = True
+        if arg == "--20b":
+            use_120b = False
+        if arg == "--tokens64":
+            tokens64 = True
+        if arg == "--w1-only":
+            run_w2_scatter = False
+            run_w2_pairs = False
+            run_reduce = False
+        if arg == "--w2-only":
+            run_w1 = False
+        if arg == "--no-reduce":
+            run_reduce = False
+
+    if use_120b:
+        if tokens64:
+            run_bench[TOKENS=64, NUM_EXPERTS=128](
+                run_w1=run_w1,
+                run_w2_scatter=run_w2_scatter,
+                run_w2_pairs=run_w2_pairs,
+                run_reduce=run_reduce,
+            )
+        else:
+            run_bench[NUM_EXPERTS=128](
+                run_w1=run_w1,
+                run_w2_scatter=run_w2_scatter,
+                run_w2_pairs=run_w2_pairs,
+                run_reduce=run_reduce,
+            )
+    else:
+        if tokens64:
+            run_bench[TOKENS=64, NUM_EXPERTS=32](
+                run_w1=run_w1,
+                run_w2_scatter=run_w2_scatter,
+                run_w2_pairs=run_w2_pairs,
+                run_reduce=run_reduce,
+            )
+        else:
+            run_bench[NUM_EXPERTS=32](
+                run_w1=run_w1,
+                run_w2_scatter=run_w2_scatter,
+                run_w2_pairs=run_w2_pairs,
+                run_reduce=run_reduce,
+            )

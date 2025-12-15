@@ -3,6 +3,7 @@
 This ExecPlan is a living document. Maintain it in line with `.agents/PLANS.md` and `AGENTS.md`; keep `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` current as work proceeds.
 
 Critical local rules (repeat of repo constraints):
+
 - **Do not modify existing Modular kernel code under `max/`.** Import/reuse upstream kernels if needed; all new code goes under `examples/`.
 - **Triton is the blueprint.** The reference implementation in `examples/custom-models/triton_example/` (and the rules in `.agents/ref_docs/MXFP4_KEY_TAKEAWAYS.md`) define the required kernel pattern.
 - **MXFP4 must stay fused.** Stage packed bytes + scales, then decode per-tile inside the GEMM K-loop. For SM90 WGMMA this can include decoding into BF16/FP16 tiles in shared (as required by WGMMA) immediately before compute; avoid any global pre-dequantization or separate BF16 matmul pass.
@@ -18,6 +19,7 @@ Enable GPT-OSS (20B/120B) to run natively in MXFP4 on H100 (SM90) with custom Mo
 Pre-flight checks refreshed 2025-12-10 02:26Z: `nvidia-smi` shows an H100 80GB (SM90); `mojo --version` is 0.26.1.0.dev2025120705; `python` imports `max`; `pixi --version` is 0.60.0.
 
 Current repo state (audited 2025-12-13):
+
 - Mojo custom ops live under `examples/custom_ops/kernels/`:
   - `examples/custom_ops/kernels/moe_mxfp4_ops.mojo` registers the MoE ops:
     - `mxfp4_moe_w1_swiglu` (W1 GEMM + fused SwiGLU)
@@ -29,9 +31,11 @@ Current repo state (audited 2025-12-13):
 - Integration tests exist under `examples/custom-models/tests/` (Python) and `examples/custom-models/tests/mojo/` (Mojo).
 
 Assumptions:
+
 - MXFP4 safetensors checkpoints (blocks + scales + biases) are present in the HF cache (`$HF_HOME` or `~/.cache/huggingface`) or can be downloaded.
 
 Risks:
+
 - Correctness/perf of the eventual SM90 `wgmma` fragment mapping; mitigate by mirroring the Triton `matmul_ogs` pattern and the tiling/warp mapping documented in `.agents/OVERVIEW.md`, and by using the repository’s Mojo GPU debugging guides (`.agents/skills/debugging-mojo/`).
 
 ## Progress
@@ -89,6 +93,7 @@ To be filled as milestones complete.
 ## Context and Orientation
 
 Key directories:
+
 - `examples/custom_ops/kernels/`: Mojo custom ops and kernels (MXFP4 kernels live here).
 - `examples/custom-models/gpt_oss_mxfp4/`: Python custom architecture (must call Mojo ops with matching dtypes/layouts).
 - `examples/custom-models/triton_example/`: OpenAI Triton reference (behavior + kernel structure to emulate).
@@ -96,6 +101,7 @@ Key directories:
 - `.agents/skills/debugging-mojo/` and `.agents/skills/testing-mojo/`: Required workflows for debugging and testing Mojo code.
 
 Terminology:
+
 - “Packed MXFP4 blocks”: FP4(E2M1) values packed as 2 nibbles per byte, 32 values per block → 16 bytes per (row, k_block).
 - “Scale”: an E8M0 exponent byte per 32-value block (power-of-two scale). In `moe_mxfp4_ops.mojo` the scale tensor is passed as `uint8` exponent bytes.
 - “Pair”: one (token, expert) assignment from top-k routing. With `TOPK=4`, there are `P = T * 4` pairs for `T` tokens.
@@ -155,6 +161,7 @@ End-to-end smoke (once model wiring is in place):
 ## Validation and Acceptance
 
 Acceptance requires observable behavior:
+
 1. Python can build a MAX Graph that calls the registered Mojo custom ops (verified by `tests/test_modular_home_bootstrap.py`).
 2. `gpt_oss.mxfp4.matmul.sm90` (CPU debug op) matches a NumPy reference for synthetic weights (`tests/test_mxfp4_matmul.py`).
 3. The MoE ops match a small NumPy reference against a real checkpoint slice on GPU (`tests/test_mxfp4_moe_reference.py`).
@@ -217,11 +224,13 @@ Evidence from pre-flight (historical):
       - `y`: `[T, D]` `float32` (sums TOPK rows per token: `y[t] = sum_k y_pairs[t*TOPK+k]`)
 
 Internal kernel notes (implementation detail; not part of the Python contract):
+
 - `examples/custom_ops/kernels/moe_mxfp4_ops.mojo` WGMMA kernels launch with `block_dim=(256,1,1)` (2 warpgroups) and tile params `BM=128`, `BN=128`/`BN_RAW=128`, `BK=64`, `wgmma_shape=(64,128,16)`, `NUM_WARP_GROUPS=2`. Host launch uses a small heuristic: `grid_y=1` for tiny `P` else `grid_y=2`, and `grid_z=min(num_experts, P)` to avoid launching inactive experts on decode/small batches.
 - A/B BF16 tiles and packed staging buffers (`B_pack{0,1}`) are in dynamic shared memory; packed `w_blocks` are staged via `gpu.memory.async_copy` and decoded to BF16 in shared immediately before WGMMA (host launch sets `shared_mem_bytes`); `w_scales` scale bytes are loaded directly and kept in registers during decode.
 - Note on “full fusion”: a naïve fused W1→SwiGLU→W2 kernel would recompute W1 activations for each W2 output tile (N-tiling), so true fusion likely needs a different mapping (e.g., cluster/DSM reuse) and should be approached after closing simpler bandwidth gaps.
 
 **Python wrappers (must match Mojo):**
+
 - `examples/custom-models/gpt_oss_mxfp4/kernels.py` defines `get_mxfp4_kernels_path()` and thin wrappers around `ops.custom(...)` for the ops above.
 - `examples/custom-models/gpt_oss_mxfp4/layers/moe.py` uses `moe_create_indices` and calls the MoE custom ops; Python code must adapt to the Mojo dtypes/layouts, not vice versa.
 
