@@ -114,6 +114,19 @@ ENV/
 env.bak/
 venv.bak/
 
+# Pixi environments
+.pixi/
+
+# Local scratch
+.local/
+
+# Profiling artifacts
+*.nsys-rep
+*.ncu-rep
+
+# Nsight Systems generates paired .sqlite exports.
+*.sqlite
+
 
 # Spyder project settings
 .spyderproject
