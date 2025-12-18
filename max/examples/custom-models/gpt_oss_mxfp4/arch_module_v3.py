@@ -5,6 +5,7 @@ from __future__ import annotations
 from max.graph.weights import WeightsFormat
 from max.interfaces import PipelineTask
 from max.nn.kv_cache import KVCacheStrategy
+from max.pipelines.core import TextContext
 from max.pipelines.lib import (
     RopeType,
     SupportedArchitecture,
@@ -30,6 +31,7 @@ gpt_oss_module_v3_arch = SupportedArchitecture(
     pipeline_model=GptOssModelModuleV3,
     task=PipelineTask.TEXT_GENERATION,
     tokenizer=TextTokenizer,
+    context_type=TextContext,
     default_weights_format=WeightsFormat.safetensors,
     multi_gpu_supported=False,
     rope_type=RopeType.yarn,
@@ -39,4 +41,3 @@ gpt_oss_module_v3_arch = SupportedArchitecture(
 )
 
 __all__ = ["WeightsFormat", "gpt_oss_module_v3_arch"]
-
