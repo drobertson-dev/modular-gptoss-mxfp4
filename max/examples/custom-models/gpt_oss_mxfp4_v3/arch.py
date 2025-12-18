@@ -1,10 +1,10 @@
-"""GPT-OSS Module architecture registration (MXFP4 expert GEMMs)."""
+"""GPT-OSS ModuleV3 architecture registration (MXFP4 expert GEMMs)."""
 
 from __future__ import annotations
 
 from max.graph.weights import WeightsFormat
 from max.interfaces import PipelineTask
-from max.nn.legacy.kv_cache import KVCacheStrategy
+from max.nn.kv_cache import KVCacheStrategy
 from max.pipelines.core import TextContext
 from max.pipelines.lib import (
     RopeType,
@@ -13,14 +13,13 @@ from max.pipelines.lib import (
     TextTokenizer,
 )
 
-from gpt_oss_mxfp4_v3.model import GptOssModelModuleV3MXFP4
-from gpt_oss_mxfp4_v3.model_config import GptOssConfig
-from gpt_oss_mxfp4_v3.weight_adapters import convert_safetensor_state_dict
+from . import weight_adapters
+from .model import GptOssModelModuleV3MXFP4
 
 gpt_oss_module_v3_arch = SupportedArchitecture(
-    # Match the built-in module architecture name so this package overrides it
-    # when used via `--custom-architectures ... --no-use-legacy-module`.
-    name="GptOssForCausalLM",
+    # Match the built-in ModuleV3 architecture name so this package overrides it when
+    # used via `--custom-architectures ... --use-module-v3`.
+    name="GptOssForCausalLM_ModuleV3",
     example_repo_ids=[
         "openai/gpt-oss-20b",
         "openai/gpt-oss-120b",
@@ -37,9 +36,8 @@ gpt_oss_module_v3_arch = SupportedArchitecture(
     multi_gpu_supported=False,
     rope_type=RopeType.yarn,
     weight_adapters={
-        WeightsFormat.safetensors: convert_safetensor_state_dict,
+        WeightsFormat.safetensors: weight_adapters.convert_safetensor_state_dict,
     },
-    config=GptOssConfig,
 )
 
 __all__ = ["WeightsFormat", "gpt_oss_module_v3_arch"]

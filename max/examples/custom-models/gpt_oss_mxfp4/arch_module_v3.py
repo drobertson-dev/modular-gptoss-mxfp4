@@ -1,10 +1,10 @@
-"""GPT-OSS Module architecture registration (MXFP4 experts + Mojo custom ops)."""
+"""GPT-OSS ModuleV3 architecture registration (MXFP4 experts + Mojo custom ops)."""
 
 from __future__ import annotations
 
 from max.graph.weights import WeightsFormat
 from max.interfaces import PipelineTask
-from max.nn.legacy.kv_cache import KVCacheStrategy
+from max.nn.kv_cache import KVCacheStrategy
 from max.pipelines.core import TextContext
 from max.pipelines.lib import (
     RopeType,
@@ -15,12 +15,11 @@ from max.pipelines.lib import (
 
 from . import weight_adapters
 from .model_module_v3 import GptOssModelModuleV3
-from .model_config import GptOssConfig
 
 gpt_oss_module_v3_arch = SupportedArchitecture(
-    # Match the built-in module architecture name so this package overrides it
-    # when used via `--custom-architectures ... --no-use-legacy-module`.
-    name="GptOssForCausalLM",
+    # Match the built-in ModuleV3 architecture name so this package overrides it when
+    # used via `--custom-architectures ... --use-module-v3`.
+    name="GptOssForCausalLM_ModuleV3",
     example_repo_ids=[
         "openai/gpt-oss-20b",
         "openai/gpt-oss-120b",
@@ -39,7 +38,6 @@ gpt_oss_module_v3_arch = SupportedArchitecture(
     weight_adapters={
         WeightsFormat.safetensors: weight_adapters.convert_safetensor_state_dict,
     },
-    config=GptOssConfig,
 )
 
 __all__ = ["WeightsFormat", "gpt_oss_module_v3_arch"]
