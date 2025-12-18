@@ -7,9 +7,76 @@ platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
-generate = "python -m max.entrypoints.pipelines generate --custom-architectures qwen2 --model Qwen/Qwen2.5-0.5B-Instruct --max-length 10000 --prompt 'Why is the sky blue?'"
-serve = "python -m max.entrypoints.pipelines serve --custom-architectures qwen2 --model Qwen/Qwen2.5-0.5B-Instruct"
+# Upstream example (kept for reference).
+generate-qwen2 = "python -m max.entrypoints.pipelines generate --custom-architectures qwen2 --model Qwen/Qwen2.5-0.5B-Instruct --max-length 10000 --prompt 'Why is the sky blue?'"
+serve-qwen2 = "python -m max.entrypoints.pipelines serve --custom-architectures qwen2 --model Qwen/Qwen2.5-0.5B-Instruct"
+
+generate = "python -m max.entrypoints.pipelines generate --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --max-length 10000 --prompt 'Why is the sky blue?'"
+generate-smoke = "python -m max.entrypoints.pipelines generate --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --max-length 2048 --prompt 'Say hello in one sentence.'"
+generate-smoke-prof = "python -m max.entrypoints.pipelines generate --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --max-length 2048 --prompt 'Say hello in one sentence.' --gpu-profiling detailed"
+generate-v3-smoke = "python -m max.entrypoints.pipelines generate --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3 --use-module-v3 --model openai/gpt-oss-20b --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3/templates/gpt-oss-20b.chat_template.jinja --max-length 2048 --prompt 'Say hello in one sentence.'"
+serve = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --devices gpu --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4/templates/gpt-oss-20b.chat_template.jinja --device-memory-utilization 0.90 --max-batch-size 512 --max-length 131072 --enable-in-flight-batching --experimental-background-queue --enable-chunked-prefill --prefill-chunk-size 8192 --no-enable-prefix-caching --pretty-print-config"
+serve-prof = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --devices gpu --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4/templates/gpt-oss-20b.chat_template.jinja --device-memory-utilization 0.90 --max-batch-size 512 --max-length 131072 --enable-in-flight-batching --experimental-background-queue --enable-chunked-prefill --prefill-chunk-size 8192 --no-enable-prefix-caching --pretty-print-config --gpu-profiling detailed"
+serve-20b = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --devices gpu --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4/templates/gpt-oss-20b.chat_template.jinja --device-memory-utilization 0.90 --max-batch-size 512 --max-length 131072 --enable-in-flight-batching --experimental-background-queue --enable-chunked-prefill --prefill-chunk-size 8192 --no-enable-prefix-caching --pretty-print-config"
+serve-20b-prof = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-20b --devices gpu --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4/templates/gpt-oss-20b.chat_template.jinja --device-memory-utilization 0.90 --max-batch-size 512 --max-length 131072 --enable-in-flight-batching --experimental-background-queue --enable-chunked-prefill --prefill-chunk-size 8192 --no-enable-prefix-caching --pretty-print-config --gpu-profiling detailed"
+serve-20b-v3 = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3 --use-module-v3 --model openai/gpt-oss-20b --devices gpu --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3/templates/gpt-oss-20b.chat_template.jinja --device-memory-utilization 0.90 --max-batch-size 512 --max-length 131072 --enable-in-flight-batching --experimental-background-queue --enable-chunked-prefill --prefill-chunk-size 8192 --no-enable-prefix-caching --pretty-print-config"
+serve-20b-v3-prof = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3 --use-module-v3 --model openai/gpt-oss-20b --devices gpu --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3/templates/gpt-oss-20b.chat_template.jinja --device-memory-utilization 0.90 --max-batch-size 512 --max-length 131072 --enable-in-flight-batching --experimental-background-queue --enable-chunked-prefill --prefill-chunk-size 8192 --no-enable-prefix-caching --pretty-print-config --gpu-profiling detailed"
+serve-120b = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-120b --devices gpu --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4/templates/gpt-oss-120b.chat_template.jinja --device-memory-utilization 0.95 --max-batch-size 64 --max-length 4096 --enable-in-flight-batching --experimental-background-queue --enable-chunked-prefill --prefill-chunk-size 2048 --no-enable-prefix-caching --pretty-print-config"
+serve-120b-prof = "python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4 --model openai/gpt-oss-120b --devices gpu --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4/templates/gpt-oss-120b.chat_template.jinja --device-memory-utilization 0.95 --max-batch-size 64 --max-length 4096 --enable-in-flight-batching --experimental-background-queue --enable-chunked-prefill --prefill-chunk-size 2048 --no-enable-prefix-caching --pretty-print-config --gpu-profiling detailed"
+
+# NOTE: `max benchmark` expects a running `pixi run serve-*` instance.
+# `SHAREGPT_PATH` defaults to `/workspace/ShareGPT_V3_unfiltered_cleaned_split.json` via the relative fallback below.
+benchmark-20b-sharegpt-500-r32 = "max benchmark --model openai/gpt-oss-20b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 500 --seed 0 --request-rate 32 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
+benchmark-20b-sharegpt-500-r32-seed123 = "max benchmark --model openai/gpt-oss-20b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 500 --seed 123 --request-rate 32 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
+benchmark-20b-sharegpt-500-r16 = "max benchmark --model openai/gpt-oss-20b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 500 --seed 0 --request-rate 16 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
+benchmark-120b-sharegpt-100-r32-seed123 = "max benchmark --model openai/gpt-oss-120b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 100 --seed 123 --request-rate 32 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
+benchmark-20b-baseline = "max benchmark --model openai/gpt-oss-20b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 500 --seed 123 --request-rate 32 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
+benchmark-120b-baseline = "max benchmark --model openai/gpt-oss-120b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 100 --seed 123 --request-rate 32 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
+mxfp4-matmul-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_mxfp4_matmul.py -q"
+mxfp4-bootstrap-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_modular_home_bootstrap.py -q"
+mxfp4-moe-reference-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_mxfp4_moe_reference.py -q"
+mxfp4-py-tests = { depends-on = [
+  "mxfp4-matmul-test",
+  "mxfp4-bootstrap-test",
+  "mxfp4-moe-reference-test",
+] }
+
+# Mojo tests (use Mojo runner; include `../custom_ops` so `kernels.*` resolves).
+mxfp4-mojo-quant-layout-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/test_mxfp4_quant_layout.mojo"
+mxfp4-mojo-swiglu-math-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/test_mxfp4_swiglu_math.mojo"
+mxfp4-mojo-tests = { depends-on = [
+  "mxfp4-mojo-quant-layout-test",
+  "mxfp4-mojo-swiglu-math-test",
+] }
+
+# SM90-only Mojo tests (expected to run only on NVIDIA sm90+; currently under active development).
+mxfp4-mojo-sm90-clean-tile-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/test_mxfp4_sm90_clean_tile_wgmma.mojo"
+mxfp4-mojo-sm90-moe-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/test_mxfp4_moe_sm90.mojo"
+mxfp4-moe-bench = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo"
+mxfp4-moe-bench-20b = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo --20b"
+mxfp4-moe-bench-120b = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo --120b"
+mxfp4-moe-bench-20b-tokens64 = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo --20b --tokens64"
+mxfp4-moe-bench-120b-tokens64 = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo --120b --tokens64"
+
+# Debug/profiling helpers (CLI-only; see `.agents/skills/debugging-mojo/`).
+setup-cuda-gdb = "bash -lc 'set -euo pipefail; echo \"mojo: $(mojo --version)\"; echo \"cuda-gdb: $(cuda-gdb --version | head -n 1)\"; echo \"nsys: $(nsys --version)\"; echo \"ncu: $(ncu --version | head -n 1)\"; nvidia-smi -L'"
+debug-moe-bench-cuda-gdb = "mojo debug --cuda-gdb --break-on-launch -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo"
+profile-generate-smoke-20b-nsys = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; nsys profile -o \\\"$PIXI_PROJECT_ROOT/profiles/generate_smoke_20b\\\" --trace=cuda,nvtx,osrt python -m max.entrypoints.pipelines generate --custom-architectures \\\"$PIXI_PROJECT_ROOT/gpt_oss_mxfp4\\\" --model openai/gpt-oss-20b --devices gpu:0 --device-memory-utilization 0.95 --chat-template \\\"$PIXI_PROJECT_ROOT/gpt_oss_mxfp4/templates/gpt-oss-20b.chat_template.jinja\\\" --max-length 2048 --num-warmups 1 --gpu-profiling on --prompt 'Say hello in one sentence.'\""
+profile-moe-bench-nsys = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; nsys profile -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_bench\\\" --trace=cuda,nvtx,osrt mojo run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\"\""
+profile-moe-bench-ncu = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; sudo env MODULAR_HOME=\\\"$MODULAR_HOME\\\" /usr/local/cuda/bin/ncu --target-processes all --set full --force-overwrite -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_bench_ncu\\\" \\\"$PIXI_PROJECT_ROOT/.pixi/envs/default/bin/mojo\\\" run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\"\""
+profile-moe-bench-120b-nsys = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; nsys profile -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_bench_120b\\\" --trace=cuda,nvtx,osrt mojo run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\" --120b\""
+profile-moe-bench-120b-tokens64-nsys = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; nsys profile -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_bench_120b_tokens64\\\" --trace=cuda,nvtx,osrt mojo run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\" --120b --tokens64\""
+profile-moe-bench-w1-ncu = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; sudo env MODULAR_HOME=\\\"$MODULAR_HOME\\\" /usr/local/cuda/bin/ncu --target-processes all --set basic --kernel-name-base function -k regex:kernels_moe_mxfp4_ops_moe_w1 -s 10 -c 1 --force-overwrite -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_w1_ncu\\\" \\\"$PIXI_PROJECT_ROOT/.pixi/envs/default/bin/mojo\\\" run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\" --w1-only\""
+profile-moe-bench-w1-tokens64-ncu = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; sudo env MODULAR_HOME=\\\"$MODULAR_HOME\\\" /usr/local/cuda/bin/ncu --target-processes all --set basic --kernel-name-base function -k regex:kernels_moe_mxfp4_ops_moe_w1 -s 10 -c 1 --force-overwrite -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_w1_tokens64_ncu\\\" \\\"$PIXI_PROJECT_ROOT/.pixi/envs/default/bin/mojo\\\" run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\" --tokens64 --w1-only\""
+profile-moe-bench-w2-ncu = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; sudo env MODULAR_HOME=\\\"$MODULAR_HOME\\\" /usr/local/cuda/bin/ncu --target-processes all --set basic --kernel-name-base function -k regex:kernels_moe_mxfp4_ops_moe_w2 -s 10 -c 1 --force-overwrite -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_w2_ncu\\\" \\\"$PIXI_PROJECT_ROOT/.pixi/envs/default/bin/mojo\\\" run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\" --w2-only\""
+profile-moe-bench-w2-tokens64-ncu = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; sudo env MODULAR_HOME=\\\"$MODULAR_HOME\\\" /usr/local/cuda/bin/ncu --target-processes all --set basic --kernel-name-base function -k regex:kernels_moe_mxfp4_ops_moe_w2 -s 10 -c 1 --force-overwrite -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_w2_tokens64_ncu\\\" \\\"$PIXI_PROJECT_ROOT/.pixi/envs/default/bin/mojo\\\" run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\" --tokens64 --w2-only\""
+format = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff format $PIXI_PROJECT_ROOT/gpt_oss_mxfp4"
+lint = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff check --fix $PIXI_PROJECT_ROOT/gpt_oss_mxfp4"
 
 [dependencies]
 python = ">=3.9,<3.14"
 modular = "*"
+pytest = ">=8.3.3"
+numpy = ">=1.26"
+safetensors = ">=0.7.0,<0.8"
+ruff = ">=0.14.8,<0.15"

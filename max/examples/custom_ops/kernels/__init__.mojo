@@ -13,7 +13,20 @@
 
 from .add_constant import *
 from .add_one import *
+from .causal_conv1d import *
+from .fused_attention import *
+from .histogram import *
 from .image_pipeline import *
 from .mandelbrot import *
+from .matrix_multiplication import *
+from .tensor_core_mma import *
 from .top_k import *
 from .vector_addition import *
+
+# MXFP4 kernels (custom architecture support).
+from .fp4_utils import *
+from .grouped_matmul_mxfp4_ops import *
+from .moe_mxfp4 import *
+from .moe_mxfp4_ops import *
+from .mxfp4_decode import *
+from .mxfp4_matmul_sm90 import *
