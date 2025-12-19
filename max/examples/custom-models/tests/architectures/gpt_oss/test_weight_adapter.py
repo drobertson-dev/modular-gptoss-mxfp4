@@ -12,7 +12,7 @@ class _DummyCastable:
     def __init__(self) -> None:
         self.cast_dtype: DType | None = None
 
-    def astype(self, dtype: DType):  # noqa: ANN001
+    def astype(self, dtype: DType):
         self.cast_dtype = dtype
         return self
 

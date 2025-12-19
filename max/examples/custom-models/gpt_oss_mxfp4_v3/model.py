@@ -27,7 +27,9 @@ class GptOssModelModuleV3MXFP4(_BaseGptOssModel):
     """GPT-OSS ModuleV3 pipeline model that loads MXFP4 custom ops."""
 
     def load_model(self) -> Callable[..., Any]:
-        assert self.pipeline_config.max_batch_size, "Expected max_batch_size to be set"
+        assert self.pipeline_config.max_batch_size, (
+            "Expected max_batch_size to be set"
+        )
         self._input_row_offsets_prealloc = Tensor.from_numpy(
             np.arange(self.pipeline_config.max_batch_size + 1, dtype=np.uint32)
         ).to(self.devices[0])
@@ -37,7 +39,9 @@ class GptOssModelModuleV3MXFP4(_BaseGptOssModel):
 
         device0: Device = self.devices[0]
         device_ref = DeviceRef(device0.label, device0.id)
-        tokens_type = TensorType(DType.int64, shape=["total_seq_len"], device=device_ref)
+        tokens_type = TensorType(
+            DType.int64, shape=["total_seq_len"], device=device_ref
+        )
         input_row_offsets_type = TensorType(
             DType.uint32,
             shape=["input_row_offsets_len"],
@@ -55,7 +59,9 @@ class GptOssModelModuleV3MXFP4(_BaseGptOssModel):
                 pipeline_config=self.pipeline_config,
             )
         else:
-            state_dict = {key: value.data() for key, value in self.weights.items()}
+            state_dict = {
+                key: value.data() for key, value in self.weights.items()
+            }
 
         model_config = GptOssConfig.generate(
             pipeline_config=self.pipeline_config,
@@ -72,7 +78,9 @@ class GptOssModelModuleV3MXFP4(_BaseGptOssModel):
         nn_model.to(self.devices[0])
 
         kv_inputs = self.kv_params.get_symbolic_inputs()
-        flattened_kv_types = [kv_type for sublist in kv_inputs for kv_type in sublist]
+        flattened_kv_types = [
+            kv_type for sublist in kv_inputs for kv_type in sublist
+        ]
 
         compiled_model = compile_with_custom_extensions(
             nn_model,
@@ -85,7 +93,9 @@ class GptOssModelModuleV3MXFP4(_BaseGptOssModel):
         )
 
         after = time.perf_counter()
-        logger.info(f"Building and compiling model took {after - before:.6f} seconds")
+        logger.info(
+            f"Building and compiling model took {after - before:.6f} seconds"
+        )
         return compiled_model
 
 

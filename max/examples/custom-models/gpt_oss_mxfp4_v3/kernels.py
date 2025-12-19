@@ -35,14 +35,14 @@ def mxfp4_grouped_matmul_ragged_bf16(
     w_scales: Any,
     expert_start_indices: Any,
     expert_ids: Any,
-    expert_usage_stats: Any,
+    expert_usage_stats_host: Any,
     *,
     target: str = "gpu",
 ) -> TensorValue:
     """Compute grouped matmul with MXFP4 weights (BF16 in/out, FP32 accum in kernel).
 
     Calls `mxfp4_grouped_matmul_ragged_bf16` registered by
-    `examples/custom_ops/kernels/grouped_matmul_mxfp4_ops.mojo`.
+    `examples/custom_ops/kernels/grouped_matmul_mxfp4_sm90.mojo`.
     """
 
     a_t = _as_tensor(a_bf16)
@@ -50,7 +50,7 @@ def mxfp4_grouped_matmul_ragged_bf16(
     w_scales_t = _as_tensor(w_scales)
     expert_start_t = _as_tensor(expert_start_indices)
     expert_ids_t = _as_tensor(expert_ids)
-    expert_usage_stats_t = _as_tensor(expert_usage_stats)
+    expert_usage_stats_host_t = _as_tensor(expert_usage_stats_host)
 
     if a_t.dtype != DType.bfloat16:
         raise ValueError(
@@ -72,9 +72,15 @@ def mxfp4_grouped_matmul_ragged_bf16(
         raise ValueError(
             f"mxfp4_grouped_matmul_ragged_bf16 expects int32 expert_ids, got {expert_ids_t.dtype}"
         )
-    if expert_usage_stats_t.dtype != DType.uint32:
+    if expert_usage_stats_host_t.dtype != DType.uint32:
         raise ValueError(
-            f"mxfp4_grouped_matmul_ragged_bf16 expects uint32 expert_usage_stats, got {expert_usage_stats_t.dtype}"
+            "mxfp4_grouped_matmul_ragged_bf16 expects uint32 expert_usage_stats_host, got"
+            f" {expert_usage_stats_host_t.dtype}"
+        )
+    host_stats_len = _try_int(expert_usage_stats_host_t.shape[0])
+    if host_stats_len is not None and host_stats_len != 2:
+        raise ValueError(
+            f"mxfp4_grouped_matmul_ragged_bf16 expects expert_usage_stats_host shape [2], got {expert_usage_stats_host_t.shape}"
         )
 
     bytes_per_block = _try_int(w_blocks_t.shape[3])
@@ -85,9 +91,9 @@ def mxfp4_grouped_matmul_ragged_bf16(
 
     P = a_t.shape[0]
     K = a_t.shape[1]
-    N = w_blocks_t.shape[1]
+    N = w_blocks_t.shape[2]
 
-    k_blocks_dim = _try_int(w_blocks_t.shape[2])
+    k_blocks_dim = _try_int(w_blocks_t.shape[1])
     k_dim = _try_int(K)
     if k_dim is not None and k_blocks_dim is not None:
         if k_dim != k_blocks_dim * MXFP4_VALUES_PER_BLOCK:
@@ -106,7 +112,8 @@ def mxfp4_grouped_matmul_ragged_bf16(
             w_scales_t,
             expert_start_t,
             expert_ids_t,
-            expert_usage_stats_t,
+            expert_usage_stats_host_t[0],
+            expert_usage_stats_host_t[1],
         ],
         out_types=[out_type],
         parameters={"target": target},

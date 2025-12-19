@@ -15,17 +15,10 @@
 #   the kernel scatter-adds into it.
 
 from math import ceildiv
+from os import Atomic
 
 import compiler
-from gpu import (
-    barrier,
-    block_dim,
-    block_idx,
-    grid_dim,
-    lane_id,
-    thread_idx,
-    warp_id,
-)
+from gpu import barrier, block_dim, block_idx, grid_dim, thread_idx, warp_id
 from gpu.host import DeviceBuffer, FuncAttribute
 from gpu.host.info import is_cpu
 from gpu.memory import (
@@ -36,6 +29,7 @@ from gpu.memory import (
     external_memory,
 )
 from layout.layout_tensor import Layout, LayoutTensor
+from layout.tensor_core import TensorCore
 from layout.tensor_core_async import (
     TensorCoreAsync,
     tile_layout_k_major,
@@ -699,14 +693,419 @@ fn moe_w1_mxfp4_swiglu_wgmma[
 
 
 @parameter
-fn moe_w2_mxfp4_pairs_bf16_wgmma[
+fn moe_w1_mxfp4_swiglu_tc[
+    BM: Int = 128,
+    BN_RAW: Int = 64,
+    BK: Int = 32,
+    WM: Int = 32,
+    WN: Int = 32,
+    MMA_M: Int = 16,
+    MMA_N: Int = 8,
+    MMA_K: Int = 16,
+](
+    x_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
+    T: Int,
+    D: Int,
+    token_expert_order_ptr: UnsafePointer[UInt32, MutAnyOrigin],
+    P: Int,
+    expert_start_ptr: UnsafePointer[UInt32, MutAnyOrigin],
+    expert_ids_ptr: UnsafePointer[Int32, MutAnyOrigin],
+    num_active_experts: Int,
+    w_blocks_ptr: UnsafePointer[UInt8, MutAnyOrigin],
+    w_scales_ptr: UnsafePointer[UInt8, MutAnyOrigin],
+    Kblocks: Int,
+    N_raw_total: Int,
+    b_ptr: UnsafePointer[Float32, MutAnyOrigin],
+    h_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
+    I: Int,
+    alpha: Scalar[F32],
+    limit: Scalar[F32],
+):
+    var expert_idx = Int(block_idx.z)
+    if expert_idx >= num_active_experts:
+        return
+
+    var expert_id = Int(expert_ids_ptr[expert_idx])
+    if expert_id < 0:
+        return
+
+    var n_tile_act = Int(block_idx.x)
+    var n_act0 = n_tile_act * (BN_RAW // 2)
+    var n_raw0 = n_tile_act * BN_RAW
+
+    var seg_start = Int(expert_start_ptr[expert_idx])
+    var seg_end = Int(expert_start_ptr[expert_idx + 1])
+    var row0 = seg_start + Int(block_idx.y) * BM
+
+    # Shared staging.
+    var token_ids_s = stack_allocation[
+        BM, Scalar[U32], address_space = AddressSpace.SHARED
+    ]()
+
+    var A_s = LayoutTensor[
+        BF16,
+        Layout.row_major(BM, BK),
+        MutAnyOrigin,
+        address_space = AddressSpace.SHARED,
+    ].stack_allocation()
+
+    var B_s = LayoutTensor[
+        BF16,
+        Layout.row_major(BK, BN_RAW),
+        MutAnyOrigin,
+        address_space = AddressSpace.SHARED,
+    ].stack_allocation()
+
+    var C_s = LayoutTensor[
+        F32,
+        Layout.row_major(BM, BN_RAW),
+        MutAnyOrigin,
+        address_space = AddressSpace.SHARED,
+    ].stack_allocation()
+
+    # Precompute token ids for the BM rows.
+    for r in range(Int(thread_idx.x), BM, Int(block_dim.x)):
+        var global_row = row0 + r
+        if global_row < seg_end and global_row < P:
+            var pair_idx = Int(token_expert_order_ptr[global_row])
+            token_ids_s[r] = UInt32(pair_idx // TOPK)
+        else:
+            token_ids_s[r] = UInt32(0)
+    barrier()
+
+    constrained[
+        WM % MMA_M == 0 and WN % MMA_N == 0 and BK % MMA_K == 0,
+        "Warp tile should be an integer multiple of instruction shape",
+    ]()
+
+    # TensorCore op: bf16 * bf16 -> f32 accum.
+    var mma = TensorCore[F32, BF16, Index(MMA_M, MMA_N, MMA_K)]()
+
+    var warp_y = warp_id() // UInt(BN_RAW // WN)
+    var warp_x = warp_id() % UInt(BN_RAW // WN)
+
+    var c_reg = (
+        LayoutTensor[
+            F32,
+            Layout.row_major(WM // MMA_M, (WN * 4) // MMA_N),
+            MutAnyOrigin,
+            address_space = AddressSpace.LOCAL,
+        ]
+        .stack_allocation()
+        .fill(0)
+    )
+
+    for k0 in range(0, D, BK):
+        # Load A tile: [BM, BK]
+        for idx in range(Int(thread_idx.x), BM * BK, Int(block_dim.x)):
+            var r = idx // BK
+            var kk = idx - r * BK
+            var global_row = row0 + r
+            var global_k = k0 + kk
+
+            if global_row < seg_end and global_row < P and global_k < D:
+                var tok = Int(token_ids_s[r][0])
+                if tok < T:
+                    A_s[r, kk] = x_ptr[tok * D + global_k]
+                else:
+                    A_s[r, kk] = 0
+            else:
+                A_s[r, kk] = 0
+
+        # Decode B tile: [BK, BN_RAW]
+        var kb = k0 // VALUES_PER_BLOCK
+        for idx in range(
+            Int(thread_idx.x),
+            BN_RAW * BYTES_PER_BLOCK,
+            Int(block_dim.x),
+        ):
+            var c = idx // BYTES_PER_BLOCK
+            var byte_in_block = idx - c * BYTES_PER_BLOCK
+            var n_raw = n_raw0 + c
+            var r0 = byte_in_block * 2
+
+            if n_raw < N_raw_total:
+                var scale_exp = w_scales_ptr[
+                    ((expert_id * N_raw_total + n_raw) * Kblocks) + kb
+                ]
+                var packed = w_blocks_ptr[
+                    (
+                        ((expert_id * N_raw_total + n_raw) * Kblocks + kb)
+                        * BYTES_PER_BLOCK
+                    )
+                    + byte_in_block
+                ]
+                var v2 = decode_mxfp4_byte_to_2xbf16_e8m0(packed, scale_exp)
+                B_s[r0 + 0, c] = v2[0]
+                B_s[r0 + 1, c] = v2[1]
+            else:
+                B_s[r0 + 0, c] = 0
+                B_s[r0 + 1, c] = 0
+
+        barrier()
+
+        # MMA accumulate into c_reg (warp tile WM x WN).
+        var A_warp_tile = A_s.tile[WM, BK](Int(warp_y), 0)
+        var B_warp_tile = B_s.tile[BK, WN](0, Int(warp_x))
+
+        @parameter
+        for mma_k in range(BK // MMA_K):
+
+            @parameter
+            for mma_m in range(WM // MMA_M):
+
+                @parameter
+                for mma_n in range(WN // MMA_N):
+                    var c_tile = c_reg.tile[1, 4](mma_m, mma_n)
+                    var A_mma = A_warp_tile.tile[MMA_M, MMA_K](mma_m, mma_k)
+                    var B_mma = B_warp_tile.tile[MMA_K, MMA_N](mma_k, mma_n)
+                    var a_reg = mma.load_a(A_mma)
+                    var b_reg = mma.load_b(B_mma)
+                    var d_reg = mma.mma_op(a_reg, b_reg, c_tile)
+                    c_tile.copy_from(d_reg)
+
+        barrier()
+
+    # Store warp accumulators into shared C tile.
+    var C_warp = C_s.tile[WM, WN](Int(warp_y), Int(warp_x))
+
+    @parameter
+    for mma_m in range(WM // MMA_M):
+
+        @parameter
+        for mma_n in range(WN // MMA_N):
+            var C_mma = C_warp.tile[MMA_M, MMA_N](mma_m, mma_n)
+            var c_tile = c_reg.tile[1, 4](mma_m, mma_n)
+            mma.store_d(C_mma, c_tile)
+    barrier()
+
+    # Epilogue: bias + SwiGLU -> write activated columns [I] to H.
+    var BN_ACT = BN_RAW // 2
+    for idx in range(Int(thread_idx.x), BM * BN_ACT, Int(block_dim.x)):
+        var r = idx // BN_ACT
+        var c_act = idx - r * BN_ACT
+        var global_row = row0 + r
+        var out_col = n_act0 + c_act
+        if global_row < seg_end and global_row < P and out_col < I:
+            var raw0 = c_act * 2
+            var raw1 = raw0 + 1
+            var col_raw0 = n_raw0 + raw0
+            var col_raw1 = n_raw0 + raw1
+
+            var glu = (
+                C_s[r, raw0][0] + b_ptr[expert_id * N_raw_total + col_raw0]
+            )
+            var lin = (
+                C_s[r, raw1][0] + b_ptr[expert_id * N_raw_total + col_raw1]
+            )
+
+            var y = swiglu_pair(glu, lin, alpha, limit)
+            h_ptr.store(global_row * I + out_col, y.cast[BF16]())
+
+
+@parameter
+fn moe_w2_mxfp4_scatter_tc[
+    BM: Int = 128,
+    BN: Int = 64,
+    BK: Int = 32,
+    WM: Int = 32,
+    WN: Int = 32,
+    MMA_M: Int = 16,
+    MMA_N: Int = 8,
+    MMA_K: Int = 16,
+](
+    h_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
+    P: Int,
+    I: Int,
+    token_expert_order_ptr: UnsafePointer[UInt32, MutAnyOrigin],
+    expert_start_ptr: UnsafePointer[UInt32, MutAnyOrigin],
+    expert_ids_ptr: UnsafePointer[Int32, MutAnyOrigin],
+    num_active_experts: Int,
+    gate_w_ptr: UnsafePointer[Float32, MutAnyOrigin],
+    w_blocks_ptr: UnsafePointer[UInt8, MutAnyOrigin],
+    w_scales_ptr: UnsafePointer[UInt8, MutAnyOrigin],
+    Kblocks: Int,
+    b_ptr: UnsafePointer[Float32, MutAnyOrigin],
+    y_ptr: UnsafePointer[Float32, MutAnyOrigin],
+    T: Int,
+    D: Int,
+):
+    var expert_idx = Int(block_idx.z)
+    if expert_idx >= num_active_experts:
+        return
+
+    var expert_id = Int(expert_ids_ptr[expert_idx])
+    if expert_id < 0:
+        return
+
+    var n0 = Int(block_idx.x) * BN
+
+    var seg_start = Int(expert_start_ptr[expert_idx])
+    var seg_end = Int(expert_start_ptr[expert_idx + 1])
+    var row0 = seg_start + Int(block_idx.y) * BM
+
+    var token_ids_s = stack_allocation[
+        BM, Scalar[U32], address_space = AddressSpace.SHARED
+    ]()
+    var gamma_s = stack_allocation[
+        BM, Scalar[F32], address_space = AddressSpace.SHARED
+    ]()
+
+    var A_s = LayoutTensor[
+        BF16,
+        Layout.row_major(BM, BK),
+        MutAnyOrigin,
+        address_space = AddressSpace.SHARED,
+    ].stack_allocation()
+
+    var B_s = LayoutTensor[
+        BF16,
+        Layout.row_major(BK, BN),
+        MutAnyOrigin,
+        address_space = AddressSpace.SHARED,
+    ].stack_allocation()
+
+    var C_s = LayoutTensor[
+        F32,
+        Layout.row_major(BM, BN),
+        MutAnyOrigin,
+        address_space = AddressSpace.SHARED,
+    ].stack_allocation()
+
+    # Precompute token ids + gamma for the BM rows.
+    for r in range(Int(thread_idx.x), BM, Int(block_dim.x)):
+        var global_row = row0 + r
+        if global_row < seg_end and global_row < P:
+            var pair_idx = Int(token_expert_order_ptr[global_row])
+            token_ids_s[r] = UInt32(pair_idx // TOPK)
+            gamma_s[r] = gate_w_ptr[pair_idx]
+        else:
+            token_ids_s[r] = UInt32(0)
+            gamma_s[r] = 0.0
+    barrier()
+
+    constrained[
+        WM % MMA_M == 0 and WN % MMA_N == 0 and BK % MMA_K == 0,
+        "Warp tile should be an integer multiple of instruction shape",
+    ]()
+
+    var mma = TensorCore[F32, BF16, Index(MMA_M, MMA_N, MMA_K)]()
+
+    var warp_y = warp_id() // UInt(BN // WN)
+    var warp_x = warp_id() % UInt(BN // WN)
+
+    var c_reg = (
+        LayoutTensor[
+            F32,
+            Layout.row_major(WM // MMA_M, (WN * 4) // MMA_N),
+            MutAnyOrigin,
+            address_space = AddressSpace.LOCAL,
+        ]
+        .stack_allocation()
+        .fill(0)
+    )
+
+    for k0 in range(0, I, BK):
+        # Load A tile from H: [BM, BK]
+        for idx in range(Int(thread_idx.x), BM * BK, Int(block_dim.x)):
+            var r = idx // BK
+            var kk = idx - r * BK
+            var global_row = row0 + r
+            var global_k = k0 + kk
+            if global_row < seg_end and global_row < P and global_k < I:
+                A_s[r, kk] = h_ptr[global_row * I + global_k]
+            else:
+                A_s[r, kk] = 0
+
+        # Decode B tile: [BK, BN] from FP4 blocks (packed along K=I).
+        var kb = k0 // VALUES_PER_BLOCK
+        for idx in range(
+            Int(thread_idx.x),
+            BN * BYTES_PER_BLOCK,
+            Int(block_dim.x),
+        ):
+            var c = idx // BYTES_PER_BLOCK
+            var byte_in_block = idx - c * BYTES_PER_BLOCK
+            var col = n0 + c
+            var r0 = byte_in_block * 2
+
+            if col < D:
+                var scale_exp = w_scales_ptr[
+                    ((expert_id * D + col) * Kblocks) + kb
+                ]
+                var packed = w_blocks_ptr[
+                    (((expert_id * D + col) * Kblocks + kb) * BYTES_PER_BLOCK)
+                    + byte_in_block
+                ]
+                var v2 = decode_mxfp4_byte_to_2xbf16_e8m0(packed, scale_exp)
+                B_s[r0 + 0, c] = v2[0]
+                B_s[r0 + 1, c] = v2[1]
+            else:
+                B_s[r0 + 0, c] = 0
+                B_s[r0 + 1, c] = 0
+
+        barrier()
+
+        var A_warp_tile = A_s.tile[WM, BK](Int(warp_y), 0)
+        var B_warp_tile = B_s.tile[BK, WN](0, Int(warp_x))
+
+        @parameter
+        for mma_k in range(BK // MMA_K):
+
+            @parameter
+            for mma_m in range(WM // MMA_M):
+
+                @parameter
+                for mma_n in range(WN // MMA_N):
+                    var c_tile = c_reg.tile[1, 4](mma_m, mma_n)
+                    var A_mma = A_warp_tile.tile[MMA_M, MMA_K](mma_m, mma_k)
+                    var B_mma = B_warp_tile.tile[MMA_K, MMA_N](mma_k, mma_n)
+                    var a_reg = mma.load_a(A_mma)
+                    var b_reg = mma.load_b(B_mma)
+                    var d_reg = mma.mma_op(a_reg, b_reg, c_tile)
+                    c_tile.copy_from(d_reg)
+
+        barrier()
+
+    # Store to shared C tile
+    var C_warp = C_s.tile[WM, WN](Int(warp_y), Int(warp_x))
+
+    @parameter
+    for mma_m in range(WM // MMA_M):
+
+        @parameter
+        for mma_n in range(WN // MMA_N):
+            var C_mma = C_warp.tile[MMA_M, MMA_N](mma_m, mma_n)
+            var c_tile = c_reg.tile[1, 4](mma_m, mma_n)
+            mma.store_d(C_mma, c_tile)
+    barrier()
+
+    # Epilogue: bias + gamma scaling + scatter-add into Y[token_id, n]
+    for idx in range(Int(thread_idx.x), BM * BN, Int(block_dim.x)):
+        var r = idx // BN
+        var c = idx - r * BN
+        var global_row = row0 + r
+        var col = n0 + c
+        if global_row < seg_end and global_row < P and col < D:
+            var tok = Int(token_ids_s[r][0])
+            if tok < T:
+                var v = C_s[r, c][0] + b_ptr[expert_id * D + col]
+                v *= gamma_s[r][0]
+
+                _ = Atomic.fetch_add(y_ptr + (tok * D + col), v)
+
+
+@parameter
+fn moe_w2_mxfp4_scatter_wgmma[
     BM: Int = 64,
-    BN: Int = 128,
+    BN: Int = 64,
     BK: Int = 64,
     WGMMA_M: Int = 64,
-    WGMMA_N: Int = 128,
+    WGMMA_N: Int = 64,
     WGMMA_K: Int = 16,
     NUM_WARP_GROUPS: Int = 1,
+    WRITE_PAIRS: Bool = False,
+    PAIR_OUT_BF16: Bool = False,
 ](
     h_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
     P: Int,
@@ -720,8 +1119,8 @@ fn moe_w2_mxfp4_pairs_bf16_wgmma[
     w_scales_ptr: UnsafePointer[UInt8, MutAnyOrigin],
     Kblocks: Int,
     b_ptr: UnsafePointer[Float32, MutAnyOrigin],
-    y_pairs_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
-    P_out: Int,
+    y_ptr: UnsafePointer[Float32, MutAnyOrigin],
+    T: Int,
     D: Int,
 ):
     constrained[WGMMA_M == 64, "SM90 WGMMA requires M=64 for this kernel"]()
@@ -731,6 +1130,11 @@ fn moe_w2_mxfp4_pairs_bf16_wgmma[
     constrained[BK % WGMMA_K == 0]()
     constrained[BK % VALUES_PER_BLOCK == 0, "BK must be a multiple of 32"]()
     constrained[BM % (WGMMA_M * NUM_WARP_GROUPS) == 0]()
+    constrained[
+        not PAIR_OUT_BF16 or WRITE_PAIRS,
+        "PAIR_OUT_BF16 is only supported when WRITE_PAIRS=True",
+    ]()
+
     var expert_idx = Int(block_idx.z)
     var num_active_experts = Int(expert_usage_stats_ptr[1])
     if expert_idx >= num_active_experts:
@@ -1244,7 +1648,11 @@ fn moe_w2_mxfp4_pairs_bf16_wgmma[
 
         wgmma.wait_group()
 
-        # Epilogue: bias + gamma scaling -> BF16 y_pairs in original pair order.
+        # Epilogue: bias + gamma scaling.
+        #
+        # - Scatter mode (WRITE_PAIRS=False): atomic scatter-add into Y[token, n]
+        # - Pair-buffer mode (WRITE_PAIRS=True): write one row per pair into Y_pairs[pair_idx, n]
+        #   for a later TOPK reduction kernel.
         @parameter
         for m_mma in range(num_m_mmas):
 
@@ -1268,9 +1676,14 @@ fn moe_w2_mxfp4_pairs_bf16_wgmma[
                         continue
 
                     var pair_id = Int(pair_idx_s[row_in_cta][0])
-                    if pair_id >= P_out:
-                        continue
                     var gamma = gamma_s[row_in_cta][0].cast[F32]()
+                    var tok = 0
+
+                    @parameter
+                    if not WRITE_PAIRS:
+                        tok = pair_id // TOPK
+                        if tok >= T:
+                            continue
 
                     @parameter
                     for c_it in range(col_iters):
@@ -1283,12 +1696,46 @@ fn moe_w2_mxfp4_pairs_bf16_wgmma[
                         if col0 < D:
                             var v0 = v2[0] + b_ptr[expert_id * D + col0]
                             v0 *= gamma
-                            y_pairs_ptr.store(pair_id * D + col0, v0.cast[BF16]())
+
+                            @parameter
+                            if WRITE_PAIRS:
+
+                                @parameter
+                                if PAIR_OUT_BF16:
+                                    var y_bf16_ptr = rebind[
+                                        UnsafePointer[BFloat16, MutAnyOrigin]
+                                    ](y_ptr)
+                                    y_bf16_ptr.store(
+                                        pair_id * D + col0, v0.cast[BF16]()
+                                    )
+                                else:
+                                    y_ptr.store(pair_id * D + col0, v0)
+                            else:
+                                _ = Atomic.fetch_add(
+                                    y_ptr + (tok * D + col0), v0
+                                )
 
                         if col1 < D:
                             var v1 = v2[1] + b_ptr[expert_id * D + col1]
                             v1 *= gamma
-                            y_pairs_ptr.store(pair_id * D + col1, v1.cast[BF16]())
+
+                            @parameter
+                            if WRITE_PAIRS:
+
+                                @parameter
+                                if PAIR_OUT_BF16:
+                                    var y_bf16_ptr = rebind[
+                                        UnsafePointer[BFloat16, MutAnyOrigin]
+                                    ](y_ptr)
+                                    y_bf16_ptr.store(
+                                        pair_id * D + col1, v1.cast[BF16]()
+                                    )
+                                else:
+                                    y_ptr.store(pair_id * D + col1, v1)
+                            else:
+                                _ = Atomic.fetch_add(
+                                    y_ptr + (tok * D + col1), v1
+                                )
 
         # Synchronize before reusing the shared routing buffers in the next loop iteration.
         barrier()
@@ -1335,6 +1782,9 @@ struct MXFP4MoEW1SwiGlu:
         # - For tiny P (decode/small batches), launching all experts dominates overhead.
         #   We can cap grid_z by P since `num_active_experts <= P` for TOPK routing.
         # - For small P, extra Y blocks are pure overhead (they immediately return).
+        var grid_y = 2
+        if P <= 128:
+            grid_y = 1
         var grid_z = num_experts
         if grid_z > P:
             grid_z = P
@@ -1381,56 +1831,6 @@ struct MXFP4MoEW1SwiGlu:
             gpu_ctx, h_sorted.unsafe_ptr(), h_sorted.size(), owning=False
         )
 
-        if P <= 128:
-            # BM=64 / 1-warpgroup kernel to reduce wasted work for small P.
-            comptime w1_small = moe_w1_mxfp4_swiglu_wgmma[
-                BM=64,
-                BN_RAW=128,
-                BK=64,
-                WGMMA_M=64,
-                WGMMA_N=128,
-                WGMMA_K=16,
-                NUM_WARP_GROUPS=1,
-            ]
-            comptime a_smem_layout = tile_layout_k_major[BF16, 64, 64]()
-            comptime b_smem_layout = tile_layout_k_major[BF16, 128, 64]()
-            comptime a_bytes = a_smem_layout.size() * 2
-            comptime b_bytes = b_smem_layout.size() * 2
-            comptime a1_off = ((a_bytes + 255) // 256) * 256
-            comptime b0_off = ((a1_off + a_bytes + 255) // 256) * 256
-            comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
-            comptime blocks_per_tile = 64 // VALUES_PER_BLOCK
-            comptime pack_bytes = 128 * blocks_per_tile * BYTES_PER_BLOCK
-            comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
-            comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
-            comptime smem_use = pack1_off + pack_bytes
-            gpu_ctx.enqueue_function_checked[w1_small, w1_small](
-                x_dev,
-                T,
-                D,
-                token_expert_order_dev,
-                P,
-                expert_start_indices_dev,
-                expert_ids_dev,
-                expert_usage_stats_dev,
-                w_blocks_dev,
-                w_scales_dev,
-                kblocks,
-                n_raw_total,
-                bias_dev,
-                h_sorted_dev,
-                I,
-                Scalar[F32](alpha),
-                Scalar[F32](limit),
-                grid_dim=(grid_x, 1, grid_z),
-                block_dim=(128, 1, 1),
-                shared_mem_bytes=Int(smem_use),
-                func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
-                    smem_use
-                ),
-            )
-            return
-
         comptime w1_kernel = moe_w1_mxfp4_swiglu_wgmma[
             BM=128,
             BN_RAW=128,
@@ -1470,7 +1870,280 @@ struct MXFP4MoEW1SwiGlu:
             I,
             Scalar[F32](alpha),
             Scalar[F32](limit),
-            grid_dim=(grid_x, 2, grid_z),
+            grid_dim=(grid_x, grid_y, grid_z),
+            block_dim=(256, 1, 1),
+            shared_mem_bytes=Int(smem_use),
+            func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
+                smem_use
+            ),
+        )
+
+
+@compiler.register("mxfp4_moe_w2_scatter")
+struct MXFP4MoEW2Scatter:
+    @staticmethod
+    fn execute[
+        target: StaticString,
+    ](
+        y: OutputTensor[dtype=F32, rank=2],
+        h_sorted: InputTensor[dtype=BF16, rank=2],
+        token_expert_order: InputTensor[dtype=U32, rank=1],
+        expert_start_indices: InputTensor[dtype=U32, rank=1],
+        expert_ids: InputTensor[dtype=I32, rank=1],
+        expert_usage_stats: InputTensor[dtype=U32, rank=1],
+        gate_weights: InputTensor[dtype=BF16, rank=1],
+        w_blocks: InputTensor[dtype=U8, rank=4],
+        w_scales: InputTensor[dtype=U8, rank=3],
+        bias: InputTensor[dtype=F32, rank=2],
+        ctx: DeviceContextPtr,
+    ) raises:
+        @parameter
+        if is_cpu[target]():
+            raise Error("mxfp4_moe_w2_scatter: GPU only")
+
+        var P = h_sorted.dim_size(0)
+        var I = h_sorted.dim_size(1)
+        var D = y.dim_size(1)
+
+        var T = y.dim_size(0)
+        var num_experts = w_blocks.dim_size(0)
+        var kblocks = w_blocks.dim_size(2)
+
+        var grid_x = ceildiv(D, 128)  # BN = 128
+        var grid_y = 2
+        if P <= 128:
+            grid_y = 1
+        var grid_z = num_experts
+        if grid_z > P:
+            grid_z = P
+
+        var gpu_ctx = ctx.get_device_context()
+
+        var h_sorted_dev = DeviceBuffer[h_sorted.dtype](
+            gpu_ctx, h_sorted.unsafe_ptr(), h_sorted.size(), owning=False
+        )
+        var token_expert_order_dev = DeviceBuffer[token_expert_order.dtype](
+            gpu_ctx,
+            token_expert_order.unsafe_ptr(),
+            token_expert_order.size(),
+            owning=False,
+        )
+        var expert_start_indices_dev = DeviceBuffer[expert_start_indices.dtype](
+            gpu_ctx,
+            expert_start_indices.unsafe_ptr(),
+            expert_start_indices.size(),
+            owning=False,
+        )
+        var expert_ids_dev = DeviceBuffer[expert_ids.dtype](
+            gpu_ctx,
+            expert_ids.unsafe_ptr(),
+            expert_ids.size(),
+            owning=False,
+        )
+        var expert_usage_stats_dev = DeviceBuffer[expert_usage_stats.dtype](
+            gpu_ctx,
+            expert_usage_stats.unsafe_ptr(),
+            expert_usage_stats.size(),
+            owning=False,
+        )
+        var gate_weights_dev = DeviceBuffer[gate_weights.dtype](
+            gpu_ctx,
+            gate_weights.unsafe_ptr(),
+            gate_weights.size(),
+            owning=False,
+        )
+        var w_blocks_dev = DeviceBuffer[w_blocks.dtype](
+            gpu_ctx, w_blocks.unsafe_ptr(), w_blocks.size(), owning=False
+        )
+        var w_scales_dev = DeviceBuffer[w_scales.dtype](
+            gpu_ctx, w_scales.unsafe_ptr(), w_scales.size(), owning=False
+        )
+        var bias_dev = DeviceBuffer[bias.dtype](
+            gpu_ctx, bias.unsafe_ptr(), bias.size(), owning=False
+        )
+        var y_dev = DeviceBuffer[y.dtype](
+            gpu_ctx, y.unsafe_ptr(), y.size(), owning=False
+        )
+
+        # Zero-initialize output (kernel scatter-adds into Y).
+        gpu_ctx.enqueue_memset(y_dev, 0)
+
+        if P == 0:
+            return
+
+        comptime w2_kernel = moe_w2_mxfp4_scatter_wgmma[
+            BM=128,
+            BN=128,
+            BK=64,
+            WGMMA_M=64,
+            WGMMA_N=128,
+            WGMMA_K=16,
+            NUM_WARP_GROUPS=2,
+        ]
+        comptime a_smem_layout = tile_layout_k_major[BF16, 128, 64]()
+        comptime b_smem_layout = tile_layout_k_major[BF16, 128, 64]()
+        comptime a_bytes = a_smem_layout.size() * 2
+        comptime b_bytes = b_smem_layout.size() * 2
+        comptime a1_off = ((a_bytes + 255) // 256) * 256
+        comptime b0_off = ((a1_off + a_bytes + 255) // 256) * 256
+        comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
+        comptime blocks_per_tile = 64 // VALUES_PER_BLOCK
+        comptime pack_bytes = 128 * blocks_per_tile * BYTES_PER_BLOCK
+        comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
+        comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
+        comptime smem_use = pack1_off + pack_bytes
+        gpu_ctx.enqueue_function_checked[w2_kernel, w2_kernel](
+            h_sorted_dev,
+            P,
+            I,
+            token_expert_order_dev,
+            expert_start_indices_dev,
+            expert_ids_dev,
+            expert_usage_stats_dev,
+            gate_weights_dev,
+            w_blocks_dev,
+            w_scales_dev,
+            kblocks,
+            bias_dev,
+            y_dev,
+            T,
+            D,
+            grid_dim=(grid_x, grid_y, grid_z),
+            block_dim=(256, 1, 1),
+            shared_mem_bytes=Int(smem_use),
+            func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
+                smem_use
+            ),
+        )
+
+
+@compiler.register("mxfp4_moe_w2_pairs")
+struct MXFP4MoEW2Pairs:
+    @staticmethod
+    fn execute[
+        target: StaticString,
+    ](
+        y_pairs: OutputTensor[dtype=F32, rank=2],
+        h_sorted: InputTensor[dtype=BF16, rank=2],
+        token_expert_order: InputTensor[dtype=U32, rank=1],
+        expert_start_indices: InputTensor[dtype=U32, rank=1],
+        expert_ids: InputTensor[dtype=I32, rank=1],
+        expert_usage_stats: InputTensor[dtype=U32, rank=1],
+        gate_weights: InputTensor[dtype=BF16, rank=1],
+        w_blocks: InputTensor[dtype=U8, rank=4],
+        w_scales: InputTensor[dtype=U8, rank=3],
+        bias: InputTensor[dtype=F32, rank=2],
+        ctx: DeviceContextPtr,
+    ) raises:
+        @parameter
+        if is_cpu[target]():
+            raise Error("mxfp4_moe_w2_pairs: GPU only")
+
+        var P = h_sorted.dim_size(0)
+        var I = h_sorted.dim_size(1)
+        var D = y_pairs.dim_size(1)
+        var P_out = y_pairs.dim_size(0)
+
+        var kblocks = w_blocks.dim_size(2)
+
+        var grid_x = ceildiv(D, 128)  # BN = 128
+        var grid_y = 2
+        if P <= 128:
+            grid_y = 1
+        var grid_z = w_blocks.dim_size(0)
+        if grid_z > P:
+            grid_z = P
+
+        var gpu_ctx = ctx.get_device_context()
+
+        var h_sorted_dev = DeviceBuffer[h_sorted.dtype](
+            gpu_ctx, h_sorted.unsafe_ptr(), h_sorted.size(), owning=False
+        )
+        var token_expert_order_dev = DeviceBuffer[token_expert_order.dtype](
+            gpu_ctx,
+            token_expert_order.unsafe_ptr(),
+            token_expert_order.size(),
+            owning=False,
+        )
+        var expert_start_indices_dev = DeviceBuffer[expert_start_indices.dtype](
+            gpu_ctx,
+            expert_start_indices.unsafe_ptr(),
+            expert_start_indices.size(),
+            owning=False,
+        )
+        var expert_ids_dev = DeviceBuffer[expert_ids.dtype](
+            gpu_ctx,
+            expert_ids.unsafe_ptr(),
+            expert_ids.size(),
+            owning=False,
+        )
+        var expert_usage_stats_dev = DeviceBuffer[expert_usage_stats.dtype](
+            gpu_ctx,
+            expert_usage_stats.unsafe_ptr(),
+            expert_usage_stats.size(),
+            owning=False,
+        )
+        var gate_weights_dev = DeviceBuffer[gate_weights.dtype](
+            gpu_ctx,
+            gate_weights.unsafe_ptr(),
+            gate_weights.size(),
+            owning=False,
+        )
+        var w_blocks_dev = DeviceBuffer[w_blocks.dtype](
+            gpu_ctx, w_blocks.unsafe_ptr(), w_blocks.size(), owning=False
+        )
+        var w_scales_dev = DeviceBuffer[w_scales.dtype](
+            gpu_ctx, w_scales.unsafe_ptr(), w_scales.size(), owning=False
+        )
+        var bias_dev = DeviceBuffer[bias.dtype](
+            gpu_ctx, bias.unsafe_ptr(), bias.size(), owning=False
+        )
+        var y_pairs_dev = DeviceBuffer[y_pairs.dtype](
+            gpu_ctx, y_pairs.unsafe_ptr(), y_pairs.size(), owning=False
+        )
+
+        if P == 0 or P_out == 0:
+            return
+
+        comptime w2_kernel = moe_w2_mxfp4_scatter_wgmma[
+            BM=128,
+            BN=128,
+            BK=64,
+            WGMMA_M=64,
+            WGMMA_N=128,
+            WGMMA_K=16,
+            NUM_WARP_GROUPS=2,
+            WRITE_PAIRS=True,
+        ]
+        comptime a_smem_layout = tile_layout_k_major[BF16, 128, 64]()
+        comptime b_smem_layout = tile_layout_k_major[BF16, 128, 64]()
+        comptime a_bytes = a_smem_layout.size() * 2
+        comptime b_bytes = b_smem_layout.size() * 2
+        comptime a1_off = ((a_bytes + 255) // 256) * 256
+        comptime b0_off = ((a1_off + a_bytes + 255) // 256) * 256
+        comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
+        comptime blocks_per_tile = 64 // VALUES_PER_BLOCK
+        comptime pack_bytes = 128 * blocks_per_tile * BYTES_PER_BLOCK
+        comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
+        comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
+        comptime smem_use = pack1_off + pack_bytes
+        gpu_ctx.enqueue_function_checked[w2_kernel, w2_kernel](
+            h_sorted_dev,
+            P,
+            I,
+            token_expert_order_dev,
+            expert_start_indices_dev,
+            expert_ids_dev,
+            expert_usage_stats_dev,
+            gate_weights_dev,
+            w_blocks_dev,
+            w_scales_dev,
+            kblocks,
+            bias_dev,
+            y_pairs_dev,
+            P_out,
+            D,
+            grid_dim=(grid_x, grid_y, grid_z),
             block_dim=(256, 1, 1),
             shared_mem_bytes=Int(smem_use),
             func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
@@ -1509,6 +2182,9 @@ struct MXFP4MoEW2PairsBF16:
         var kblocks = w_blocks.dim_size(2)
 
         var grid_x = ceildiv(D, 128)  # BN = 128
+        var grid_y = 2
+        if P <= 128:
+            grid_y = 1
         var grid_z = w_blocks.dim_size(0)
         if grid_z > P:
             grid_z = P
@@ -1558,62 +2234,23 @@ struct MXFP4MoEW2PairsBF16:
             gpu_ctx, bias.unsafe_ptr(), bias.size(), owning=False
         )
 
-        var y_pairs_dev = DeviceBuffer[y_pairs.dtype](
-            gpu_ctx, y_pairs.unsafe_ptr(), y_pairs.size(), owning=False
+        if y_pairs.size() % 2 != 0:
+            raise Error(
+                "mxfp4_moe_w2_pairs_bf16: y_pairs size must be even to alias"
+                " as f32"
+            )
+
+        var y_pairs_ptr_f32 = rebind[UnsafePointer[Float32, MutAnyOrigin]](
+            y_pairs.unsafe_ptr()
+        )
+        var y_pairs_dev = DeviceBuffer[F32](
+            gpu_ctx, y_pairs_ptr_f32, y_pairs.size() // 2, owning=False
         )
 
         if P == 0 or P_out == 0:
             return
 
-        if P <= 128:
-            # BM=64 / 1-warpgroup kernel to reduce wasted work for small P.
-            comptime w2_small = moe_w2_mxfp4_pairs_bf16_wgmma[
-                BM=64,
-                BN=128,
-                BK=64,
-                WGMMA_M=64,
-                WGMMA_N=128,
-                WGMMA_K=16,
-                NUM_WARP_GROUPS=1,
-            ]
-            comptime a_smem_layout = tile_layout_k_major[BF16, 64, 64]()
-            comptime b_smem_layout = tile_layout_k_major[BF16, 128, 64]()
-            comptime a_bytes = a_smem_layout.size() * 2
-            comptime b_bytes = b_smem_layout.size() * 2
-            comptime a1_off = ((a_bytes + 255) // 256) * 256
-            comptime b0_off = ((a1_off + a_bytes + 255) // 256) * 256
-            comptime b1_off = ((b0_off + b_bytes + 255) // 256) * 256
-            comptime blocks_per_tile = 64 // VALUES_PER_BLOCK
-            comptime pack_bytes = 128 * blocks_per_tile * BYTES_PER_BLOCK
-            comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
-            comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
-            comptime smem_use = pack1_off + pack_bytes
-            gpu_ctx.enqueue_function_checked[w2_small, w2_small](
-                h_sorted_dev,
-                P,
-                I,
-                token_expert_order_dev,
-                expert_start_indices_dev,
-                expert_ids_dev,
-                expert_usage_stats_dev,
-                gate_weights_dev,
-                w_blocks_dev,
-                w_scales_dev,
-                kblocks,
-                bias_dev,
-                y_pairs_dev,
-                P_out,
-                D,
-                grid_dim=(grid_x, 1, grid_z),
-                block_dim=(128, 1, 1),
-                shared_mem_bytes=Int(smem_use),
-                func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
-                    smem_use
-                ),
-            )
-            return
-
-        comptime w2_kernel = moe_w2_mxfp4_pairs_bf16_wgmma[
+        comptime w2_kernel = moe_w2_mxfp4_scatter_wgmma[
             BM=128,
             BN=128,
             BK=64,
@@ -1621,6 +2258,8 @@ struct MXFP4MoEW2PairsBF16:
             WGMMA_N=128,
             WGMMA_K=16,
             NUM_WARP_GROUPS=2,
+            WRITE_PAIRS=True,
+            PAIR_OUT_BF16=True,
         ]
         comptime a_smem_layout = tile_layout_k_major[BF16, 128, 64]()
         comptime b_smem_layout = tile_layout_k_major[BF16, 128, 64]()
@@ -1650,12 +2289,83 @@ struct MXFP4MoEW2PairsBF16:
             y_pairs_dev,
             P_out,
             D,
-            grid_dim=(grid_x, 2, grid_z),
+            grid_dim=(grid_x, grid_y, grid_z),
             block_dim=(256, 1, 1),
             shared_mem_bytes=Int(smem_use),
             func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
                 smem_use
             ),
+        )
+
+
+@parameter
+fn moe_topk_reduce_pairs[
+    BN: Int = 256,
+](
+    y_pairs_ptr: UnsafePointer[Float32, MutAnyOrigin],
+    P: Int,
+    y_ptr: UnsafePointer[Float32, MutAnyOrigin],
+    T: Int,
+    D: Int,
+):
+    var tok = Int(block_idx.y)
+    if tok >= T:
+        return
+
+    var pair0 = tok * TOPK
+    if pair0 + (TOPK - 1) >= P:
+        return
+
+    var col = Int(block_idx.x) * BN + Int(thread_idx.x)
+    if col >= D:
+        return
+
+    var base = pair0 * D + col
+    var s = y_pairs_ptr[base]
+    s += y_pairs_ptr[base + D]
+    s += y_pairs_ptr[base + 2 * D]
+    s += y_pairs_ptr[base + 3 * D]
+    y_ptr.store(tok * D + col, s)
+
+
+@compiler.register("mxfp4_moe_topk_reduce")
+struct MXFP4MoETopKReduce:
+    @staticmethod
+    fn execute[
+        target: StaticString,
+    ](
+        y: OutputTensor[dtype=F32, rank=2],
+        y_pairs: InputTensor[dtype=F32, rank=2],
+        ctx: DeviceContextPtr,
+    ) raises:
+        @parameter
+        if is_cpu[target]():
+            raise Error("mxfp4_moe_topk_reduce: GPU only")
+
+        var P = y_pairs.dim_size(0)
+        var T = y.dim_size(0)
+        var D = y.dim_size(1)
+
+        if T == 0 or D == 0 or P == 0:
+            return
+
+        var gpu_ctx = ctx.get_device_context()
+        var y_pairs_dev = DeviceBuffer[y_pairs.dtype](
+            gpu_ctx, y_pairs.unsafe_ptr(), y_pairs.size(), owning=False
+        )
+        var y_dev = DeviceBuffer[y.dtype](
+            gpu_ctx, y.unsafe_ptr(), y.size(), owning=False
+        )
+
+        comptime reduce_kernel = moe_topk_reduce_pairs[BN=256]
+        gpu_ctx.enqueue_function_checked[reduce_kernel, reduce_kernel](
+            y_pairs_dev,
+            P,
+            y_dev,
+            T,
+            D,
+            grid_dim=(ceildiv(D, 256), T, 1),
+            block_dim=(256, 1, 1),
         )
 
 

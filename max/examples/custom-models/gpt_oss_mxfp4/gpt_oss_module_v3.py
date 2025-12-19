@@ -29,7 +29,9 @@ from max.pipelines.architectures.gpt_oss_module_v3.layers.rotary_embedding impor
 from max.pipelines.architectures.gpt_oss_module_v3.layers.transformer_block import (
     GptOssTransformerBlock,
 )
-from max.pipelines.architectures.gpt_oss_module_v3.model_config import GptOssConfig
+from max.pipelines.architectures.gpt_oss_module_v3.model_config import (
+    GptOssConfig,
+)
 
 from .layers.moe_module_v3 import GptOssMoEMXFP4
 

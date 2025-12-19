@@ -33,7 +33,8 @@ fn mxfp4_address(k: Int, block_k: Int = MXFP4_BLOCK_K) -> SIMD[DType.int32, 3]:
 
 @always_inline
 fn set_mxfp4_scale[
-    scales_layout: Layout, //,
+    scales_layout: Layout,
+    //,
 ](
     scales: LayoutTensor[MXFP4_SF_DTYPE, scales_layout, MutAnyOrigin],
     row: Int,
@@ -51,7 +52,8 @@ fn set_mxfp4_scale[
 
 @always_inline
 fn get_mxfp4_scale[
-    scales_layout: Layout, //,
+    scales_layout: Layout,
+    //,
 ](
     scales: LayoutTensor[MXFP4_SF_DTYPE, scales_layout, MutAnyOrigin],
     row: Int,
@@ -71,7 +73,8 @@ fn get_mxfp4_scale[
 fn dequant_row_cpu[
     packed_layout: Layout,
     scales_layout: Layout,
-    out_layout: Layout, //,
+    out_layout: Layout,
+    //,
 ](
     packed: LayoutTensor[DType.uint8, packed_layout, MutAnyOrigin],
     scales: LayoutTensor[MXFP4_SF_DTYPE, scales_layout, MutAnyOrigin],
