@@ -273,7 +273,8 @@ struct GroupedMXFP4Matmul:
         bias_layout: Layout,
         offsets_layout: Layout,
         ids_layout: Layout,
-        stats_layout: Layout, //,
+        stats_layout: Layout,
+        //,
     ](
         output: LayoutTensor[BF16, out_layout, MutAnyOrigin],
         a: LayoutTensor[BF16, a_layout, MutAnyOrigin],
@@ -354,7 +355,8 @@ struct GroupedMXFP4MatmulSwiGLU:
         bias_layout: Layout,
         offsets_layout: Layout,
         ids_layout: Layout,
-        stats_layout: Layout, //,
+        stats_layout: Layout,
+        //,
     ](
         output: LayoutTensor[BF16, out_layout, MutAnyOrigin],
         a: LayoutTensor[BF16, a_layout, MutAnyOrigin],

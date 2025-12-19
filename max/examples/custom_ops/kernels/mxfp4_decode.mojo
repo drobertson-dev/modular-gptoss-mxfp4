@@ -12,6 +12,7 @@ comptime BF16 = DType.bfloat16
 comptime F16 = DType.float16
 comptime F32 = DType.float32
 comptime U8 = DType.uint8
+comptime U32 = DType.uint32
 
 comptime FP4_E2M1_LUT_BF16 = SIMD[BF16, 16](
     0.0,
@@ -127,6 +128,61 @@ fn decode_mxfp4_byte_to_2xbf16_scaled(
     out[0] = (FP4_E2M1_LUT_BF16[Int(lo)] * scale).cast[BF16]()
     out[1] = (FP4_E2M1_LUT_BF16[Int(hi)] * scale).cast[BF16]()
     return out
+
+
+comptime _MXFP4_PACK_MASK_U32 = UInt32(0x81C081C0)
+comptime _MXFP4_D1_MASK_U32 = UInt32(0x80008000)
+comptime _MXFP4_D3_MASK_U32 = UInt32(0x01800180)
+comptime _MXFP4_D6_MASK_U32 = UInt32(0x00400040)
+comptime _MXFP4_FP4_BIAS_BF16 = bitcast[BF16, 1](UInt16(0x7E80))  # 2**126
+
+
+@always_inline
+fn decode_mxfp4_packbits_u32_to_8xbf16_scaled(
+    packed_bits: UInt32,
+    scale: Scalar[BF16],
+) -> SIMD[BF16, 8]:
+    """Decode 4 packed MXFP4 bytes (8 FP4 values) into 8 BF16 values.
+
+    This expects the input bytes have been preprocessed by the Hopper `_pack_bits`
+    transform (offline, in the weight adapter). The unpack sequence mirrors the
+    Triton `matmul_ogs` Hopper path: mask/shift to BF16 bit patterns, then
+    multiply by a BF16 bias (2**126) to add the missing exponent bias, and then
+    multiply by the per-32 E8M0 scale (BF16).
+    """
+    var x = packed_bits
+
+    var y0_bits = x & _MXFP4_PACK_MASK_U32
+    var y1_bits = (x << UInt32(3)) & _MXFP4_PACK_MASK_U32
+    var y2_bits = (x << UInt32(6)) & _MXFP4_PACK_MASK_U32
+
+    var d1 = (x << UInt32(1)) & _MXFP4_D1_MASK_U32
+    var d3 = (x >> UInt32(3)) & _MXFP4_D3_MASK_U32
+    var d6 = (x >> UInt32(7)) & _MXFP4_D6_MASK_U32
+    var y3_bits = d1 | d3 | d6
+
+    var bias2 = SIMD[BF16, 2](_MXFP4_FP4_BIAS_BF16, _MXFP4_FP4_BIAS_BF16)
+    var scale2 = SIMD[BF16, 2](scale, scale)
+
+    var v0 = bitcast[BF16, 2](y0_bits) * bias2
+    v0 = v0 * scale2
+    var v1 = bitcast[BF16, 2](y1_bits) * bias2
+    v1 = v1 * scale2
+    var v2 = bitcast[BF16, 2](y2_bits) * bias2
+    v2 = v2 * scale2
+    var v3 = bitcast[BF16, 2](y3_bits) * bias2
+    v3 = v3 * scale2
+
+    return SIMD[BF16, 8](
+        v0[0],
+        v0[1],
+        v1[0],
+        v1[1],
+        v2[0],
+        v2[1],
+        v3[0],
+        v3[1],
+    )
 
 
 @always_inline

@@ -25,8 +25,7 @@ from .vector_addition import *
 
 # MXFP4 kernels (custom architecture support).
 from .fp4_utils import *
-from .grouped_matmul_mxfp4_ops import *
+from .grouped_matmul_mxfp4_sm90 import *
 from .moe_mxfp4 import *
 from .moe_mxfp4_ops import *
-from .mxfp4_decode import *
 from .mxfp4_matmul_sm90 import *
