@@ -1,0 +1,36 @@
+10:20:53.798 INFO: Metrics initialized.
+10:20:53.997 WARNING: Overriding existing architecture for 'GptOssForCausalLM_ModuleV3'
+10:20:54.828 INFO: 
+10:20:54.828 INFO: ============================================================
+10:20:54.828 INFO: Pipeline Configuration (use --pretty-print-config to print full config)
+10:20:54.828 INFO: ============================================================
+10:20:54.828 INFO:     model              : openai/gpt-oss-20b
+10:20:54.828 INFO:     architecture       : GptOssForCausalLM_ModuleV3
+10:20:54.828 INFO:     pipeline           : TextGenerationPipeline
+10:20:54.828 INFO:     devices            : gpu[0]
+10:20:54.828 INFO:     max_batch_size     : 512
+10:20:54.828 INFO:     max_seq_len        : 2048
+10:20:54.828 INFO:     cache_memory       : 48.00 GiB
+10:20:54.828 INFO: 
+10:20:54.828 INFO: Successfully loaded custom prompt template from /workspace/modular-gptoss-mxfp4/max/examples/custom-models/gpt_oss_mxfp4_v3/templates/gpt-oss-20b.chat_template.jinja (16714 characters)
+10:20:55.781 INFO: Set custom chat template on tokenizer for openai/gpt-oss-20b
+10:20:55.783 INFO: Starting download of model: openai/gpt-oss-20b
+  0%|          | 0/3 [00:00<?, ?it/s] 33%|███▎      | 1/3 [00:00<00:00,  7.83it/s]100%|██████████| 3/3 [00:00<00:00, 23.46it/s]
+10:20:55.915 INFO: Finished download of model: openai/gpt-oss-20b in 0.132298 seconds.
+10:20:56.099 INFO: Building and compiling model...
+10:22:17.892 INFO: Building and compiling model took 81.792266 seconds
+10:22:19.263 INFO: Beginning text generation
+29 
+
+We see grammar works though excessive loops. The issue we didn't separately track final separators; but we did.
+
+Hence final code may accept many of the tokens
+Prompt size: 901
+Output size: 40
+Startup time: 84434.92126464844 ms
+Time to first token: 5720.043182373047 ms
+Prompt eval throughput (context-encoding): 157.51629336934593 tokens per second
+Time per Output Token: 32.05045064290365 ms
+Eval throughput (token-generation): 31.20080934716629 tokens per second
+Total Latency: 6970.010757446289 ms
+Total Throughput: 0.14347180152220962 req/s

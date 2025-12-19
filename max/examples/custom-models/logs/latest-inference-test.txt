@@ -1,0 +1,505 @@
+pixi run serve-20b-v3
+✨ Pixi task (serve-20b-v3): python -m max.entrypoints.pipelines serve --custom-architectures $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3 --use-module-v3 --model openai/gpt-oss-20b --devices gpu --chat-template $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3/templates/gpt-oss-20b.chat_template.jinja --device-memory-utilization 0.90 --max-batch-size 512 --max-length 131072 --enable-in-flight-batching --experimental-background-queue --enable-chunked-prefill --prefill-chunk-size 8192 --no-enable-prefix-caching --pretty-print-config                                      
+08:43:33.250 INFO: Metrics initialized.
+08:43:33.518 WARNING: Overriding existing architecture for 'GptOssForCausalLM_ModuleV3'
+08:43:34.360 INFO: 
+08:43:34.360 INFO: Model Information
+08:43:34.360 INFO: ============================================================
+08:43:34.360 INFO:     architecture           : GptOssForCausalLM_ModuleV3
+08:43:34.360 INFO:     pipeline_class         : TextGenerationPipeline
+08:43:34.360 INFO:     pipeline_model         : GptOssModelModuleV3MXFP4
+08:43:34.360 INFO:     tokenizer              : TextTokenizer
+08:43:34.360 INFO:     devices                : gpu[0]
+08:43:34.360 INFO:     model_path             : openai/gpt-oss-20b
+08:43:34.360 INFO:     huggingface_revision   : main
+08:43:34.360 INFO:     quantization_encoding  : SupportedEncoding.bfloat16
+08:43:34.360 INFO:     weight_path            : [
+08:43:34.360 INFO:                               model-00000-of-00002.safetensors
+08:43:34.360 INFO:                               model-00001-of-00002.safetensors
+08:43:34.360 INFO:                               model-00002-of-00002.safetensors
+08:43:34.360 INFO:                             ]
+08:43:34.361 INFO: 
+08:43:34.361 INFO: Pipeline Config
+08:43:34.361 INFO: ============================================================
+08:43:34.361 INFO:     max_seq_len            : 131072
+08:43:34.361 INFO:     max_batch_size         : 512
+08:43:34.361 INFO:     chunked_prefill        : True
+08:43:34.361 INFO:     prefill_chunk_size     : 8192
+08:43:34.361 INFO:     in_flight_batching     : True
+08:43:34.361 INFO: 
+08:43:34.361 INFO: KVCache Config
+08:43:34.361 INFO: ============================================================
+08:43:34.361 INFO:     cache_strategy         : KVCacheStrategy.PAGED
+08:43:34.361 INFO:     page_size              : 128 tokens
+08:43:34.361 INFO:     prefix_caching         : False
+08:43:34.361 INFO:     host_swapping          : False
+08:43:34.361 INFO:     memory_utilization     : 90.0%
+08:43:34.361 INFO:     available_cache_memory : 50.90 GiB
+08:43:34.361 INFO: 
+08:43:34.361 INFO: Sampling Config
+08:43:34.361 INFO: ============================================================
+08:43:34.361 INFO:     top_k                  : -1
+08:43:34.361 INFO:     top_p                  : 1
+08:43:34.361 INFO:     min_p                  : 0.0
+08:43:34.361 INFO:     temperature            : 1
+08:43:34.361 INFO:     frequency_penalty      : 0.0
+08:43:34.361 INFO:     presence_penalty       : 0.0
+08:43:34.361 INFO:     repetition_penalty     : 1.0
+08:43:34.361 INFO:     max_new_tokens         : None
+08:43:34.361 INFO:     min_new_tokens         : 0
+08:43:34.361 INFO:     ignore_eos             : False
+08:43:34.361 INFO:     detokenize             : True
+08:43:34.361 INFO:     stop_strings           : None
+08:43:34.361 INFO:     stop_token_ids         : None
+08:43:34.361 INFO: 
+08:43:34.361 INFO: 
+08:43:34.361 INFO: Server Config
+08:43:34.361 INFO: ============================================================
+08:43:34.361 INFO:     host                   : 0.0.0.0
+08:43:34.361 INFO:     port                   : 8000
+08:43:34.361 INFO:     metrics_port           : 8001
+08:43:34.361 INFO:     api_types              : openai, sagemaker
+08:43:34.361 INFO:     operation_mode         : standard
+08:43:34.361 INFO: 
+08:43:34.361 INFO: File System Config
+08:43:34.361 INFO: ============================================================
+08:43:34.361 INFO:     allowed_image_roots    : None
+08:43:34.361 INFO:     max_local_image_bytes  : 20.00 MiB
+08:43:34.361 INFO: 
+08:43:34.361 INFO: Metrics and Telemetry Config
+08:43:34.361 INFO: ============================================================
+08:43:34.361 INFO:     metric_recording       : PROCESS
+08:43:34.361 INFO:     metric_level           : BASIC (10)
+08:43:34.361 INFO:     detailed_buffer_factor : 20
+08:43:34.361 INFO:     disable_telemetry      : False
+08:43:34.361 INFO:     transaction_recording  : None
+08:43:34.361 INFO: 
+08:43:34.362 INFO: Model Worker Config
+08:43:34.362 INFO: ============================================================
+08:43:34.362 INFO:     use_heartbeat          : False
+08:43:34.362 INFO:     health_fail_timeout    : 60.0s
+08:43:34.362 INFO: 
+08:43:34.362 INFO: Successfully loaded custom prompt template from /workspace/modular-gptoss-mxfp4/max/examples/custom-models/gpt_oss_mxfp4_v3/templates/gpt-oss-20b.chat_template.jinja (16714 characters)
+08:43:35.288 INFO: Set custom chat template on tokenizer for openai/gpt-oss-20b
+08:43:35.470 INFO: Starting server...
+Starting ASGI metrics server on port 8001
+08:43:37.926 INFO: Metrics initialized.
+08:43:38.154 INFO: Starting download of model: openai/gpt-oss-20b
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:00<00:00, 16.98it/s]
+08:43:38.336 INFO: Finished download of model: openai/gpt-oss-20b in 0.181455 seconds.
+08:43:50.097 INFO: Building and compiling model...
+08:46:11.011 INFO: Building and compiling model took 140.913859 seconds
+08:46:16.249 INFO: 
+
+********************************************************************************
+
+          🚀 Server ready on http://0.0.0.0:8000 (Press CTRL+C to quit)          
+
+********************************************************************************
+
+08:46:54.672 INFO: Executed CE batch with 1 reqs | Terminated: 0 reqs, Pending: 0 reqs | Input Tokens: 93/8192 toks | Prompt Tput: 17.2 tok/s, Generation Tput: 0.2 tok/s | Batch creation: 446.93us, Execution: 5.41s | All Preemptions: 0 reqs
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [96,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [97,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [98,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [99,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [100,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [101,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [102,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [103,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [32,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [33,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [34,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [35,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [36,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [37,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [38,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [39,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [40,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [41,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [42,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [43,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [44,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [45,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [46,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [47,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [48,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [49,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [50,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [51,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [52,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [53,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [54,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [55,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [56,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [57,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [58,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [59,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [60,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [61,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [62,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [63,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [64,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [65,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [66,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [67,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [68,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [69,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [70,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [71,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [72,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [73,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [74,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [75,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [76,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [77,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [78,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [79,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [80,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [81,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [82,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [83,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [84,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [85,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [86,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [87,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [88,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [89,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [90,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [91,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [92,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [93,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [94,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [95,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [0,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [1,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [2,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [3,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [4,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [5,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [6,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [7,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [8,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [9,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [10,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [11,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [12,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [13,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [14,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [15,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [16,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [17,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [18,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [19,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [20,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [21,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [22,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [23,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [24,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [25,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [26,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [27,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [28,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [29,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [30,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [31,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+08:46:54.731 ERROR: ValueError in request 98f8314ee39e42a7bdfd6cffa223eec8
+Traceback (most recent call last):
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/pipelines/lib/tokenizer.py", line 442, in decode
+    return self.delegate.decode(encoded, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/transformers/tokenization_utils_base.py", line 4059, in decode
+    return self._decode(
+           ~~~~~~~~~~~~^
+        token_ids=token_ids,
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/transformers/tokenization_utils_fast.py", line 682, in _decode
+    text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+OverflowError: out of range integral type conversion attempted
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/serve/router/openai_routes.py", line 828, in openai_create_chat_completion
+    response = await response_generator.complete([token_request])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/serve/router/openai_routes.py", line 361, in complete
+    completed_outputs = await self.pipeline.all_tokens(request)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/serve/pipelines/llm.py", line 282, in all_tokens
+    return [token async for token in self.next_token(request)]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/serve/pipelines/llm.py", line 211, in next_token
+    decoded_token = await self.tokenizer.decode(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        token, skip_special_tokens=skip_special_tokens
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/pipelines/lib/tokenizer.py", line 444, in decode
+    error_msg = _handle_decode_overflow(encoded, len(self.delegate))
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/pipelines/lib/tokenizer.py", line 78, in _handle_decode_overflow
+    invalid_indices = np.where(invalid_mask)[0]
+                      ~~~~~~~~^^^^^^^^^^^^^^
+ValueError: Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead. If the context of this error is of the form `arr[nonzero(cond)]`, just use `arr[cond]`.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [96,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [97,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [98,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [99,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [100,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [101,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [102,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [103,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [104,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [105,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [106,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [107,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [108,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [109,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [110,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [111,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [112,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [113,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [114,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [115,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [116,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [117,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [118,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [119,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [120,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [121,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [122,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [123,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [124,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [125,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [126,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [127,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [0,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [1,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [2,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [3,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [4,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [5,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [6,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [7,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [8,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [9,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [10,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [11,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [12,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [13,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [14,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [15,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [16,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [17,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [18,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [19,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [20,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [21,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [22,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [23,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [24,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [25,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [26,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [27,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [28,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [29,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [30,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [31,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [160,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [161,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [162,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [163,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [164,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [165,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [166,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [167,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [168,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [169,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [170,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [171,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [172,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [173,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [174,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [175,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [176,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [177,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [178,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [179,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [180,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [181,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [182,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [183,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [184,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [185,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [186,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [187,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [188,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [189,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [190,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [191,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [64,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [65,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [66,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [67,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [68,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [69,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [70,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [71,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [72,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [73,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [74,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [75,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [76,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [77,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [78,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [79,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [80,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [81,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [82,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [83,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [84,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [85,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [86,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [87,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [88,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [89,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [90,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [91,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [92,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [93,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [94,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [95,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [224,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [225,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [226,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [227,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [228,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [229,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [230,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [231,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [232,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [233,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [234,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [235,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [236,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [237,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [238,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [239,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [240,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [241,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [242,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [243,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [244,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [245,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [246,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [247,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [248,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [249,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [250,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [251,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [252,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [253,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [254,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [255,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [128,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [129,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [130,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [131,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [132,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [133,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [134,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [135,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [136,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [137,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [138,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [139,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [140,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [141,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [142,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [143,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [144,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [145,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [146,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [147,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [148,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [149,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [150,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [151,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [152,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [153,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [154,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [155,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [156,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [157,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [158,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [159,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [32,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [33,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [34,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [35,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [36,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [37,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [38,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [39,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [40,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [41,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [42,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [43,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [44,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [45,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [46,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [47,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [48,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [49,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [50,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [51,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [52,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [53,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [54,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [55,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [56,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [57,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [58,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [59,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [60,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [61,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [62,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [63,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [192,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [193,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [194,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [195,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [196,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [197,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [198,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [199,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [200,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [201,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [202,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [203,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [204,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [205,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [206,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [207,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [208,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [209,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [210,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [211,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [212,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [213,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [214,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [215,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [216,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [217,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [218,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [219,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [220,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [221,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [222,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [223,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+08:46:55.042 ERROR: Encountered an exception while executing batch: batch_size=1, cache_tokens=93, input_tokens=1, num_steps=10

@@ -29,7 +29,9 @@ def compile_with_custom_extensions(
 ) -> Callable[..., Any]:
     """Compile a ModuleV3 `Module` with `custom_extensions` enabled."""
 
-    kernel_paths = [p if isinstance(p, Path) else Path(p) for p in custom_extensions]
+    kernel_paths = [
+        p if isinstance(p, Path) else Path(p) for p in custom_extensions
+    ]
 
     with Graph(
         type(module).__qualname__,

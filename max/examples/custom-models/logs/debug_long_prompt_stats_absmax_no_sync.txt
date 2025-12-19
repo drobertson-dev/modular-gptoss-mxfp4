@@ -1,0 +1,1294 @@
+10:12:30.104 INFO: Metrics initialized.
+10:12:30.320 WARNING: Overriding existing architecture for 'GptOssForCausalLM_ModuleV3'
+10:12:31.260 INFO: 
+10:12:31.260 INFO: ============================================================
+10:12:31.260 INFO: Pipeline Configuration (use --pretty-print-config to print full config)
+10:12:31.260 INFO: ============================================================
+10:12:31.260 INFO:     model              : openai/gpt-oss-20b
+10:12:31.260 INFO:     architecture       : GptOssForCausalLM_ModuleV3
+10:12:31.260 INFO:     pipeline           : TextGenerationPipeline
+10:12:31.260 INFO:     devices            : gpu[0]
+10:12:31.260 INFO:     max_batch_size     : 512
+10:12:31.260 INFO:     max_seq_len        : 2048
+10:12:31.260 INFO:     cache_memory       : 48.00 GiB
+10:12:31.260 INFO: 
+10:12:31.260 INFO: Successfully loaded custom prompt template from /workspace/modular-gptoss-mxfp4/max/examples/custom-models/gpt_oss_mxfp4_v3/templates/gpt-oss-20b.chat_template.jinja (16714 characters)
+10:12:32.207 INFO: Set custom chat template on tokenizer for openai/gpt-oss-20b
+10:12:32.209 INFO: Starting download of model: openai/gpt-oss-20b
+  0%|          | 0/3 [00:00<?, ?it/s]100%|██████████| 3/3 [00:00<00:00, 34.28it/s]
+10:12:32.301 INFO: Finished download of model: openai/gpt-oss-20b in 0.092034 seconds.
+10:12:32.558 INFO: Building and compiling model...
+10:12:42.369 INFO: Building and compiling model took 9.810200 seconds
+10:12:43.618 INFO: Beginning text generation
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[2.6250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[24]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[900, 9]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[21.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[25.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[81.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[55.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[3.1719]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[3]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[29]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[901, 9]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[3854761187776256031421040474812]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[42.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[118.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[37.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[3.7812]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[2]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[900, 12]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[12.1250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[10.0625]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[68.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[36.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.6562]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[900, 13]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[9887674681780189331674285001932]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[13.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[185691005892807041234868633600.]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[38685626227668133590597632000.0]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.9375]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[29]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[900, 14]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[5248073484944869722196351270256]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[42.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[1779538806472734145167491072.00]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[539180915548124611918954496.000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.7812]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[883, 14]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[10.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[25.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[226.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[88.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[17.8750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[2]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[30]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[708, 14]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[14.6250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[43008.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[41216.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[77.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[30]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[708, 15]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[13.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[23.1250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[249.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[145.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[57.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[4]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[30]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[897, 19]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[21.3750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[11.0625]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[444.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[253.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[64.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[900, 14]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[165888.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[2803840303608806919406468017778]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[6957677790436669022230865081154]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[46.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[30]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[862, 13]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[9038750371337427935745888009906]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[1004.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[856.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[78.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[30]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[881, 16]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[19.3750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[42.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[1184492720853257552758519475103]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[2920666982925840541048404185186]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[83.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[900, 13]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[14.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[51.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[940.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[572.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[86.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[27]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[832, 15]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[11892317766025216.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[784.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[500.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[99.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[30]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[890, 14]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[30.1250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[125142711796045598162944.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[25825441703193372262400.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[106.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[29]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[890, 16]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[24.8750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[39.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[3102397372974559508046971556709]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[7399023023412129370655957269138]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[83.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[3]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[895, 16]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[4381000474388760811572606277779]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[1480615901066571940948149343879]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[3473362644625348560100966782730]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[82.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[26]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[897, 19]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[2803840303608806919406468017778]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[51968.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[40448.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[90.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[563, 21]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[91.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[2416.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[1832.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[89.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[30]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[690, 20]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[51.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[33.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[2720763553872249677349980076511]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[6905754821851320745945560117862]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[93.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[29]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[661, 17]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[47.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[29.3750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[9760909621757366391524614681395]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[2503609935450753067955988830617]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[93.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[3]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[29]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[836, 20]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[INF]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[37174468953149847122214912.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[1152257421820193432141824.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[92.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[-1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[471, 16]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3601]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[48.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[56.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[49152.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[16896.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[97.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[-1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[30]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[395, 25]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3601]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3603]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[38.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[54.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[INF]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[INF]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[3.0781]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[10]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[28]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[9.4375]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[14.6250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[105.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[63.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[2.4375]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[5]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[29]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[14.3750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[9.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[41.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[17.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[2.1562]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[8]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[29]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[8.8125]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[19.8750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[48.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[20.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[2.1094]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[19]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[8.6250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[6.2812]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[43.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[22.1250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[3.2812]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[6]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[23]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[7.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[4.4062]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[62.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[46.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[4.8750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[14]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[26]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[8.6250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[5.9375]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[32.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[14.0625]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[3.3906]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[2]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[10]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[10.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[9.3750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[66.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[51.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[3.4688]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[5]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[24]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[8.3750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[6.3438]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[123.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[87.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[3.5625]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[4]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[24]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[8.8125]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[4.2812]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[144.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[91.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[3.0938]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[8]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[19]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[7.4375]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[6.5938]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[300.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[166.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[2.7969]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[26]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[14.1875]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[3.8750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[276.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[112.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[3.8281]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[4]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[30]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[10.4375]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[8.3750]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[664.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[424.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[2.6562]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[23]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[8.1875]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[6.1562]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[292.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[94.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[4.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[3]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[17]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[11.4375]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[10.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[252.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[158.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.9062]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[16]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[10.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[11.3125]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[290.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[167.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.9688]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[19.6250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[6.5625]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[350.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[276.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[6.1250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[13]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[31]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[21.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[4.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[636.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[464.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[3]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[21]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[30.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[10.9375]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[680.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[378.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.3438]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[24]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[24.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[14.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[1384.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[904.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.5938]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[0]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[18]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[26.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[8.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[1040.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[852.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.8125]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[7]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[19]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[28.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[21.2500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[3184.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[1608.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[5.1250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[4]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[24]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[1, 4]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[17.1250]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[3.7969]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[1768.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[1272.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[-INF]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[-1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[-1]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[0, 0]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[16.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[45.7500]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[1488.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[-INF]], dtype=bf16, shape=[1,1])
+mxfp4_v3_moe_x_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_moe_x_abs_max = tensor([[-INF]], dtype=bf16, shape=[1,1])
+mxfp4_v3_router_idx_min = tensor([[-1]], dtype=si64, shape=[1])
+mxfp4_v3_router_idx_max = tensor([[-1]], dtype=si64, shape=[1])
+mxfp4_v3_expert_usage_stats_host = tensor([[0, 0]], dtype=ui32, shape=[2])
+mxfp4_v3_token_expert_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_token_expert_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_min = tensor([[0]], dtype=ui32, shape=[1])
+mxfp4_v3_restore_token_order_max = tensor([[3]], dtype=ui32, shape=[1])
+mxfp4_v3_gate_up_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gate_up_abs_max = tensor([[16.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_gated_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_gated_abs_max = tensor([[34.5000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_down_any_nan = tensor([[0]], dtype=si32, shape=[1,1])
+mxfp4_v3_down_abs_max = tensor([[1416.0000]], dtype=bf16, shape=[1,1])
+mxfp4_v3_routed_any_nan = tensor([[1]], dtype=si32, shape=[1,1])
+mxfp4_v3_routed_abs_max = tensor([[-INF]], dtype=bf16, shape=[1,1])
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [96,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [97,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [98,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [99,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [100,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [101,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [102,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [103,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [32,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [33,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [34,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [35,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [36,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [37,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [38,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [39,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [40,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [41,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [42,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [43,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [44,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [45,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [46,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [47,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [48,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [49,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [50,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [51,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [52,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [53,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [54,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [55,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [56,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [57,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [58,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [59,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [60,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [61,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [62,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [63,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [0,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [1,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [2,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [3,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [4,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [5,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [6,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [7,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [8,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [9,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [10,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [11,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [12,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [13,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [14,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [15,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [16,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [17,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [18,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [19,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [20,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [21,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [22,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [23,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [24,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [25,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [26,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [27,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [28,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [29,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [30,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [31,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [64,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [65,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [66,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [67,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [68,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [69,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [70,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [71,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [72,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [73,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [74,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [75,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [76,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [77,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [78,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [79,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [80,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [81,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [82,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [83,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [84,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [85,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [86,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [87,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [88,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [89,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [90,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [91,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [92,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [93,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [94,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [1,0,0] thread: [95,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [160,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [161,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [162,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [163,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [164,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [165,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [166,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [167,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [168,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [169,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [170,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [171,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [172,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [173,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [174,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [175,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [176,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [177,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [178,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [179,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [180,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [181,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [182,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [183,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [184,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [185,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [186,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [187,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [188,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [189,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [190,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [191,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [128,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [129,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [130,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [131,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [132,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [133,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [134,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [135,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [136,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [137,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [138,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [139,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [140,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [141,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [142,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [143,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [144,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [145,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [146,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [147,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [148,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [149,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [150,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [151,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [152,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [153,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [154,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [155,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [156,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [157,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [158,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [159,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [224,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [225,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [226,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [227,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [228,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [229,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [230,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [231,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [232,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [233,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [234,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [235,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [236,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [237,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [238,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [239,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [240,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [241,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [242,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [243,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [244,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [245,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [246,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [247,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [248,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [249,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [250,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [251,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [252,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [253,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [254,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [255,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [192,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [193,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [194,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [195,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [196,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [197,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [198,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [199,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [200,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [201,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [202,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [203,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [204,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [205,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [206,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [207,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [208,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [209,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [210,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [211,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [212,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [213,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [214,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [215,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [216,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [217,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [218,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [219,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [220,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [221,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [222,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [223,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [32,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [33,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [34,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [35,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [36,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [37,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [38,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [39,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [40,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [41,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [42,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [43,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [44,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [45,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [46,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [47,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [48,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [49,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [50,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [51,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [52,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [53,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [54,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [55,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [56,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [57,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [58,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [59,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [60,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [61,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [62,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [63,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [0,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [1,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [2,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [3,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [4,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [5,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [6,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [7,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [8,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [9,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [10,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [11,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [12,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [13,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [14,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [15,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [16,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [17,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [18,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [19,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [20,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [21,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [22,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [23,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [24,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [25,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [26,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [27,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [28,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [29,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [30,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [31,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [96,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [97,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [98,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [99,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [100,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [101,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [102,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [103,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [104,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [105,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [106,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [107,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [108,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [109,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [110,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [111,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [112,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [113,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [114,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [115,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [116,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [117,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [118,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [119,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [120,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [121,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [122,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [123,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [124,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [125,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [126,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [127,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [64,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [65,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [66,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [67,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [68,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [69,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [70,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [71,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [72,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [73,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [74,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [75,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [76,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [77,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [78,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [79,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [80,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [81,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [82,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [83,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [84,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [85,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [86,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [87,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [88,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [89,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [90,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [91,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [92,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [93,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [94,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+At: max/kernels/src/nn/gather_scatter.mojo:578:49: block: [0,0,0] thread: [95,0,0] Assert Error: Gather index out of bounds. Run on CPU for more detailed error checking.
+10:12:55.658 ERROR: Encountered an exception while executing batch: batch_size=1, cache_tokens=0, input_tokens=901, num_steps=10
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/entrypoints/pipelines.py", line 535, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/click/core.py", line 1485, in __call__
+    return self.main(*args, **kwargs)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/click/core.py", line 1406, in main
+    rv = self.invoke(ctx)
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/click/core.py", line 1873, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/entrypoints/pipelines.py", line 85, in invoke
+    return super().invoke(ctx)
+           ~~~~~~~~~~~~~~^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/click/core.py", line 1269, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/click/core.py", line 824, in invoke
+    return callback(*args, **kwargs)
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/entrypoints/cli/config.py", line 437, in wrapper
+    return func(*args, **kwargs)
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/entrypoints/cli/config.py", line 318, in wrapper
+    return func(*args, **kwargs)
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/entrypoints/pipelines.py", line 375, in cli_pipeline
+    generate_text_for_pipeline(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        pipeline_config,
+        ^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        num_warmups=num_warmups,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/entrypoints/cli/generate.py", line 140, in generate_text_for_pipeline
+    asyncio.run(
+    ~~~~~~~~~~~^
+        stream_text_to_console(
+        ^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+        )
+        ^
+    )
+    ^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/entrypoints/cli/generate.py", line 95, in stream_text_to_console
+    async for outputs in pipeline.generate_async(request):
+    ...<2 lines>...
+            print(decoded, end="", flush=True)
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/pipelines/lib/interfaces/generate.py", line 142, in generate_async
+    step_outputs = self.execute(inputs)
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/profiler/tracing.py", line 112, in wrapper
+    return func(*args, **kwargs)
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/pipelines/lib/pipeline_variants/text_generation.py", line 621, in execute
+    model_outputs = self._pipeline_model.execute(
+        model_inputs=curr_step_inputs
+    )
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/pipelines/architectures/gpt_oss_module_v3/model.py", line 308, in execute
+    model_outputs = self.model(
+        model_inputs.tokens,
+    ...<2 lines>...
+        *curr_kv_cache_inputs,
+    )
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/experimental/functional.py", line 66, in wrapped
+    results = op(*args, **kwargs)
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/engine/api.py", line 116, in _Model_call
+    return self.execute(*bound.arguments.values())
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/profiler/tracing.py", line 112, in wrapper
+    return func(*args, **kwargs)
+  File "/workspace/modular-gptoss-mxfp4/max/examples/custom-models/.pixi/envs/default/lib/python3.14/site-packages/max/engine/api.py", line 109, in _Model_execute
+    return self._execute_device_tensors(input_impls)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+ValueError: At open-source/max/mojo/stdlib/std/gpu/host/device_context.mojo:6033:17: CUDA call failed: CUDA_ERROR_LAUNCH_FAILED (unspecified launch failure)
+To get more accurate error information, set MODULAR_DEVICE_CONTEXT_SYNC_MODE=true.
+
+Prompt size: 901
+Output size: 2
+Startup time: 12358.073949813843 ms
+Time to first token: 11634.122848510742 ms
+Prompt eval throughput (context-encoding): 77.44460082913213 tokens per second
+Time per Output Token: 405.31182289123535 ms
+Eval throughput (token-generation): 2.467236195743414 tokens per second
+Total Latency: 12039.434671401978 ms
+Total Throughput: 0.08306037843914404 req/s

@@ -10,7 +10,6 @@ from typing import Any
 import numpy as np
 from max.driver import Device, Tensor
 from max.dtype import DType
-from max.engine import InferenceSession
 from max.graph import DeviceRef, TensorType
 from max.pipelines.architectures.gpt_oss_module_v3.model import (
     GptOssModel as _BaseGptOssModel,
