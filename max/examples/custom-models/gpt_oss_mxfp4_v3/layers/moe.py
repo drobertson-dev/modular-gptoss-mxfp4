@@ -192,7 +192,18 @@ class GptOssMoE(MoE):
             _debug_abs_max("mxfp4_v3_moe_x_abs_max", x_bf16)
 
         router_idx, router_weight = self.gate(x_bf16)
+        expected_pairs = seq_len * self.num_experts_per_token
         router_idx = F.reshape(router_idx, [-1])
+        router_weight = F.reshape(router_weight, [-1])
+        router_idx = F.slice_tensor(
+            router_idx, [(slice(0, expected_pairs), "num_pairs")]
+        )
+        router_weight = F.slice_tensor(
+            router_weight, [(slice(0, expected_pairs), "num_pairs")]
+        )
+        router_weight = F.reshape(
+            router_weight, [seq_len, self.num_experts_per_token]
+        )
         router_idx_i32 = F.cast(router_idx, DType.int32)
 
         if debug_enabled:
