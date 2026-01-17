@@ -26,12 +26,12 @@ from max.pipelines.architectures.gpt_oss_module_v3.layers.rotary_embedding impor
     YarnRotaryEmbedding,
     YarnScalingParams,
 )
-from max.pipelines.architectures.gpt_oss_module_v3.layers.transformer_block import (
+
+from gpt_oss_mxfp4_v3.layers.moe import GptOssMoE
+from gpt_oss_mxfp4_v3.layers.transformer_block import (
     GptOssTransformerBlock,
 )
-
-from .layers.moe import GptOssMoE
-from .model_config import GptOssConfig
+from gpt_oss_mxfp4_v3.model_config import GptOssConfig
 
 
 class GptOssTextModel(Module):

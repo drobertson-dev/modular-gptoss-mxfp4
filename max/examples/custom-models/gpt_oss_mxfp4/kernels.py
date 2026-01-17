@@ -45,14 +45,17 @@ def mxfp4_matmul_swiglu(
     alpha: float = 1.702,
     limit: float = 7.0,
     target: str = "cpu",
-    custom_extensions: list[str] | None = None,  # compatibility; Graph owns this
+    custom_extensions: list[str]
+    | None = None,  # compatibility; Graph owns this
 ) -> TensorValue:
     """Call `gpt_oss.mxfp4.matmul.sm90` (currently CPU-only correctness op).
 
     Shapes/dtypes must match `examples/custom_ops/kernels/mxfp4_matmul_sm90.mojo`.
     """
 
-    del custom_extensions  # Graph-level `custom_extensions` controls op loading.
+    del (
+        custom_extensions
+    )  # Graph-level `custom_extensions` controls op loading.
 
     a_t = _as_tensor(a)
     b_packed_t = _as_tensor(b_packed)
@@ -68,14 +71,22 @@ def mxfp4_matmul_swiglu(
     n_full = _try_int(n_full_dim)
 
     if bytes_per_block is not None and bytes_per_block != MXFP4_BYTES_PER_BLOCK:
-        raise ValueError(f"MXFP4 packed byte dim must be 16, got {bytes_per_block}")
-    if k is not None and k_blocks is not None and k != k_blocks * MXFP4_VALUES_PER_BLOCK:
+        raise ValueError(
+            f"MXFP4 packed byte dim must be 16, got {bytes_per_block}"
+        )
+    if (
+        k is not None
+        and k_blocks is not None
+        and k != k_blocks * MXFP4_VALUES_PER_BLOCK
+    ):
         raise ValueError("K must be divisible by 32 (MXFP4 block)")
     if n_full is not None and n_full % 2 != 0:
         raise ValueError("N must be even (interleaved gate/up columns)")
 
     if n_full is None:
-        raise ValueError("mxfp4_matmul_swiglu requires a statically known N dimension")
+        raise ValueError(
+            "mxfp4_matmul_swiglu requires a statically known N dimension"
+        )
     out_type = TensorType(
         dtype=a_t.dtype,
         shape=[m_dim, n_full // 2],
@@ -120,7 +131,9 @@ def mxfp4_moe_w1_swiglu(
     p = token_expert_order_t.shape[0]
     bias_cols = _try_int(bias_t.shape[1])
     if bias_cols is None:
-        raise ValueError("mxfp4_moe_w1_swiglu requires a statically known bias width")
+        raise ValueError(
+            "mxfp4_moe_w1_swiglu requires a statically known bias width"
+        )
     i = bias_cols // 2
 
     out_type = TensorType(dtype=DType.bfloat16, shape=[p, i], device=x_t.device)
@@ -175,12 +188,16 @@ def mxfp4_moe_w2_pairs_bf16(
     bias_t = _as_tensor(bias_f32)
 
     if gate_weights_t.dtype != DType.bfloat16:
-        raise ValueError(f"mxfp4_moe_w2_pairs_bf16 expects BF16 gate weights, got {gate_weights_t.dtype}")
+        raise ValueError(
+            f"mxfp4_moe_w2_pairs_bf16 expects BF16 gate weights, got {gate_weights_t.dtype}"
+        )
 
     p_pairs = token_expert_order_t.shape[0]
     d_hidden = x_t.shape[1]
 
-    out_type = TensorType(dtype=DType.bfloat16, shape=[p_pairs, d_hidden], device=x_t.device)
+    out_type = TensorType(
+        dtype=DType.bfloat16, shape=[p_pairs, d_hidden], device=x_t.device
+    )
 
     return ops.custom(
         "mxfp4_moe_w2_pairs_bf16",
@@ -215,7 +232,9 @@ def mxfp4_moe_topk_reduce_bf16(
     t_tokens = x_t.shape[0]
     d_hidden = x_t.shape[1]
 
-    out_type = TensorType(dtype=DType.bfloat16, shape=[t_tokens, d_hidden], device=x_t.device)
+    out_type = TensorType(
+        dtype=DType.bfloat16, shape=[t_tokens, d_hidden], device=x_t.device
+    )
 
     return ops.custom(
         "mxfp4_moe_topk_reduce_bf16",

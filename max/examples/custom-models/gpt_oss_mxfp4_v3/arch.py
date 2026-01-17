@@ -13,8 +13,8 @@ from max.pipelines.lib import (
     TextTokenizer,
 )
 
-from . import weight_adapters
-from .model import GptOssModelModuleV3MXFP4
+from gpt_oss_mxfp4_v3.model import GptOssModelModuleV3MXFP4
+from gpt_oss_mxfp4_v3.weight_adapters import convert_safetensor_state_dict
 
 gpt_oss_module_v3_arch = SupportedArchitecture(
     # Match the built-in ModuleV3 architecture name so this package overrides it when
@@ -36,7 +36,7 @@ gpt_oss_module_v3_arch = SupportedArchitecture(
     multi_gpu_supported=False,
     rope_type=RopeType.yarn,
     weight_adapters={
-        WeightsFormat.safetensors: weight_adapters.convert_safetensor_state_dict,
+        WeightsFormat.safetensors: convert_safetensor_state_dict,
     },
 )
 

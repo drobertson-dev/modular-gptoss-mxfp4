@@ -22,7 +22,7 @@ from gpt_oss_mxfp4_v3.kernels import (
     mxfp4_grouped_matmul_ragged_bf16,
 )
 from gpt_oss_mxfp4_v3.weight_adapters import _mxfp4_pack_bits_u8
-from max.driver import CPU, Accelerator, Tensor
+from max.driver import Buffer, CPU, Accelerator
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import DeviceRef, Graph, TensorType, ops
@@ -61,7 +61,9 @@ def _bf16_round_to_f32(x: np.ndarray) -> np.ndarray:
     return rounded.view(np.float32)
 
 
-def _decode_mxfp4_rows(blocks: np.ndarray, scales_exp: np.ndarray) -> np.ndarray:
+def _decode_mxfp4_rows(
+    blocks: np.ndarray, scales_exp: np.ndarray
+) -> np.ndarray:
     """Decode MXFP4 rows into dense float32.
 
     blocks: [K/32, N, 16] uint8
@@ -111,7 +113,7 @@ def _find_gpt_oss_20b_file() -> Path | None:
 def _bench(
     model,
     device: Accelerator,
-    inputs: list[Tensor],
+    inputs: list[Buffer],
     *,
     warmup: int,
     iters: int,
@@ -249,13 +251,13 @@ def main() -> None:
     mxfp4_model = session.load(graph_mxfp4)
     bf16_model = session.load(graph_bf16)
 
-    a_dev = Tensor.from_numpy(a_f32).to(device)
-    blocks_dev = Tensor.from_numpy(w_blocks).to(device)
-    scales_dev = Tensor.from_numpy(w_scales).to(device)
-    start_dev = Tensor.from_numpy(expert_start).to(device)
-    ids_dev = Tensor.from_numpy(expert_ids).to(device)
-    stats_cpu = Tensor.from_numpy(expert_usage_stats).to(CPU())
-    w_dense_dev = Tensor.from_numpy(w_dense).to(device)
+    a_dev = Buffer.from_numpy(a_f32).to(device)
+    blocks_dev = Buffer.from_numpy(w_blocks).to(device)
+    scales_dev = Buffer.from_numpy(w_scales).to(device)
+    start_dev = Buffer.from_numpy(expert_start).to(device)
+    ids_dev = Buffer.from_numpy(expert_ids).to(device)
+    stats_cpu = Buffer.from_numpy(expert_usage_stats).to(CPU())
+    w_dense_dev = Buffer.from_numpy(w_dense).to(device)
 
     t_mxfp4 = _bench(
         mxfp4_model,
@@ -273,9 +275,9 @@ def main() -> None:
     )
 
     print(f"P={args.P} K={args.K} N={args.N} which={args.which}")
-    print(f"MXFP4 grouped matmul: {t_mxfp4*1e3:.3f} ms/iter")
-    print(f"BF16  grouped matmul: {t_bf16*1e3:.3f} ms/iter")
-    print(f"Speedup (BF16/MXFP4): {t_bf16/t_mxfp4:.2f}x")
+    print(f"MXFP4 grouped matmul: {t_mxfp4 * 1e3:.3f} ms/iter")
+    print(f"BF16  grouped matmul: {t_bf16 * 1e3:.3f} ms/iter")
+    print(f"Speedup (BF16/MXFP4): {t_bf16 / t_mxfp4:.2f}x")
 
     if args.check:
         out_mxfp4 = (
@@ -286,13 +288,15 @@ def main() -> None:
             .to_numpy()
         )
         out_bf16 = (
-            bf16_model.execute(a_dev, w_dense_dev, start_dev, ids_dev, stats_cpu)[
-                0
-            ]
+            bf16_model.execute(
+                a_dev, w_dense_dev, start_dev, ids_dev, stats_cpu
+            )[0]
             .to(CPU())
             .to_numpy()
         )
-        diff = np.max(np.abs(out_mxfp4.astype(np.float32) - out_bf16.astype(np.float32)))
+        diff = np.max(
+            np.abs(out_mxfp4.astype(np.float32) - out_bf16.astype(np.float32))
+        )
         print(f"max|MXFP4-BF16| = {diff}")
 
 

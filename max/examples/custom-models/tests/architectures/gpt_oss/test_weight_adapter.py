@@ -44,11 +44,12 @@ def test_moe_expert_biases_cast_to_f32() -> None:
     mapped = weight_adapters.convert_safetensor_state_dict(state)
 
     assert (
-        mapped["language_model.layers.0.mlp.experts.gate_up_proj_bias"].cast_dtype
+        mapped[
+            "language_model.layers.0.mlp.experts.gate_up_proj_bias"
+        ].cast_dtype
         == DType.float32
     )
     assert (
         mapped["language_model.layers.0.mlp.experts.down_proj_bias"].cast_dtype
         == DType.float32
     )
-

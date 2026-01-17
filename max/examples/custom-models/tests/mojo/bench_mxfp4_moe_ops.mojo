@@ -31,7 +31,8 @@ from tensor import Input, IOSpec, ManagedTensorSlice, Output, StaticTensorSpec
 @fieldwise_init
 struct Tensor[
     dtype: DType,
-    rank: Int, //,
+    rank: Int,
+    //,
     io_spec: IOSpec,
     static_spec: StaticTensorSpec[dtype, rank],
 ](ImplicitlyCopyable):

@@ -15,7 +15,9 @@ MXFP4_BYTES_PER_BLOCK = 16
 def get_mxfp4_kernels_path() -> Path:
     """Return the Mojo package path containing the registered MXFP4 custom ops."""
     examples_dir = Path(__file__).resolve().parents[2]
-    return examples_dir / "custom_ops" / "kernels"
+    # Use a minimal Mojo package to avoid importing unrelated example kernels
+    # from `custom_ops/kernels/__init__.mojo`.
+    return examples_dir / "custom_ops" / "mxfp4_grouped_kernels"
 
 
 def _as_tensor(value: Any) -> TensorValue:

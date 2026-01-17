@@ -7,9 +7,6 @@ behavior lives in the MoE layer and Mojo custom ops, not the config.
 
 from __future__ import annotations
 
-from max.pipelines.architectures.gpt_oss.model_config import (
-    GptOssConfig,
-    GptOssConfigBase,
-)
+from max.pipelines.architectures.gpt_oss.model_config import GptOssConfig
 
-__all__ = ["GptOssConfig", "GptOssConfigBase"]
+__all__ = ["GptOssConfig"]

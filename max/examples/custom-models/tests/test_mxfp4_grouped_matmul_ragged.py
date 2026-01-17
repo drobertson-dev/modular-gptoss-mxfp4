@@ -15,11 +15,13 @@ from gpt_oss_mxfp4_v3.kernels import (
     mxfp4_grouped_matmul_ragged_bf16,
 )
 from gpt_oss_mxfp4_v3.weight_adapters import _mxfp4_pack_bits_u8
-from max.driver import CPU, Accelerator, Tensor
+from max.driver import Buffer, CPU, Accelerator
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import DeviceRef, Graph, TensorType, ops
 from safetensors import safe_open
+
+Tensor = Buffer
 
 FP4_VALUES = np.array(
     [
@@ -53,7 +55,9 @@ def _bf16_round_to_f32(x: np.ndarray) -> np.ndarray:
     return rounded.view(np.float32)
 
 
-def _decode_mxfp4_rows(blocks: np.ndarray, scales_exp: np.ndarray) -> np.ndarray:
+def _decode_mxfp4_rows(
+    blocks: np.ndarray, scales_exp: np.ndarray
+) -> np.ndarray:
     """Decode MXFP4 rows into dense float32.
 
     Args:
@@ -136,8 +140,12 @@ def test_mxfp4_grouped_matmul_single_expert_matches_reference(P: int) -> None:
     k_blocks = K // MXFP4_VALUES_PER_BLOCK
 
     with safe_open(str(ckpt), framework="numpy") as f:
-        w_blocks_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_blocks")
-        w_scales_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_scales")
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
 
     # Prepack for kernel access: [E, N, K/32, 16] -> [E, K/32, N, 16]
     # Then apply Hopper `_pack_bits` so the kernel can use the fast bit-unpack
@@ -199,14 +207,18 @@ def test_mxfp4_grouped_matmul_single_expert_matches_reference(P: int) -> None:
         graph.output(ops.cast(out_bf16, DType.float32))
 
     model = session.load(graph)
-    got = model.execute(
-        Tensor.from_numpy(a_f32).to(device),
-        Tensor.from_numpy(w_blocks).to(device),
-        Tensor.from_numpy(w_scales).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(CPU()),
-    )[0].to(CPU()).to_numpy()
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     assert got.shape == ref.shape
     assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
@@ -235,8 +247,12 @@ def test_mxfp4_grouped_matmul_two_experts_segments_match_reference() -> None:
     k_blocks = K // MXFP4_VALUES_PER_BLOCK
 
     with safe_open(str(ckpt), framework="numpy") as f:
-        w_blocks_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_blocks")
-        w_scales_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_scales")
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
 
     w_blocks_raw = np.ascontiguousarray(
         np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
@@ -290,14 +306,18 @@ def test_mxfp4_grouped_matmul_two_experts_segments_match_reference() -> None:
         graph.output(ops.cast(out_bf16, DType.float32))
 
     model = session.load(graph)
-    got = model.execute(
-        Tensor.from_numpy(a_f32).to(device),
-        Tensor.from_numpy(w_blocks).to(device),
-        Tensor.from_numpy(w_scales).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(CPU()),
-    )[0].to(CPU()).to_numpy()
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     assert got.shape == ref.shape
     assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
@@ -329,8 +349,12 @@ def test_mxfp4_grouped_matmul_multi_bn_tiles_matches_reference() -> None:
     k_blocks = K // MXFP4_VALUES_PER_BLOCK
 
     with safe_open(str(ckpt), framework="numpy") as f:
-        w_blocks_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_blocks")
-        w_scales_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_scales")
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
 
     w_blocks_raw = np.ascontiguousarray(
         np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
@@ -344,7 +368,9 @@ def test_mxfp4_grouped_matmul_multi_bn_tiles_matches_reference() -> None:
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
-    w_dense = _bf16_round_to_f32(_decode_mxfp4_rows(w_blocks_raw[0], w_scales[0]))
+    w_dense = _bf16_round_to_f32(
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+    )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
     expert_start = np.array([0, P, P], dtype=np.uint32)
@@ -379,14 +405,18 @@ def test_mxfp4_grouped_matmul_multi_bn_tiles_matches_reference() -> None:
         graph.output(ops.cast(out_bf16, DType.float32))
 
     model = session.load(graph)
-    got = model.execute(
-        Tensor.from_numpy(a_f32).to(device),
-        Tensor.from_numpy(w_blocks).to(device),
-        Tensor.from_numpy(w_scales).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(CPU()),
-    )[0].to(CPU()).to_numpy()
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     assert got.shape == ref.shape
     assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
@@ -419,8 +449,12 @@ def test_mxfp4_grouped_matmul_strided_weight_views_match_reference() -> None:
     k_blocks = K // MXFP4_VALUES_PER_BLOCK
 
     with safe_open(str(ckpt), framework="numpy") as f:
-        w_blocks_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_blocks")
-        w_scales_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_scales")
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
 
     w_blocks_raw = np.ascontiguousarray(
         np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
@@ -468,8 +502,13 @@ def test_mxfp4_grouped_matmul_strided_weight_views_match_reference() -> None:
             graph.inputs
         )
         a_bf16_in = ops.cast(a_in.tensor, DType.bfloat16)
-        blocks_view = ops.slice_tensor(blocks_big_in.tensor, (slice(None), slice(None), slice(0, N), slice(None)))
-        scales_view = ops.slice_tensor(scales_big_in.tensor, (slice(None), slice(None), slice(0, N)))
+        blocks_view = ops.slice_tensor(
+            blocks_big_in.tensor,
+            (slice(None), slice(None), slice(0, N), slice(None)),
+        )
+        scales_view = ops.slice_tensor(
+            scales_big_in.tensor, (slice(None), slice(None), slice(0, N))
+        )
 
         out_bf16 = mxfp4_grouped_matmul_ragged_bf16(
             a_bf16_in,
@@ -483,14 +522,18 @@ def test_mxfp4_grouped_matmul_strided_weight_views_match_reference() -> None:
         graph.output(ops.cast(out_bf16, DType.float32))
 
     model = session.load(graph)
-    got = model.execute(
-        Tensor.from_numpy(a_f32).to(device),
-        Tensor.from_numpy(w_blocks_big).to(device),
-        Tensor.from_numpy(w_scales_big).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(CPU()),
-    )[0].to(CPU()).to_numpy()
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks_big).to(device),
+            Tensor.from_numpy(w_scales_big).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     assert got.shape == ref.shape
     assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
@@ -518,8 +561,12 @@ def test_mxfp4_grouped_matmul_large_kblocks_matches_reference() -> None:
     k_blocks = K // MXFP4_VALUES_PER_BLOCK
 
     with safe_open(str(ckpt), framework="numpy") as f:
-        w_blocks_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_blocks")
-        w_scales_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_scales")
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
 
     w_blocks_raw = np.ascontiguousarray(
         np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
@@ -533,7 +580,9 @@ def test_mxfp4_grouped_matmul_large_kblocks_matches_reference() -> None:
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
-    w_dense = _bf16_round_to_f32(_decode_mxfp4_rows(w_blocks_raw[0], w_scales[0]))
+    w_dense = _bf16_round_to_f32(
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+    )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
     expert_start = np.array([0, P], dtype=np.uint32)
@@ -568,14 +617,18 @@ def test_mxfp4_grouped_matmul_large_kblocks_matches_reference() -> None:
         graph.output(ops.cast(out_bf16, DType.float32))
 
     model = session.load(graph)
-    got = model.execute(
-        Tensor.from_numpy(a_f32).to(device),
-        Tensor.from_numpy(w_blocks).to(device),
-        Tensor.from_numpy(w_scales).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(CPU()),
-    )[0].to(CPU()).to_numpy()
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     assert got.shape == ref.shape
     assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
@@ -603,8 +656,12 @@ def test_mxfp4_grouped_matmul_small_m_many_ktiles_matches_reference() -> None:
     k_blocks = K // MXFP4_VALUES_PER_BLOCK
 
     with safe_open(str(ckpt), framework="numpy") as f:
-        w_blocks_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_blocks")
-        w_scales_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_scales")
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
 
     w_blocks_raw = np.ascontiguousarray(
         np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
@@ -618,7 +675,9 @@ def test_mxfp4_grouped_matmul_small_m_many_ktiles_matches_reference() -> None:
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
-    w_dense = _bf16_round_to_f32(_decode_mxfp4_rows(w_blocks_raw[0], w_scales[0]))
+    w_dense = _bf16_round_to_f32(
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+    )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
     expert_start = np.array([0, P], dtype=np.uint32)
@@ -653,14 +712,18 @@ def test_mxfp4_grouped_matmul_small_m_many_ktiles_matches_reference() -> None:
         graph.output(ops.cast(out_bf16, DType.float32))
 
     model = session.load(graph)
-    got = model.execute(
-        Tensor.from_numpy(a_f32).to(device),
-        Tensor.from_numpy(w_blocks).to(device),
-        Tensor.from_numpy(w_scales).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(CPU()),
-    )[0].to(CPU()).to_numpy()
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     assert got.shape == ref.shape
     assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
@@ -770,8 +833,12 @@ def test_mxfp4_grouped_matmul_max_m1_wgmma_matches_reference() -> None:
     k_blocks = K // MXFP4_VALUES_PER_BLOCK
 
     with safe_open(str(ckpt), framework="numpy") as f:
-        w_blocks_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_blocks")
-        w_scales_all = f.get_tensor("model.layers.0.mlp.experts.down_proj_scales")
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
 
     w_blocks_raw = np.ascontiguousarray(
         np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
@@ -785,7 +852,9 @@ def test_mxfp4_grouped_matmul_max_m1_wgmma_matches_reference() -> None:
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
-    w_dense = _bf16_round_to_f32(_decode_mxfp4_rows(w_blocks_raw[0], w_scales[0]))
+    w_dense = _bf16_round_to_f32(
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+    )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
     expert_start = np.array([0, P], dtype=np.uint32)
@@ -820,14 +889,18 @@ def test_mxfp4_grouped_matmul_max_m1_wgmma_matches_reference() -> None:
         graph.output(ops.cast(out_bf16, DType.float32))
 
     model = session.load(graph)
-    got = model.execute(
-        Tensor.from_numpy(a_f32).to(device),
-        Tensor.from_numpy(w_blocks).to(device),
-        Tensor.from_numpy(w_scales).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(CPU()),
-    )[0].to(CPU()).to_numpy()
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     assert got.shape == ref.shape
     assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
@@ -859,8 +932,12 @@ def test_mxfp4_grouped_matmul_gate_up_wgmma_matches_reference() -> None:
     k_blocks = K // MXFP4_VALUES_PER_BLOCK
 
     with safe_open(str(ckpt), framework="numpy") as f:
-        w_blocks_all = f.get_tensor("model.layers.0.mlp.experts.gate_up_proj_blocks")
-        w_scales_all = f.get_tensor("model.layers.0.mlp.experts.gate_up_proj_scales")
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.gate_up_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.gate_up_proj_scales"
+        )
 
     w_blocks_raw = np.ascontiguousarray(
         np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
@@ -874,7 +951,9 @@ def test_mxfp4_grouped_matmul_gate_up_wgmma_matches_reference() -> None:
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
-    w_dense = _bf16_round_to_f32(_decode_mxfp4_rows(w_blocks_raw[0], w_scales[0]))
+    w_dense = _bf16_round_to_f32(
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+    )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
     expert_start = np.array([0, P], dtype=np.uint32)
@@ -909,14 +988,18 @@ def test_mxfp4_grouped_matmul_gate_up_wgmma_matches_reference() -> None:
         graph.output(ops.cast(out_bf16, DType.float32))
 
     model = session.load(graph)
-    got = model.execute(
-        Tensor.from_numpy(a_f32).to(device),
-        Tensor.from_numpy(w_blocks).to(device),
-        Tensor.from_numpy(w_scales).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(CPU()),
-    )[0].to(CPU()).to_numpy()
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     assert got.shape == ref.shape
     assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
@@ -955,7 +1038,9 @@ def test_mxfp4_grouped_matmul_synthetic_many_ktiles_matches_reference() -> None:
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
-    w_dense = _bf16_round_to_f32(_decode_mxfp4_rows(w_blocks_raw[0], w_scales[0]))
+    w_dense = _bf16_round_to_f32(
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+    )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
     expert_start = np.array([0, P], dtype=np.uint32)
@@ -990,14 +1075,18 @@ def test_mxfp4_grouped_matmul_synthetic_many_ktiles_matches_reference() -> None:
         graph.output(ops.cast(out_bf16, DType.float32))
 
     model = session.load(graph)
-    got = model.execute(
-        Tensor.from_numpy(a_f32).to(device),
-        Tensor.from_numpy(w_blocks).to(device),
-        Tensor.from_numpy(w_scales).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(CPU()),
-    )[0].to(CPU()).to_numpy()
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     assert got.shape == ref.shape
     assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (

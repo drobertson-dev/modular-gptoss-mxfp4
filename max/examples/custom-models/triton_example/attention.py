@@ -54,10 +54,15 @@ def _attn_fwd(
     acc = tl.zeros([BLOCK_M, HEAD_DIM], dtype=tl.float32)
     # load scales
     qk_scale = sm_scale
-    q = Q.load([off_z, off_h, start_m * BLOCK_M, 0]).reshape([BLOCK_M, HEAD_DIM])
+    q = Q.load([off_z, off_h, start_m * BLOCK_M, 0]).reshape(
+        [BLOCK_M, HEAD_DIM]
+    )
 
     if BANDWIDTH:
-        lo, hi = tl.maximum(start_q, start_q + start_m * BLOCK_M - BANDWIDTH), start_q + (start_m + 1) * BLOCK_M
+        lo, hi = (
+            tl.maximum(start_q, start_q + start_m * BLOCK_M - BANDWIDTH),
+            start_q + (start_m + 1) * BLOCK_M,
+        )
     else:
         lo, hi = start_q, start_q + (start_m + 1) * BLOCK_M
 
@@ -67,7 +72,9 @@ def _attn_fwd(
         mask = (start_n + offs_n)[None, :] > (start_q + offs_m)[:, None]
 
         if BANDWIDTH:
-            too_old = (start_n + offs_n[None, :]) < (start_q + offs_m[:, None] - BANDWIDTH + 1)
+            too_old = (start_n + offs_n[None, :]) < (
+                start_q + offs_m[:, None] - BANDWIDTH + 1
+            )
             mask = mask | too_old
 
         k = K.load([off_z, off_h, start_n, 0]).reshape([BLOCK_N, HEAD_DIM]).T
@@ -121,13 +128,19 @@ class _attention(torch.autograd.Function):
         m_pad_size = BLOCK_M - n_ctx % BLOCK_M if n_ctx % BLOCK_M != 0 else 0
         # pad q to multiple of its block size in the n_ctx dimension (-2)
         q = torch.nn.functional.pad(q, (0, 0, 0, m_pad_size))
-        n_pad_size = BLOCK_N - n_kv_ctx % BLOCK_N if n_kv_ctx % BLOCK_N != 0 else 0
+        n_pad_size = (
+            BLOCK_N - n_kv_ctx % BLOCK_N if n_kv_ctx % BLOCK_N != 0 else 0
+        )
         # pad k and v to multiple of their block size in the n_kv_ctx dimension
         k = torch.nn.functional.pad(k, (0, 0, 0, n_pad_size))
         v = torch.nn.functional.pad(v, (0, 0, 0, n_pad_size))
 
         o = torch.empty_like(q)
-        M = torch.empty((bs, n_heads, n_ctx + m_pad_size), device=q.device, dtype=torch.float32)
+        M = torch.empty(
+            (bs, n_heads, n_ctx + m_pad_size),
+            device=q.device,
+            dtype=torch.float32,
+        )
         grid = (triton.cdiv(n_ctx, BLOCK_M), bs * n_heads, 1)
         _attn_fwd[grid](
             TensorDescriptor.from_tensor(q, [1, 1, BLOCK_M, HEAD_DIM_K]),
@@ -169,10 +182,18 @@ def attention_ref(
     sliding_window: int | None = None,
     start_q: torch.LongTensor = 0,
 ):
-    batch_size, num_queries, num_key_value_heads, num_key_value_groups, head_dim = query.shape
+    (
+        batch_size,
+        num_queries,
+        num_key_value_heads,
+        num_key_value_groups,
+        head_dim,
+    ) = query.shape
     batch_size, num_keys, num_key_value_heads, head_dim = key.shape
 
-    sinks = sinks.view(1, num_key_value_heads, num_key_value_groups, 1, 1).float()
+    sinks = sinks.view(
+        1, num_key_value_heads, num_key_value_groups, 1, 1
+    ).float()
     key = key.unsqueeze(3)
     value = value.unsqueeze(3)
 
@@ -182,10 +203,15 @@ def attention_ref(
     mask = mask.float().masked_fill(mask, float("-inf"))
 
     if sliding_window:
-        too_old = pos_keys[None, :] < (pos_queries[:, None] - sliding_window + 1)
+        too_old = pos_keys[None, :] < (
+            pos_queries[:, None] - sliding_window + 1
+        )
         mask.masked_fill_(too_old, float("-inf"))
 
-    logits = torch.einsum("bqhmd,bkhmd->bhmqk", query.float(), key.float()) * sm_scale
+    logits = (
+        torch.einsum("bqhmd,bkhmd->bhmqk", query.float(), key.float())
+        * sm_scale
+    )
     logits = logits + mask[None, None, None, :, :]
 
     logits_max = torch.max(logits, dim=-1, keepdim=True).values
@@ -197,7 +223,11 @@ def attention_ref(
 
     output = torch.einsum("bhmqk,bkhmd->bqhmd", scores, value.float())
 
-    output = output.reshape(batch_size, num_queries, num_key_value_heads * num_key_value_groups * head_dim).bfloat16()
+    output = output.reshape(
+        batch_size,
+        num_queries,
+        num_key_value_heads * num_key_value_groups * head_dim,
+    ).bfloat16()
     return output
 
 
@@ -224,10 +254,32 @@ def test_eq(
     if num_queries > num_keys:
         pytest.skip("too many queries")
 
-    q = torch.randn(batch_size, num_queries, num_key_value_heads, num_key_value_groups, head_dim).bfloat16().cuda()
-    k = torch.randn(batch_size, num_keys, num_key_value_heads, head_dim).bfloat16().cuda()
-    v = torch.randn(batch_size, num_keys, num_key_value_heads, head_dim).bfloat16().cuda()
-    sinks = torch.randn(num_key_value_heads * num_key_value_groups).bfloat16().cuda()
+    q = (
+        torch.randn(
+            batch_size,
+            num_queries,
+            num_key_value_heads,
+            num_key_value_groups,
+            head_dim,
+        )
+        .bfloat16()
+        .cuda()
+    )
+    k = (
+        torch.randn(batch_size, num_keys, num_key_value_heads, head_dim)
+        .bfloat16()
+        .cuda()
+    )
+    v = (
+        torch.randn(batch_size, num_keys, num_key_value_heads, head_dim)
+        .bfloat16()
+        .cuda()
+    )
+    sinks = (
+        torch.randn(num_key_value_heads * num_key_value_groups)
+        .bfloat16()
+        .cuda()
+    )
 
     start_q = torch.tensor([start_q], dtype=torch.int32).cuda()
 
