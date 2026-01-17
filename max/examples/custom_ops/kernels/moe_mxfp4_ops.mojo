@@ -1852,7 +1852,7 @@ struct MXFP4MoEW1SwiGlu:
         comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
         comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
         comptime smem_use = pack1_off + pack_bytes
-        gpu_ctx.enqueue_function_checked[w1_kernel, w1_kernel](
+        gpu_ctx.enqueue_function[w1_kernel, w1_kernel](
             x_dev,
             T,
             D,
@@ -1992,7 +1992,7 @@ struct MXFP4MoEW2Scatter:
         comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
         comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
         comptime smem_use = pack1_off + pack_bytes
-        gpu_ctx.enqueue_function_checked[w2_kernel, w2_kernel](
+        gpu_ctx.enqueue_function[w2_kernel, w2_kernel](
             h_sorted_dev,
             P,
             I,
@@ -2127,7 +2127,7 @@ struct MXFP4MoEW2Pairs:
         comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
         comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
         comptime smem_use = pack1_off + pack_bytes
-        gpu_ctx.enqueue_function_checked[w2_kernel, w2_kernel](
+        gpu_ctx.enqueue_function[w2_kernel, w2_kernel](
             h_sorted_dev,
             P,
             I,
@@ -2273,7 +2273,7 @@ struct MXFP4MoEW2PairsBF16:
         comptime pack0_off = ((b1_off + b_bytes + 255) // 256) * 256
         comptime pack1_off = ((pack0_off + pack_bytes + 255) // 256) * 256
         comptime smem_use = pack1_off + pack_bytes
-        gpu_ctx.enqueue_function_checked[w2_kernel, w2_kernel](
+        gpu_ctx.enqueue_function[w2_kernel, w2_kernel](
             h_sorted_dev,
             P,
             I,
@@ -2358,7 +2358,7 @@ struct MXFP4MoETopKReduce:
         )
 
         comptime reduce_kernel = moe_topk_reduce_pairs[BN=256]
-        gpu_ctx.enqueue_function_checked[reduce_kernel, reduce_kernel](
+        gpu_ctx.enqueue_function[reduce_kernel, reduce_kernel](
             y_pairs_dev,
             P,
             y_dev,
@@ -2429,7 +2429,7 @@ struct MXFP4MoETopKReduceBF16:
         )
 
         comptime reduce_kernel = moe_topk_reduce_pairs_bf16[BN=256]
-        gpu_ctx.enqueue_function_checked[reduce_kernel, reduce_kernel](
+        gpu_ctx.enqueue_function[reduce_kernel, reduce_kernel](
             y_pairs_dev,
             P,
             y_dev,

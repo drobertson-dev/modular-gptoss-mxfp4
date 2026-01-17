@@ -43,8 +43,12 @@ class GptOssTextModel(Module):
         super().__init__()
         self.devices = config.devices
 
-        assert config.rope_scaling is not None, "RoPE scaling is required for GPT-OSS models"
-        assert isinstance(config.rope_scaling, YarnScalingParams), "Only YARN scaling is supported for GPT-OSS models"
+        assert config.rope_scaling is not None, (
+            "RoPE scaling is required for GPT-OSS models"
+        )
+        assert isinstance(config.rope_scaling, YarnScalingParams), (
+            "Only YARN scaling is supported for GPT-OSS models"
+        )
         yarn_scaling_params: YarnScalingParams = config.rope_scaling
 
         rope = YarnRotaryEmbedding(
@@ -162,8 +166,12 @@ class GptOss(Module):
         input_row_offsets: Tensor,
         *variadic_args,
     ) -> tuple[Tensor, ...]:
-        kv_collection = _unflatten_kv_inputs(self.config, self.kv_manager, variadic_args)
-        return self.language_model(tokens, kv_collection[0], return_n_logits, input_row_offsets)
+        kv_collection = _unflatten_kv_inputs(
+            self.config, self.kv_manager, variadic_args
+        )
+        return self.language_model(
+            tokens, kv_collection[0], return_n_logits, input_row_offsets
+        )
 
 
 def _unflatten_kv_inputs(

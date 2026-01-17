@@ -30,12 +30,21 @@ FP4_VALUES = [
 PARAM_NAME_MAP = (
     {f"block.{n}.mlp.mlp1_bias": f"block.{n}.mlp.mlp1_bias" for n in range(36)}
     | {
-        f"block.{n}.mlp.mlp1_weight": (f"block.{n}.mlp.mlp1_weight.blocks", f"block.{n}.mlp.mlp1_weight.scales")
+        f"block.{n}.mlp.mlp1_weight": (
+            f"block.{n}.mlp.mlp1_weight.blocks",
+            f"block.{n}.mlp.mlp1_weight.scales",
+        )
         for n in range(36)
     }
-    | {f"block.{n}.mlp.mlp2_bias": f"block.{n}.mlp.mlp2_bias" for n in range(36)}
     | {
-        f"block.{n}.mlp.mlp2_weight": (f"block.{n}.mlp.mlp2_weight.blocks", f"block.{n}.mlp.mlp2_weight.scales")
+        f"block.{n}.mlp.mlp2_bias": f"block.{n}.mlp.mlp2_bias"
+        for n in range(36)
+    }
+    | {
+        f"block.{n}.mlp.mlp2_weight": (
+            f"block.{n}.mlp.mlp2_weight.blocks",
+            f"block.{n}.mlp.mlp2_weight.scales",
+        )
         for n in range(36)
     }
 )
@@ -43,15 +52,25 @@ PARAM_NAME_MAP = (
 
 class Checkpoint:
     def __init__(self, path: str, device: torch.device):
-        device_str = device.type if device.index is None else device.type + ":" + str(device.index)
+        device_str = (
+            device.type
+            if device.index is None
+            else device.type + ":" + str(device.index)
+        )
         self.device_str = device_str
 
         # Read from all files ending with .safetensors in the checkpoint directory
-        safetensor_files = [os.path.join(path, fname) for fname in os.listdir(path) if fname.endswith(".safetensors")]
+        safetensor_files = [
+            os.path.join(path, fname)
+            for fname in os.listdir(path)
+            if fname.endswith(".safetensors")
+        ]
         # Build a mapping from tensor name to (file, key)
         tensor_name_to_file = {}
         for safetensor_file in safetensor_files:
-            with safe_open(safetensor_file, framework="pt", device=device_str) as f:
+            with safe_open(
+                safetensor_file, framework="pt", device=device_str
+            ) as f:
                 for key in f.keys():
                     tensor_name_to_file[key] = safetensor_file
 
@@ -61,14 +80,22 @@ class Checkpoint:
         match PARAM_NAME_MAP.get(name, name):
             case (blocks_name, scales_name):
                 # MoE weights: are in block-based MXFP4 format
-                return self._get_mxfp4_tensor(blocks_name, scales_name, dtype=torch.bfloat16)
+                return self._get_mxfp4_tensor(
+                    blocks_name, scales_name, dtype=torch.bfloat16
+                )
             case tensor_name:
                 # MoE biases and other weights
                 return self._get_tensor(tensor_name)
 
     def _get_tensor(self, name: str) -> str:
-        assert name in self.tensor_name_to_file, f"Tensor {name} not found in checkpoint."
-        with safe_open(self.tensor_name_to_file[name], framework="pt", device=self.device_str) as f:
+        assert name in self.tensor_name_to_file, (
+            f"Tensor {name} not found in checkpoint."
+        )
+        with safe_open(
+            self.tensor_name_to_file[name],
+            framework="pt",
+            device=self.device_str,
+        ) as f:
             return f.get_tensor(name)
 
     def _get_mxfp4_tensor(
@@ -79,13 +106,19 @@ class Checkpoint:
         dtype: torch.dtype = torch.bfloat16,
         rows_per_chunk: int = 16384 * 512,
     ) -> torch.Tensor:
-        assert blocks_name in self.tensor_name_to_file, f"Blocks tensor {blocks_name} not found in checkpoint."
-        assert scales_name in self.tensor_name_to_file, f"Scales tensor {scales_name} not found in checkpoint."
+        assert blocks_name in self.tensor_name_to_file, (
+            f"Blocks tensor {blocks_name} not found in checkpoint."
+        )
+        assert scales_name in self.tensor_name_to_file, (
+            f"Scales tensor {scales_name} not found in checkpoint."
+        )
 
         blocks = self._get_tensor(blocks_name)
         scales = self._get_tensor(scales_name).to(torch.int32) - 127
 
-        assert blocks.shape[:-1] == scales.shape, f"{blocks.shape=} does not match {scales.shape=}"
+        assert blocks.shape[:-1] == scales.shape, (
+            f"{blocks.shape=} does not match {scales.shape=}"
+        )
 
         lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
 
@@ -114,24 +147,39 @@ class Checkpoint:
             torch.ldexp(sub, exp, out=sub)
             del idx_lo, idx_hi, blk, exp
 
-        return out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
+        return out.reshape(*prefix_shape, G, B * 2).view(
+            *prefix_shape, G * B * 2
+        )
 
-    def _get_mxfp4_tensor_copy(self, blocks_name: str, scales_name: str, dtype: torch.dtype = torch.bfloat16):
+    def _get_mxfp4_tensor_copy(
+        self,
+        blocks_name: str,
+        scales_name: str,
+        dtype: torch.dtype = torch.bfloat16,
+    ):
         "short version that uses a lot of memory"
 
         loaded_blocks = self._get_tensor(blocks_name)
         # Split it into low and high nibbles, upcast to bytes, and interleave (for swiglu)
         loaded_blocks_lo = loaded_blocks & 0x0F
         loaded_blocks_hi = loaded_blocks >> 4
-        loaded_blocks = torch.stack((loaded_blocks_lo, loaded_blocks_hi), dim=-1)
-        loaded_blocks = loaded_blocks.view(*loaded_blocks.shape[:-2], loaded_blocks.shape[-2] * 2)
+        loaded_blocks = torch.stack(
+            (loaded_blocks_lo, loaded_blocks_hi), dim=-1
+        )
+        loaded_blocks = loaded_blocks.view(
+            *loaded_blocks.shape[:-2], loaded_blocks.shape[-2] * 2
+        )
 
         loaded_scales = self._get_tensor(scales_name)
         # Upcast to int32 and subtract bias
         loaded_scales = loaded_scales.int() - 127
 
         # Convert MXFP4 numbers into target dtype
-        fp4_values = torch.tensor(FP4_VALUES, dtype=dtype, device=self.device_str)
-        loaded_tensor = torch.ldexp(fp4_values[loaded_blocks.int()], loaded_scales.unsqueeze(-1))
+        fp4_values = torch.tensor(
+            FP4_VALUES, dtype=dtype, device=self.device_str
+        )
+        loaded_tensor = torch.ldexp(
+            fp4_values[loaded_blocks.int()], loaded_scales.unsqueeze(-1)
+        )
         loaded_tensor = loaded_tensor.view(*loaded_tensor.shape[:-2], -1)
         return loaded_tensor

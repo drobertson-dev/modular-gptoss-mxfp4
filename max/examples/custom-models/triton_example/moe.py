@@ -20,12 +20,16 @@ from triton_kernels.tensor_details.layout import (
 
 def quantize_mx4(w):
     w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
-    w = convert_layout(wrap_torch_tensor(w, dtype=FP4), HopperMXValueLayout, mx_axis=1)
+    w = convert_layout(
+        wrap_torch_tensor(w, dtype=FP4), HopperMXValueLayout, mx_axis=1
+    )
     w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
     return w, w_scale
 
 
-def swiglu(x, alpha: float = 1.702, limit: float = 7.0, interleaved: bool = True):
+def swiglu(
+    x, alpha: float = 1.702, limit: float = 7.0, interleaved: bool = True
+):
     if interleaved:
         x_glu, x_linear = x[..., ::2], x[..., 1::2]
     else:
@@ -55,28 +59,58 @@ def moe(
     if x.numel() == 0:
         return x
 
-    pc1 = PrecisionConfig(weight_scale=w1_mx, flex_ctx=FlexCtx(rhs_data=InFlexData()))
-    pc2 = PrecisionConfig(weight_scale=w2_mx, flex_ctx=FlexCtx(rhs_data=InFlexData()))
+    pc1 = PrecisionConfig(
+        weight_scale=w1_mx, flex_ctx=FlexCtx(rhs_data=InFlexData())
+    )
+    pc2 = PrecisionConfig(
+        weight_scale=w2_mx, flex_ctx=FlexCtx(rhs_data=InFlexData())
+    )
     pcg = PrecisionConfig(flex_ctx=FlexCtx(rhs_data=InFlexData()))
 
     with record_function("wg"):
         logits = matmul_ogs(x, wg, bg, precision_config=pcg)
     with record_function("routing"):
-        rdata, gather_indx, scatter_indx = routing(logits, experts_per_token, simulated_ep=1)
+        rdata, gather_indx, scatter_indx = routing(
+            logits, experts_per_token, simulated_ep=1
+        )
 
     if fused_act:
         assert interleaved, "Fused activation requires interleaved weights"
         with record_function("w1+swiglu"):
             act = FusedActivation(
-                FnSpecs("swiglu", triton_kernels.swiglu.swiglu_fn, ("alpha", "limit")), (1.702, swiglu_limit), 2
+                FnSpecs(
+                    "swiglu",
+                    triton_kernels.swiglu.swiglu_fn,
+                    ("alpha", "limit"),
+                ),
+                (1.702, swiglu_limit),
+                2,
             )
-            x = matmul_ogs(x, w1, b1, rdata, gather_indx=gather_indx, precision_config=pc1, fused_activation=act)
+            x = matmul_ogs(
+                x,
+                w1,
+                b1,
+                rdata,
+                gather_indx=gather_indx,
+                precision_config=pc1,
+                fused_activation=act,
+            )
     else:
         with record_function("w1"):
-            x = matmul_ogs(x, w1, b1, rdata, gather_indx=gather_indx, precision_config=pc1)
+            x = matmul_ogs(
+                x, w1, b1, rdata, gather_indx=gather_indx, precision_config=pc1
+            )
         with record_function("swiglu"):
             x = swiglu(x, limit=swiglu_limit, interleaved=interleaved)
 
     with record_function("w2"):
-        x = matmul_ogs(x, w2, b2, rdata, scatter_indx=scatter_indx, precision_config=pc2, gammas=rdata.gate_scal)
+        x = matmul_ogs(
+            x,
+            w2,
+            b2,
+            rdata,
+            scatter_indx=scatter_indx,
+            precision_config=pc2,
+            gammas=rdata.gate_scal,
+        )
     return x

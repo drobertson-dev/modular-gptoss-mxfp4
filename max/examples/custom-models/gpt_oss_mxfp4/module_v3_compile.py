@@ -16,7 +16,8 @@ from typing import Any
 from max import graph
 from max.driver import CPU, DLPackArray
 from max.experimental import functional as F
-from max.experimental.tensor import Tensor, _session
+from max.experimental.realization_context import GraphRealizationContext, _session
+from max.experimental.tensor import Tensor, realization_context
 from max.graph import Graph, TensorType
 from max.nn.module_v3.module import Module
 
@@ -29,13 +30,16 @@ def compile_with_custom_extensions(
 ) -> Callable[..., Any]:
     """Compile a ModuleV3 `Module` with `custom_extensions` enabled."""
 
-    kernel_paths = [p if isinstance(p, Path) else Path(p) for p in custom_extensions]
+    kernel_paths = [
+        p if isinstance(p, Path) else Path(p) for p in custom_extensions
+    ]
 
-    with Graph(
+    graph_ = Graph(
         type(module).__qualname__,
         input_types=input_types,
         custom_extensions=kernel_paths,
-    ) as graph_:
+    )
+    with realization_context(GraphRealizationContext(graph_)) as ctx, ctx:
         inputs = [Tensor.from_graph_value(v) for v in graph_.inputs]
 
         def as_weight(name: str, tensor: Tensor):  # noqa: ANN202

@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from gpt_oss_mxfp4.kernels import get_mxfp4_kernels_path
-from max.driver import CPU, Accelerator, Tensor
+from max.driver import CPU, Accelerator, Buffer
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import DeviceRef, Graph, TensorType, ops
@@ -367,23 +367,27 @@ def test_mxfp4_moe_ops_match_numpy_reference() -> None:
         graph_bf16.output(y_bf16_f32)
 
     model_bf16 = session.load(graph_bf16)
-    got_bf16 = model_bf16.execute(
-        Tensor.from_numpy(x_f32).to(device),
-        Tensor.from_numpy(token_expert_order).to(device),
-        Tensor.from_numpy(expert_start).to(device),
-        Tensor.from_numpy(expert_ids).to(device),
-        Tensor.from_numpy(expert_usage_stats).to(device),
-        Tensor.from_numpy(w1_blocks).to(device),
-        Tensor.from_numpy(w1_scales).to(device),
-        Tensor.from_numpy(w1_bias).to(device),
-        Tensor.from_numpy(gate_weights).to(device),
-        Tensor.from_numpy(w2_blocks).to(device),
-        Tensor.from_numpy(w2_scales).to(device),
-        Tensor.from_numpy(w2_bias).to(device),
-    )[0].to(CPU()).to_numpy()
+    got_bf16 = (
+        model_bf16.execute(
+            Buffer.from_numpy(x_f32).to(device),
+            Buffer.from_numpy(token_expert_order).to(device),
+            Buffer.from_numpy(expert_start).to(device),
+            Buffer.from_numpy(expert_ids).to(device),
+            Buffer.from_numpy(expert_usage_stats).to(device),
+            Buffer.from_numpy(w1_blocks).to(device),
+            Buffer.from_numpy(w1_scales).to(device),
+            Buffer.from_numpy(w1_bias).to(device),
+            Buffer.from_numpy(gate_weights).to(device),
+            Buffer.from_numpy(w2_blocks).to(device),
+            Buffer.from_numpy(w2_scales).to(device),
+            Buffer.from_numpy(w2_bias).to(device),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
 
     bf16_atol = 1e-1
     bf16_rtol = 1e-1
-    assert np.allclose(
-        got_bf16, ref, atol=bf16_atol, rtol=bf16_rtol
-    ), f"bf16 max abs diff {np.max(np.abs(got_bf16 - ref))}"
+    assert np.allclose(got_bf16, ref, atol=bf16_atol, rtol=bf16_rtol), (
+        f"bf16 max abs diff {np.max(np.abs(got_bf16 - ref))}"
+    )

@@ -55,7 +55,9 @@ class GptOssMoEGate(MoEGate):
 
     def __call__(self, hidden_state: Tensor) -> tuple[Tensor, Tensor]:
         scores = self.gate_score(hidden_state)
-        topk_scores, topk_indices = F.top_k(scores, k=self.num_experts_per_token, axis=-1)
+        topk_scores, topk_indices = F.top_k(
+            scores, k=self.num_experts_per_token, axis=-1
+        )
         topk_scores = F.softmax(topk_scores)
         return topk_indices, topk_scores
 
@@ -67,12 +69,18 @@ class MXFP4Experts(Module):
     stay minimal and avoid BF16 materialization of expert weights.
     """
 
-    def __init__(self, *, num_experts: int, hidden_dim: int, moe_dim: int) -> None:
+    def __init__(
+        self, *, num_experts: int, hidden_dim: int, moe_dim: int
+    ) -> None:
         super().__init__()
         if hidden_dim % MXFP4_VALUES_PER_BLOCK != 0:
-            raise ValueError("hidden_dim must be divisible by 32 for MXFP4 packing")
+            raise ValueError(
+                "hidden_dim must be divisible by 32 for MXFP4 packing"
+            )
         if moe_dim % MXFP4_VALUES_PER_BLOCK != 0:
-            raise ValueError("intermediate_size must be divisible by 32 for MXFP4 packing")
+            raise ValueError(
+                "intermediate_size must be divisible by 32 for MXFP4 packing"
+            )
 
         kblocks_w1 = hidden_dim // MXFP4_VALUES_PER_BLOCK
         kblocks_w2 = moe_dim // MXFP4_VALUES_PER_BLOCK
@@ -152,7 +160,9 @@ class GptOssMoEMXFP4(MoE):
             _restore_token_order,
             expert_ids,
             expert_usage_stats,
-        ) = moe_create_indices(F.cast(router_idx_flat, DType.int32), self.num_experts)
+        ) = moe_create_indices(
+            F.cast(router_idx_flat, DType.int32), self.num_experts
+        )
 
         gate_weights_bf16 = (
             gate_weights_flat

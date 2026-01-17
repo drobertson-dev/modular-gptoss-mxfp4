@@ -321,7 +321,7 @@ struct GroupedMXFP4Matmul:
             BN=16,
         ]
 
-        ctx.enqueue_function_checked[kernel, kernel](
+        ctx.enqueue_function[kernel, kernel](
             out_dev,
             M,
             N,
@@ -403,7 +403,7 @@ struct GroupedMXFP4MatmulSwiGLU:
             BN=16,
         ]
 
-        ctx.enqueue_function_checked[kernel, kernel](
+        ctx.enqueue_function[kernel, kernel](
             out_dev,
             M,
             I,

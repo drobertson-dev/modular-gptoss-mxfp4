@@ -55,9 +55,13 @@ class GptOssMoEGate(MoEGate):
             has_bias=True,
         )
 
-    def __call__(self, hidden_state: TensorValue) -> tuple[TensorValue, TensorValue]:
+    def __call__(
+        self, hidden_state: TensorValue
+    ) -> tuple[TensorValue, TensorValue]:
         scores = self.gate_score(hidden_state)
-        topk_scores, topk_indices = ops.top_k(scores, k=self.num_experts_per_token, axis=-1)
+        topk_scores, topk_indices = ops.top_k(
+            scores, k=self.num_experts_per_token, axis=-1
+        )
         topk_scores = ops.softmax(topk_scores)
         return topk_indices, topk_scores
 
@@ -90,9 +94,13 @@ class GptOssMoE(MoE, Shardable):
         self.experts = LayerList([])
 
         if self.hidden_dim % MXFP4_VALUES_PER_BLOCK != 0:
-            raise ValueError("hidden_dim must be divisible by 32 for MXFP4 packing")
+            raise ValueError(
+                "hidden_dim must be divisible by 32 for MXFP4 packing"
+            )
         if self.moe_dim % MXFP4_VALUES_PER_BLOCK != 0:
-            raise ValueError("intermediate_size must be divisible by 32 for MXFP4 packing")
+            raise ValueError(
+                "intermediate_size must be divisible by 32 for MXFP4 packing"
+            )
         kblocks_w1 = self.hidden_dim // MXFP4_VALUES_PER_BLOCK
         kblocks_w2 = self.moe_dim // MXFP4_VALUES_PER_BLOCK
         # W1: [E, 2*I, D/32, 16] blocks + [E, 2*I, D/32] scales (E8M0 exponent bytes).
@@ -142,14 +150,18 @@ class GptOssMoE(MoE, Shardable):
         # Routing.
         router_idx, router_weight = self.gate(x)  # [T, TOPK]
         router_idx_flat = ops.reshape(router_idx, [-1])  # [P]
-        gate_weights_flat = ops.reshape(router_weight, [-1])  # [P] in original pair order
+        gate_weights_flat = ops.reshape(
+            router_weight, [-1]
+        )  # [P] in original pair order
         (
             token_expert_order,
             expert_start_indices,
             _restore_token_order,
             expert_ids,
             expert_usage_stats,
-        ) = moe_create_indices(ops.cast(router_idx_flat, DType.int32), self.num_experts)
+        ) = moe_create_indices(
+            ops.cast(router_idx_flat, DType.int32), self.num_experts
+        )
         # Mojo kernels expect BF16 activations, BF16 gate weights, and FP32 biases.
         x_bf16 = ops.cast(x, DType.bfloat16) if x.dtype != DType.bfloat16 else x
         gate_weights_bf16 = (
@@ -196,15 +208,23 @@ class GptOssMoE(MoE, Shardable):
     def sharding_strategy(self, strategy: ShardingStrategy) -> None:
         # The current Mojo kernels are single-device; keep the contract explicit.
         if not strategy.is_tensor_parallel:
-            raise ValueError("Only tensor-parallel sharding is supported for MoE modules")
+            raise ValueError(
+                "Only tensor-parallel sharding is supported for MoE modules"
+            )
         if strategy.num_devices != 1:
-            raise ValueError("MXFP4 MoE sharding across multiple devices is not implemented yet")
+            raise ValueError(
+                "MXFP4 MoE sharding across multiple devices is not implemented yet"
+            )
         self._sharding_strategy = strategy
 
     def shard(self, devices: Iterable[DeviceRef]) -> list[GptOssMoE]:
         devices = list(devices)
         if not self._sharding_strategy:
-            raise ValueError("MoE module cannot be sharded because no sharding strategy was provided.")
+            raise ValueError(
+                "MoE module cannot be sharded because no sharding strategy was provided."
+            )
         if len(devices) != 1:
-            raise ValueError("MXFP4 MoE currently supports only single-device execution")
+            raise ValueError(
+                "MXFP4 MoE currently supports only single-device execution"
+            )
         return [self]

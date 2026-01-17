@@ -10,7 +10,7 @@ from gpt_oss_mxfp4.kernels import (
     mxfp4_matmul_swiglu,
 )
 from gpt_oss_mxfp4.weight_loader import decode_mxfp4, make_dummy_mxfp4_weights
-from max.driver import CPU, Tensor
+from max.driver import CPU, Buffer
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import DeviceRef, Graph, TensorType
@@ -73,10 +73,10 @@ def test_mxfp4_matmul_swiglu_cpu(M: int, K: int, N_full: int) -> None:
     session = InferenceSession(devices=[device])
     model = session.load(graph)
 
-    a_t = Tensor.from_numpy(a_np).to(device)
-    blocks_t = Tensor.from_numpy(w_blocks).to(device)
-    scales_t = Tensor.from_numpy(w_scales.astype(np.float32)).to(device)
-    bias_t = Tensor.from_numpy(bias).to(device)
+    a_t = Buffer.from_numpy(a_np).to(device)
+    blocks_t = Buffer.from_numpy(w_blocks).to(device)
+    scales_t = Buffer.from_numpy(w_scales.astype(np.float32)).to(device)
+    bias_t = Buffer.from_numpy(bias).to(device)
 
     out_t = model.execute(a_t, blocks_t, scales_t, bias_t)[0].to(CPU())
     got = out_t.to_numpy()

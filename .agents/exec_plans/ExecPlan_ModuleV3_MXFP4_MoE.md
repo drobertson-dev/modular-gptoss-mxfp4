@@ -83,8 +83,10 @@ Success looks like:
     - Helper: `copy_local_to_shared[..., swizzle=make_swizzle[...]](...)` in `max/kernels/src/layout/layout_tensor.mojo`
     - Manual fallback: apply the same swizzle mapping as `copy_local_to_shared` (do not invent a new one; do not swizzle a row-major index if the tensor-core layout is not row-major).
   - Reference patterns (read-only): `max/kernels/test/gpu/linalg/test_tma_wgmma.mojo`, `max/kernels/test/gpu/linalg/test_async_copy_wgmma.mojo`, and `max/kernels/src/linalg/matmul/gpu/sm90/*` (Hopper-specific helpers).
-- Performance reality check: `_pack_bits` + bit-unpack alone is not enough; without the full swizzle + TMA/persistent scheduling pattern the custom kernel remains far below BF16 throughput.
-  Evidence: `max/examples/custom-models/scripts/bench_mxfp4_grouped_matmul_ragged.py` currently reports ~`0.18–0.22×` BF16 for the isolated grouped matmul on H100.
+- Kernel reality check (isolated): the MXFP4 grouped matmul kernel is not the current bottleneck.
+  Evidence: `max/examples/custom-models/scripts/bench_mxfp4_grouped_matmul_ragged.py` shows the MXFP4 path matching BF16 output (reference decode) and outperforming the BF16 `grouped_matmul_ragged` baseline on realistic W1 shapes (single expert, small P).
+- End-to-end performance blocker: generation throughput is currently dominated by **upstream runtime/scheduler waiting**, not GEMM math.
+  Evidence: Nsight Systems profiles show heavy OSRT `poll` (~100ms/256ms medians) and `sem_wait` time inside `libmax.so` while total CUDA kernel time is tiny; CLI `generate` shows ~7 tok/s even on upstream ModuleV3 BF16 (`unsloth/gpt-oss-20b-BF16`).
 
 ## Decision Log
 

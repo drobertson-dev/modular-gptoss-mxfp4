@@ -8,17 +8,18 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
-from max.driver import Device, Tensor
+from max.driver import Buffer, Device
 from max.dtype import DType
+from max.experimental import functional as F
 from max.graph import DeviceRef, TensorType
 from max.pipelines.architectures.gpt_oss_module_v3.model import (
     GptOssModel as _BaseGptOssModel,
 )
 
-from .gpt_oss import GptOss
-from .kernels import get_mxfp4_kernels_path
-from .model_config import GptOssConfig
-from .module_v3_compile import compile_with_custom_extensions
+from gpt_oss_mxfp4_v3.gpt_oss import GptOss
+from gpt_oss_mxfp4_v3.kernels import get_mxfp4_kernels_path
+from gpt_oss_mxfp4_v3.model_config import GptOssConfig
+from gpt_oss_mxfp4_v3.module_v3_compile import compile_with_custom_extensions
 
 logger = logging.getLogger("max.pipelines")
 
@@ -30,7 +31,7 @@ class GptOssModelModuleV3MXFP4(_BaseGptOssModel):
         assert self.pipeline_config.max_batch_size, (
             "Expected max_batch_size to be set"
         )
-        self._input_row_offsets_prealloc = Tensor.from_numpy(
+        self._input_row_offsets_prealloc = Buffer.from_numpy(
             np.arange(self.pipeline_config.max_batch_size + 1, dtype=np.uint32)
         ).to(self.devices[0])
 
@@ -74,8 +75,9 @@ class GptOssModelModuleV3MXFP4(_BaseGptOssModel):
             return_logits=self.return_logits,
         )
 
-        nn_model = GptOss(model_config, self.kv_manager)
-        nn_model.to(self.devices[0])
+        with F.lazy():
+            nn_model = GptOss(model_config, self.kv_manager)
+            nn_model.to(self.devices[0])
 
         kv_inputs = self.kv_params.get_symbolic_inputs()
         flattened_kv_types = [

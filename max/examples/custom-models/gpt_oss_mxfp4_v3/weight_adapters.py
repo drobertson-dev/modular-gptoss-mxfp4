@@ -11,6 +11,7 @@ Key design choice:
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Callable
 
 import numpy as np
 from max.graph.weights import WeightData, Weights
@@ -61,7 +62,10 @@ def _mxfp4_pack_bits_u8(x: np.ndarray) -> np.ndarray:
             | ((b & np.uint32(0x1)) << np.uint32(13))
         )
 
-    def _pack_two_nibbles(comp_fn, b: np.ndarray) -> np.ndarray:
+    def _pack_two_nibbles(
+        comp_fn: Callable[[np.ndarray], np.ndarray],
+        b: np.ndarray,
+    ) -> np.ndarray:
         lo = comp_fn(b)
         hi = comp_fn((b >> np.uint32(4)) & np.uint32(0xF))
         return lo | (hi << np.uint32(16))

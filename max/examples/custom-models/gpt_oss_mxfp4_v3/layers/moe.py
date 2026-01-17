@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
+from typing import Any, cast
 
-from max.driver import CPU
 from max.dtype import DType
 from max.experimental import functional as F
 from max.experimental.tensor import Tensor
@@ -19,13 +19,13 @@ from max.pipelines.architectures.gpt_oss_module_v3.layers.moe_base import (
     MoEGate,
 )
 
-from ..kernels import (
+from gpt_oss_mxfp4_v3.kernels import (
     MXFP4_VALUES_PER_BLOCK,
 )
-from ..kernels import (
+from gpt_oss_mxfp4_v3.kernels import (
     mxfp4_grouped_matmul_ragged_bf16 as _mxfp4_grouped_matmul_ragged_bf16,
 )
-from ..model_config import GptOssConfig
+from gpt_oss_mxfp4_v3.model_config import GptOssConfig
 
 mxfp4_grouped_matmul_ragged_bf16 = F.functional(
     _mxfp4_grouped_matmul_ragged_bf16
@@ -138,11 +138,17 @@ class GptOssMoE(MoE):
     def _init_experts(self) -> None:
         # Replace the dense expert weights with MXFP4 blocks/scales under a child
         # module named `experts` so checkpoint keys map directly.
-        self.experts = MXFP4Experts(
-            num_experts=self.num_experts,
-            hidden_dim=self.hidden_dim,
-            moe_dim=self.moe_dim,
+        self.experts = cast(
+            Any,
+            MXFP4Experts(
+                num_experts=self.num_experts,
+                hidden_dim=self.hidden_dim,
+                moe_dim=self.moe_dim,
+            ),
         )
+
+    def _mxfp4_experts(self) -> MXFP4Experts:
+        return cast(MXFP4Experts, self.experts)
 
     def __call__(self, x: Tensor) -> Tensor:
         seq_len = x.shape[0]
@@ -192,18 +198,7 @@ class GptOssMoE(MoE):
             _debug_abs_max("mxfp4_v3_moe_x_abs_max", x_bf16)
 
         router_idx, router_weight = self.gate(x_bf16)
-        expected_pairs = seq_len * self.num_experts_per_token
         router_idx = F.reshape(router_idx, [-1])
-        router_weight = F.reshape(router_weight, [-1])
-        router_idx = F.slice_tensor(
-            router_idx, [(slice(0, expected_pairs), "num_pairs")]
-        )
-        router_weight = F.slice_tensor(
-            router_weight, [(slice(0, expected_pairs), "num_pairs")]
-        )
-        router_weight = F.reshape(
-            router_weight, [seq_len, self.num_experts_per_token]
-        )
         router_idx_i32 = F.cast(router_idx, DType.int32)
 
         if debug_enabled:
@@ -277,14 +272,16 @@ class GptOssMoE(MoE):
                 router_weight.reshape([-1, 1]), token_expert_order, axis=0
             ).cast(x_bf16.dtype)
 
+        experts = self._mxfp4_experts()
+
         # W1: grouped GEMM with MXFP4 weights.
         gate_up_output = mxfp4_grouped_matmul_ragged_bf16(
             permutated_states,
-            self.experts.gate_up_proj_blocks,
-            self.experts.gate_up_proj_scales,
+            experts.gate_up_proj_blocks,
+            experts.gate_up_proj_scales,
             expert_start_indices,
             expert_ids,
-            expert_usage_stats.to(CPU()),
+            expert_usage_stats,
         )
         if debug_enabled:
             _debug_any_nan("mxfp4_v3_gate_up_matmul_any_nan", gate_up_output)
@@ -304,7 +301,7 @@ class GptOssMoE(MoE):
                 label="mxfp4_v3_expert_assignments_max",
             )
         bias_per_token = F.gather(
-            self.experts.gate_up_proj_bias, expert_assignments, axis=0
+            experts.gate_up_proj_bias, expert_assignments, axis=0
         )
         gate_up_output = gate_up_output + bias_per_token
         if debug_enabled:
@@ -326,15 +323,15 @@ class GptOssMoE(MoE):
         # W2: grouped GEMM with MXFP4 weights.
         down_output = mxfp4_grouped_matmul_ragged_bf16(
             gated_output,
-            self.experts.down_proj_blocks,
-            self.experts.down_proj_scales,
+            experts.down_proj_blocks,
+            experts.down_proj_scales,
             expert_start_indices,
             expert_ids,
-            expert_usage_stats.to(CPU()),
+            expert_usage_stats,
         )
 
         down_bias_per_token = F.gather(
-            self.experts.down_proj_bias, expert_assignments, axis=0
+            experts.down_proj_bias, expert_assignments, axis=0
         )
         down_output = down_output + down_bias_per_token
         if debug_enabled:
