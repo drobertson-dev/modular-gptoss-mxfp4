@@ -1,4 +1,4 @@
-"""ModuleV3 pipeline model for GPT-OSS with MXFP4 Mojo custom ops."""
+"""Module pipeline model for GPT-OSS with MXFP4 Mojo custom ops."""
 
 from __future__ import annotations
 
@@ -8,19 +8,17 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+from max import functional as F
 from max.driver import Buffer, Device
 from max.dtype import DType
-from max.experimental import functional as F
 from max.graph import DeviceRef, TensorType
-from max.pipelines.architectures.gpt_oss_module_v3.model import (
+from max.pipelines.architectures.gpt_oss.model import (
     GptOssModel as _BaseGptOssModel,
-)
-from max.pipelines.architectures.gpt_oss_module_v3.model_config import (
-    GptOssConfig,
 )
 
 from .gpt_oss_module_v3 import GptOss
 from .kernels import get_mxfp4_kernels_path
+from .model_config import GptOssConfig
 from .module_v3_compile import compile_with_custom_extensions
 
 logger = logging.getLogger("max.pipelines")
@@ -66,14 +64,10 @@ class GptOssModelModuleV3(_BaseGptOssModel):
                 key: value.data() for key, value in self.weights.items()
             }
 
-        model_config = GptOssConfig.generate(
-            pipeline_config=self.pipeline_config,
+        model_config = GptOssConfig.initialize(self.pipeline_config)
+        model_config.finalize(
             huggingface_config=huggingface_config,
             state_dict=state_dict,
-            dtype=self.dtype,
-            n_devices=len(self.devices),
-            cache_dtype=self.encoding.cache_dtype,
-            kv_cache_config=self.kv_cache_config,
             return_logits=self.return_logits,
         )
 

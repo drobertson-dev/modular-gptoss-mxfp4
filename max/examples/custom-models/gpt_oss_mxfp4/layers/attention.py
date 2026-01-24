@@ -7,19 +7,19 @@ from collections.abc import Iterable
 
 from max.dtype import DType
 from max.graph import DeviceRef, ShardingStrategy, TensorValue, Weight, ops
-from max.nn.attention import MHAMaskVariant
-from max.nn.kernels import (
+from max.nn.legacy.attention import MHAMaskVariant
+from max.nn.legacy.kernels import (
     flash_attention_ragged,
     fused_qk_ragged_rope,
     fused_qkv_ragged_matmul,
 )
-from max.nn.kv_cache import (
+from max.nn.legacy.kv_cache import (
     KVCacheParams,
     PagedCacheValues,
 )
-from max.nn.layer import Module, Shardable
-from max.nn.linear import Linear
-from max.nn.rotary_embedding import YarnRotaryEmbedding
+from max.nn.legacy.layer import Module, Shardable
+from max.nn.legacy.linear import Linear
+from max.nn.legacy.rotary_embedding import YarnRotaryEmbedding
 
 
 def compute_heads_per_device(

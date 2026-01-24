@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from max.graph.weights import WeightsFormat
 from max.interfaces import PipelineTask
-from max.nn.kv_cache import KVCacheStrategy
+from max.nn.legacy.kv_cache import KVCacheStrategy
 from max.pipelines.core import TextContext
 from max.pipelines.lib import (
     RopeType,
@@ -17,9 +17,9 @@ from . import weight_adapters
 from .model import GptOssModel
 
 gpt_oss_arch = SupportedArchitecture(
-    # Keep the same name as the built-in architecture so this custom package
-    # overrides it when passed via `--custom-architectures`.
-    name="GptOssForCausalLM",
+    # Match the legacy architecture name so this package overrides it when
+    # used via `--custom-architectures ... --use-legacy-module`.
+    name="GptOssForCausalLM_Legacy",
     example_repo_ids=[
         "openai/gpt-oss-20b",
         "openai/gpt-oss-120b",

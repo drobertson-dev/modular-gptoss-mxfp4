@@ -1,28 +1,25 @@
-"""ModuleV3 GPT-OSS model that swaps MoE expert GEMMs to MXFP4 custom ops."""
+"""GPT-OSS model that swaps MoE expert GEMMs to MXFP4 custom ops."""
 
 from __future__ import annotations
 
 import functools
 from collections.abc import Sequence
 
+from max import functional as F
 from max.dtype import DType
-from max.experimental import functional as F
-from max.experimental.tensor import Tensor
+from max.tensor import Tensor
 from max.graph import BufferValue, TensorValue
 from max.kv_cache import NullKVCacheManager, PagedKVCacheManager
-from max.nn.attention import MHAMaskVariant
-from max.nn.kv_cache import PagedCacheValues
-from max.nn.module_v3 import Module
-from max.nn.module_v3.embedding import Embedding
-from max.nn.module_v3.linear import Linear
-from max.nn.module_v3.sequential import ModuleList
-from max.pipelines.architectures.gpt_oss_module_v3.layers.attention import (
+from max.nn import Embedding, Linear, Module, ModuleList
+from max.nn.legacy.attention import MHAMaskVariant
+from max.nn.legacy.kv_cache import PagedCacheValues
+from max.pipelines.architectures.gpt_oss.layers.attention import (
     GptOssAttention,
 )
-from max.pipelines.architectures.gpt_oss_module_v3.layers.rms_norm import (
+from max.pipelines.architectures.gpt_oss.layers.rms_norm import (
     GptOssRMSNorm,
 )
-from max.pipelines.architectures.gpt_oss_module_v3.layers.rotary_embedding import (
+from max.pipelines.architectures.gpt_oss.layers.rotary_embedding import (
     YarnRotaryEmbedding,
     YarnScalingParams,
 )
@@ -108,7 +105,7 @@ class GptOssTextModel(Module):
         self.kv_params = config.kv_params
         self.return_logits = config.return_logits
 
-    def __call__(
+    def forward(
         self,
         tokens: Tensor,
         kv_collection: PagedCacheValues,
@@ -134,7 +131,7 @@ class GptOssTextModel(Module):
 
 
 class GptOss(Module):
-    """Top-level ModuleV3 GPT-OSS model (MXFP4 MoE)."""
+    """Top-level GPT-OSS model (MXFP4 MoE)."""
 
     def __init__(
         self,
@@ -146,7 +143,7 @@ class GptOss(Module):
         self.config = config
         self.kv_manager = kv_manager
 
-    def __call__(
+    def forward(
         self,
         tokens: Tensor,
         return_n_logits: Tensor,

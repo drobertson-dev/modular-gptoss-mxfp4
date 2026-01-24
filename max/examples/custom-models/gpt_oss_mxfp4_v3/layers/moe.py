@@ -1,20 +1,21 @@
-"""ModuleV3 GPT-OSS MoE layer swapping expert GEMMs to MXFP4 grouped matmul."""
+"""GPT-OSS MoE layer swapping expert GEMMs to MXFP4 grouped matmul."""
 
 from __future__ import annotations
 
 import os
 from typing import Any, cast
 
+from max import functional as F
+from max.driver import CPU
 from max.dtype import DType
-from max.experimental import functional as F
-from max.experimental.tensor import Tensor
+from max.tensor import Tensor
 from max.graph import ops
-from max.nn.module_v3 import Linear
-from max.nn.module_v3.module import Module
-from max.pipelines.architectures.gpt_oss_module_v3.layers.functional_kernels import (
+from max.nn import Linear
+from max.nn.module import Module
+from max.pipelines.architectures.gpt_oss.layers.functional_kernels import (
     moe_create_indices,
 )
-from max.pipelines.architectures.gpt_oss_module_v3.layers.moe_base import (
+from max.pipelines.architectures.gpt_oss.layers.moe_base import (
     MoE,
     MoEGate,
 )
@@ -56,7 +57,7 @@ class GptOssMoEGate(MoEGate):
             bias=True,
         )
 
-    def __call__(self, hidden_state: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, hidden_state: Tensor) -> tuple[Tensor, Tensor]:
         scores = self.gate_score(hidden_state)
         topk_scores, topk_indices = F.top_k(
             scores, k=self.num_experts_per_token, axis=-1
@@ -150,7 +151,7 @@ class GptOssMoE(MoE):
     def _mxfp4_experts(self) -> MXFP4Experts:
         return cast(MXFP4Experts, self.experts)
 
-    def __call__(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         seq_len = x.shape[0]
 
         x_bf16 = x if x.dtype == DType.bfloat16 else F.cast(x, DType.bfloat16)
@@ -218,6 +219,7 @@ class GptOssMoE(MoE):
             expert_ids,
             expert_usage_stats,
         ) = moe_create_indices(router_idx_i32, self.num_experts)
+        expert_usage_stats_host = expert_usage_stats.to(CPU())
 
         if debug_enabled:
             ops.print(
@@ -281,7 +283,7 @@ class GptOssMoE(MoE):
             experts.gate_up_proj_scales,
             expert_start_indices,
             expert_ids,
-            expert_usage_stats,
+            expert_usage_stats_host,
         )
         if debug_enabled:
             _debug_any_nan("mxfp4_v3_gate_up_matmul_any_nan", gate_up_output)
@@ -327,7 +329,7 @@ class GptOssMoE(MoE):
             experts.down_proj_scales,
             expert_start_indices,
             expert_ids,
-            expert_usage_stats,
+            expert_usage_stats_host,
         )
 
         down_bias_per_token = F.gather(

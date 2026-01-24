@@ -1,16 +1,16 @@
-"""ModuleV3 GPT-OSS MoE layer backed by MXFP4 Mojo custom ops."""
+"""GPT-OSS MoE layer backed by MXFP4 Mojo custom ops."""
 
 from __future__ import annotations
 
+from max import functional as F
 from max.dtype import DType
-from max.experimental import functional as F
-from max.experimental.tensor import Tensor
-from max.nn.module_v3 import Linear
-from max.nn.module_v3.module import Module
-from max.pipelines.architectures.gpt_oss_module_v3.layers.functional_kernels import (
+from max.nn import Linear
+from max.nn.module import Module
+from max.tensor import Tensor
+from max.pipelines.architectures.gpt_oss.layers.functional_kernels import (
     moe_create_indices,
 )
-from max.pipelines.architectures.gpt_oss_module_v3.layers.moe_base import (
+from max.pipelines.architectures.gpt_oss.layers.moe_base import (
     MoE,
     MoEGate,
 )
@@ -34,7 +34,7 @@ mxfp4_moe_topk_reduce_bf16 = F.functional(_mxfp4_moe_topk_reduce_bf16)
 
 
 class GptOssMoEGate(MoEGate):
-    """GptOss-style Gate module for MoE with bias support (ModuleV3)."""
+    """GptOss-style Gate module for MoE with bias support."""
 
     def __init__(
         self,
@@ -53,7 +53,7 @@ class GptOssMoEGate(MoEGate):
             bias=True,
         )
 
-    def __call__(self, hidden_state: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, hidden_state: Tensor) -> tuple[Tensor, Tensor]:
         scores = self.gate_score(hidden_state)
         topk_scores, topk_indices = F.top_k(
             scores, k=self.num_experts_per_token, axis=-1
@@ -144,7 +144,7 @@ class GptOssMoEMXFP4(MoE):
             moe_dim=self.moe_dim,
         )
 
-    def __call__(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         if x.dtype != DType.bfloat16:
             x_bf16 = F.cast(x, DType.bfloat16)
         else:
