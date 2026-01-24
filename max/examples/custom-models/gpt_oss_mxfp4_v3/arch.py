@@ -1,10 +1,10 @@
-"""GPT-OSS ModuleV3 architecture registration (MXFP4 expert GEMMs)."""
+"""GPT-OSS Module architecture registration (MXFP4 expert GEMMs)."""
 
 from __future__ import annotations
 
 from max.graph.weights import WeightsFormat
 from max.interfaces import PipelineTask
-from max.nn.kv_cache import KVCacheStrategy
+from max.nn.legacy.kv_cache import KVCacheStrategy
 from max.pipelines.core import TextContext
 from max.pipelines.lib import (
     RopeType,
@@ -17,9 +17,9 @@ from gpt_oss_mxfp4_v3.model import GptOssModelModuleV3MXFP4
 from gpt_oss_mxfp4_v3.weight_adapters import convert_safetensor_state_dict
 
 gpt_oss_module_v3_arch = SupportedArchitecture(
-    # Match the built-in ModuleV3 architecture name so this package overrides it when
-    # used via `--custom-architectures ... --use-module-v3`.
-    name="GptOssForCausalLM_ModuleV3",
+    # Match the built-in module architecture name so this package overrides it
+    # when used via `--custom-architectures ... --no-use-legacy-module`.
+    name="GptOssForCausalLM",
     example_repo_ids=[
         "openai/gpt-oss-20b",
         "openai/gpt-oss-120b",
