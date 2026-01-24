@@ -14,10 +14,10 @@ from collections.abc import Iterable
 
 from max.dtype import DType
 from max.graph import DeviceRef, ShardingStrategy, TensorValue, Weight, ops
-from max.nn.kernels import moe_create_indices
-from max.nn.layer import LayerList, Shardable
-from max.nn.linear import Linear
-from max.nn.moe import MoE, MoEGate
+from max.nn.legacy.kernels import moe_create_indices
+from max.nn.legacy.layer import LayerList, Shardable
+from max.nn.legacy.linear import Linear
+from max.nn.legacy.moe import MoE, MoEGate
 
 from ..kernels import (
     MXFP4_VALUES_PER_BLOCK,

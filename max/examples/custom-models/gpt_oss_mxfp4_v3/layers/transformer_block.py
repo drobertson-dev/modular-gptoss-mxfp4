@@ -1,15 +1,15 @@
-"""Implements the GPT OSS transformer block for MXFP4 ModuleV3."""
+"""Implements the GPT OSS transformer block for MXFP4."""
 
 from __future__ import annotations
 
-from max.experimental.tensor import Tensor
-from max.nn.kv_cache import PagedCacheValues
-from max.nn.module_v3 import Module
-from max.nn.module_v3.norm import RMSNorm
-from max.pipelines.architectures.gpt_oss_module_v3.layers.attention import (
+from max.nn import Module
+from max.nn.legacy.kv_cache import PagedCacheValues
+from max.nn.norm import RMSNorm
+from max.tensor import Tensor
+from max.pipelines.architectures.gpt_oss.layers.attention import (
     GptOssAttention,
 )
-from max.pipelines.architectures.gpt_oss_module_v3.layers.moe_base import MoE
+from max.pipelines.architectures.gpt_oss.layers.moe_base import MoE
 
 
 class GptOssTransformerBlock(Module[..., Tensor]):

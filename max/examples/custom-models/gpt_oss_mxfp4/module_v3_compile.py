@@ -1,6 +1,6 @@
-"""ModuleV3 compilation helpers.
+"""Module compilation helpers.
 
-Upstream `max.nn.module_v3.Module.compile()` does not pass `custom_extensions` to
+Upstream `max.nn.module.Module.compile()` does not pass `custom_extensions` to
 `max.graph.Graph(...)`, so custom Mojo ops under `examples/custom_ops/kernels/`
 won't be registered. This helper mirrors `Module.compile()` while injecting the
 needed `custom_extensions` list.
@@ -13,13 +13,12 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from max import graph
+from max import functional as F, graph
+from max._realization_context import GraphRealizationContext, _session
 from max.driver import CPU, DLPackArray
-from max.experimental import functional as F
-from max.experimental.realization_context import GraphRealizationContext, _session
-from max.experimental.tensor import Tensor, realization_context
 from max.graph import Graph, TensorType
-from max.nn.module_v3.module import Module
+from max.nn.module import Module
+from max.tensor import Tensor, realization_context
 
 
 def compile_with_custom_extensions(

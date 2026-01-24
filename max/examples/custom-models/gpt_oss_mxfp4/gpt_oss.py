@@ -11,10 +11,10 @@ from collections.abc import Sequence
 
 from max.dtype import DType
 from max.graph import BufferValue, ShardingStrategy, TensorValue, ops
-from max.nn import ColumnParallelLinear, Embedding, LayerList, Module
-from max.nn.kv_cache import PagedCacheValues
-from max.nn.norm.rms_norm import RMSNorm
-from max.nn.rotary_embedding import YarnRotaryEmbedding, YarnScalingParams
+from max.nn.legacy import ColumnParallelLinear, Embedding, LayerList, Module
+from max.nn.legacy.kv_cache import PagedCacheValues
+from max.nn.legacy.norm.rms_norm import RMSNorm
+from max.nn.legacy.rotary_embedding import YarnRotaryEmbedding, YarnScalingParams
 
 from .layers.attention import GptOssAttention
 from .layers.moe import GptOssMoE
