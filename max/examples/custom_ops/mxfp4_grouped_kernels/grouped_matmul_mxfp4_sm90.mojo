@@ -278,7 +278,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline[
                 a_tma_op.async_copy(
                     A_s,
                     full_mbar[Int(slot)],
-                    (UInt(k0), UInt(row0)),
+                    (Int(k0), Int(row0)),
                 )
 
             # Decode B tile (MXFP4 -> BF16 in shared).

@@ -373,6 +373,7 @@ fn run_bench[
         )
 
     print(bench)
+    bench.dump_report()
 
 
 def main():

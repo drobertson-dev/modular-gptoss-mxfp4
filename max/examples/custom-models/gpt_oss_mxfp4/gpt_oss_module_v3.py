@@ -9,7 +9,7 @@ from max import functional as F
 from max.dtype import DType
 from max.tensor import Tensor
 from max.graph import BufferValue, TensorValue
-from max.kv_cache import NullKVCacheManager, PagedKVCacheManager
+from max.kv_cache import PagedKVCacheManager
 from max.nn import Embedding, Linear, Module, ModuleList
 from max.nn.legacy.attention import MHAMaskVariant
 from max.nn.legacy.kv_cache import PagedCacheValues
@@ -147,7 +147,7 @@ class GptOss(Module):
     def __init__(
         self,
         config: GptOssConfig,
-        kv_manager: PagedKVCacheManager | NullKVCacheManager,
+        kv_manager: PagedKVCacheManager,
     ) -> None:
         super().__init__()
         self.language_model = GptOssTextModel(config)
@@ -171,7 +171,7 @@ class GptOss(Module):
 
 def _unflatten_kv_inputs(
     config: GptOssConfig,
-    kv_manager: PagedKVCacheManager | NullKVCacheManager,
+    kv_manager: PagedKVCacheManager,
     kv_inputs_flat: Sequence[Tensor],
 ) -> list[PagedCacheValues]:
     kv_params = config.kv_params

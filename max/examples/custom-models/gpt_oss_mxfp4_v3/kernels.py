@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
+from max import functional as F
 from max.dtype import DType
-from max.graph import TensorType, TensorValue, ops
+from max.graph import TensorType, TensorValue
+from max.tensor import Tensor
 
 MXFP4_VALUES_PER_BLOCK = 32
 MXFP4_BYTES_PER_BLOCK = 16
@@ -40,7 +42,8 @@ def mxfp4_grouped_matmul_ragged_bf16(
     expert_usage_stats_host: Any,
     *,
     target: str = "gpu",
-) -> TensorValue:
+    custom_extensions: str | Path | Sequence[str | Path] | None = None,
+) -> Tensor | TensorValue:
     """Compute grouped matmul with MXFP4 weights (BF16 in/out, FP32 accum in kernel).
 
     Calls `mxfp4_grouped_matmul_ragged_bf16` registered by
@@ -104,8 +107,10 @@ def mxfp4_grouped_matmul_ragged_bf16(
             )
 
     out_type = TensorType(dtype=DType.bfloat16, shape=[P, N], device=a_t.device)
+    if custom_extensions is None:
+        custom_extensions = get_mxfp4_kernels_path()
 
-    return ops.custom(
+    return F.custom(
         "mxfp4_grouped_matmul_ragged_bf16",
         device=a_t.device,
         values=[
@@ -119,7 +124,8 @@ def mxfp4_grouped_matmul_ragged_bf16(
         ],
         out_types=[out_type],
         parameters={"target": target},
-    )[0].tensor
+        custom_extensions=custom_extensions,
+    )[0]
 
 
 __all__ = [

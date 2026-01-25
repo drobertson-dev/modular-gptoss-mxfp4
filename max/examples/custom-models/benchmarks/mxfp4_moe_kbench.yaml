@@ -1,0 +1,4 @@
+name: mxfp4_moe_ops_sm90
+file: max/examples/custom-models/tests/mojo/bench_mxfp4_moe_ops.mojo
+params:
+  - {}
