@@ -5,12 +5,12 @@
 # Goal: match upstream SM90 grouped matmul intent:
 # - BF16 activations in/out
 # - MXFP4 expert weights stored as packed FP4 (uint8) + E8M0 scales (uint8)
-# - Decode weights inside the K-tile loop into BF16 shared memory
+# - Decode weights inside the K-tile loop into fragment-sized registers
+#   (no full BF16 B tile in shared memory).
 # - FP32 only for register accumulators (+ tiny scalar epilogue temps)
 #
-# Design: producer/consumer warpgroup pipeline with mbarrier barriers.
-# - Warpgroup 0: producer (loads A tile, decodes B tile)
-# - Warpgroup 1..N: consumers (WGMMA + epilogue store)
+# Design: keep the WGMMA pipeline for reference, but use a warp-level MMA
+# path that decodes MXFP4 per fragment.
 
 from math import ceildiv
 
@@ -44,6 +44,7 @@ from layout.tensor_core_async import (
     tile_layout_k_major,
     warpgroup_fence,
 )
+from layout.tensor_core import TensorCore
 from layout.tma_async import (
     PipelineState,
     SharedMemBarrier,
@@ -88,6 +89,209 @@ fn _u32_from_u8x4(b0: UInt8, b1: UInt8, b2: UInt8, b3: UInt8) -> UInt32:
 fn _apply_xor_swizzle(swizzle: Swizzle, idx: Int) -> Int:
     var base = idx % swizzle.size()
     return swizzle(base) + (idx - base)
+
+
+@parameter
+fn grouped_matmul_mxfp4_bf16_warp_mma_sm90[
+    BM: Int = 64,
+    BN: Int = 64,
+    BK: Int = 64,
+    WM: Int = 64,
+    WN: Int = 64,
+    MMA_M: Int = 16,
+    MMA_N: Int = 8,
+    MMA_K: Int = 16,
+](
+    a_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
+    a_stride0: Int,
+    a_stride1: Int,
+    P: Int,
+    K: Int,
+    expert_start_ptr: UnsafePointer[UInt32, MutAnyOrigin],
+    expert_ids_ptr: UnsafePointer[Int32, MutAnyOrigin],
+    num_active_experts: Int,
+    w_blocks_ptr: UnsafePointer[UInt8, MutAnyOrigin],
+    w_scales_ptr: UnsafePointer[UInt8, MutAnyOrigin],
+    Kblocks: Int,
+    out_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
+    out_stride0: Int,
+    out_stride1: Int,
+    N: Int,
+):
+    constrained[BM == WM]()
+    constrained[BN == WN]()
+    constrained[BM % MMA_M == 0]()
+    constrained[BN % MMA_N == 0]()
+    constrained[BK % MMA_K == 0]()
+    constrained[
+        BK % VALUES_PER_BLOCK == 0,
+        "BK must be a multiple of 32",
+    ]()
+
+    var expert_idx = Int(block_idx.z)
+    if expert_idx >= num_active_experts:
+        return
+    var expert_id = Int(expert_ids_ptr[expert_idx])
+    if expert_id < 0:
+        return
+
+    var seg_start = Int(expert_start_ptr[expert_idx])
+    var seg_end = Int(expert_start_ptr[expert_idx + 1])
+    if seg_start >= seg_end:
+        return
+
+    var n0 = Int(block_idx.x) * BN
+    var row0 = seg_start + Int(block_idx.y) * BM
+    if row0 >= seg_end or row0 >= P:
+        return
+
+    var w_blocks_u64 = w_blocks_ptr.address_space_cast[
+        AddressSpace.GLOBAL
+    ]().bitcast[Scalar[U64]]()
+
+    var A_s = LayoutTensor[
+        BF16,
+        Layout.row_major(BM, BK),
+        MutAnyOrigin,
+        address_space = AddressSpace.SHARED,
+    ].stack_allocation()
+
+    var C_s = LayoutTensor[
+        F32,
+        Layout.row_major(BM, BN),
+        MutAnyOrigin,
+        address_space = AddressSpace.SHARED,
+    ].stack_allocation()
+
+    var B_frag_s = LayoutTensor[
+        BF16,
+        Layout.row_major(MMA_K, MMA_N),
+        MutAnyOrigin,
+        address_space = AddressSpace.SHARED,
+    ].stack_allocation()
+
+    var mma = TensorCore[F32, BF16, Index(MMA_M, MMA_N, MMA_K)]()
+
+    var c_reg = (
+        LayoutTensor[
+            F32,
+            Layout.row_major(WM // MMA_M, (WN * 4) // MMA_N),
+            MutAnyOrigin,
+            address_space = AddressSpace.LOCAL,
+        ]
+        .stack_allocation()
+        .fill(0.0)
+    )
+
+    var num_k_tiles = ceildiv(K, BK)
+    for k_tile in range(num_k_tiles):
+        var k_base = k_tile * BK
+
+        for idx in range(Int(thread_idx.x), BM * BK, Int(block_dim.x)):
+            var r = idx // BK
+            var c = idx - r * BK
+            var global_row = row0 + r
+            var global_k = k_base + c
+            if (
+                global_row < seg_end
+                and global_row < P
+                and global_k < K
+            ):
+                A_s[r, c] = a_ptr[
+                    global_row * a_stride0 + global_k * a_stride1
+                ]
+            else:
+                A_s[r, c] = 0
+        barrier()
+
+        var A_warp_tile = A_s.tile[WM, BK](0, 0)
+
+        @parameter
+        for mma_k in range(BK // MMA_K):
+            var k_frag_base = k_base + mma_k * MMA_K
+            var kb = k_frag_base // VALUES_PER_BLOCK
+            var k_in_block = k_frag_base - kb * VALUES_PER_BLOCK
+            var byte_start = k_in_block // 2
+
+            @parameter
+            for mma_n in range(WN // MMA_N):
+                var n_frag_base = n0 + mma_n * MMA_N
+
+                var lane = Int(lane_id())
+                if lane < MMA_N:
+                    var col = n_frag_base + lane
+                    if col < N and kb < Kblocks:
+                        var scale_exp = w_scales_ptr[
+                            ((expert_id * Kblocks + kb) * N) + col
+                        ]
+                        var scale = e8m0_to_bf16_bits(scale_exp)
+                        var packed_base = (
+                            ((expert_id * Kblocks + kb) * N) + col
+                        ) * BYTES_PER_BLOCK + byte_start
+                        var base_u64 = packed_base // 8
+                        var packed = bitcast[DType.uint8, 8](
+                            UInt64(
+                                w_blocks_u64.load[alignment=8](base_u64)
+                            )
+                        )
+
+                        @parameter
+                        for group in range(2):
+                            var byte_base = group * 4
+                            var k_local = group * 8
+                            var p = _u32_from_u8x4(
+                                UInt8(packed[byte_base + 0]),
+                                UInt8(packed[byte_base + 1]),
+                                UInt8(packed[byte_base + 2]),
+                                UInt8(packed[byte_base + 3]),
+                            )
+                            var outv = (
+                                decode_mxfp4_packbits_u32_to_8xbf16_scaled(
+                                    p, scale
+                                )
+                            )
+                            @parameter
+                            for i in range(8):
+                                B_frag_s[k_local + i, lane] = outv[i]
+                    else:
+                        @parameter
+                        for i in range(MMA_K):
+                            B_frag_s[i, lane] = 0
+                barrier()
+
+                @parameter
+                for mma_m in range(WM // MMA_M):
+                    var c_tile = c_reg.tile[1, 4](mma_m, mma_n)
+                    var A_mma = A_warp_tile.tile[MMA_M, MMA_K](mma_m, mma_k)
+                    var B_mma = B_frag_s
+                    var a_reg = mma.load_a(A_mma)
+                    var b_reg = mma.load_b(B_mma)
+                    var d_reg = mma.mma_op(a_reg, b_reg, c_tile)
+                    c_tile.copy_from(d_reg)
+                barrier()
+        barrier()
+
+    var C_warp = C_s.tile[WM, WN](0, 0)
+
+    @parameter
+    for mma_m in range(WM // MMA_M):
+
+        @parameter
+        for mma_n in range(WN // MMA_N):
+            var C_mma = C_warp.tile[MMA_M, MMA_N](mma_m, mma_n)
+            var c_tile = c_reg.tile[1, 4](mma_m, mma_n)
+            mma.store_d(C_mma, c_tile)
+    barrier()
+
+    for idx in range(Int(thread_idx.x), BM * BN, Int(block_dim.x)):
+        var r = idx // BN
+        var c = idx - r * BN
+        var global_row = row0 + r
+        var global_col = n0 + c
+        if global_row < seg_end and global_row < P and global_col < N:
+            out_ptr[
+                global_row * out_stride0 + global_col * out_stride1
+            ] = C_s[r, c][0].cast[BF16]()
 
 
 @parameter
@@ -964,13 +1168,10 @@ struct MXFP4GroupedMatmulRaggedBF16:
         if grid_z <= 0:
             return
 
-        # Deterministic baseline: 1 producer warpgroup + 1 consumer warpgroup.
-        # Keep BN=128 so producer has 1 thread per output column.
-        comptime BN = 128
+        # Deterministic baseline: single-warp MMA kernel with fragment decode.
+        comptime BN = 64
         comptime BM = 64
         comptime BK = 64
-        comptime NUM_WARP_GROUPS = 1
-        comptime NUM_PIPELINE_STAGES = 2
         var grid_x = ceildiv(N, BN)
         var grid_y = ceildiv(max_M, BM)
         if grid_x == 0 or grid_y == 0:
@@ -1000,50 +1201,25 @@ struct MXFP4GroupedMatmulRaggedBF16:
                 "w_scales must be contiguous with dim stride0 == Kblocks*N"
             )
 
-        # Build a TMA op for A so the producer can async-copy BF16 tiles into
-        # SWIZZLE_128B shared memory.
-        comptime a_gmem_layout = Layout.row_major[2]()
-        var a_shape = IndexList[2](P, K)
-        var a_runtime_layout = RuntimeLayout[a_gmem_layout].row_major(a_shape)
-        var a_tensor = LayoutTensor[
-            BF16,
-            a_gmem_layout,
-            MutAnyOrigin,
-            address_space = AddressSpace.GENERIC,
-        ](a.unsafe_ptr(), a_runtime_layout)
-        comptime a_swizzle = TensorMapSwizzle.SWIZZLE_128B
-        var a_tma_op = create_tma_tile[BM, BK, swizzle_mode=a_swizzle](
-            gpu_ctx, a_tensor
+        var a_dev = DeviceBuffer[a.dtype](
+            gpu_ctx, a.unsafe_ptr(), a.size(), owning=False
         )
 
-        comptime kernel = grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline[
+        comptime kernel = grouped_matmul_mxfp4_bf16_warp_mma_sm90[
             BM=BM,
             BN=BN,
             BK=BK,
-            WGMMA_M=64,
-            WGMMA_N=128,
-            WGMMA_K=16,
-            NUM_WARP_GROUPS=NUM_WARP_GROUPS,
-            NUM_PIPELINE_STAGES=NUM_PIPELINE_STAGES,
-            a_tile_layout=a_tma_op.layout,
-            a_desc_layout=a_tma_op.desc_layout,
+            WM=BM,
+            WN=BN,
+            MMA_M=16,
+            MMA_N=8,
+            MMA_K=16,
         ]
 
-        comptime a_smem_layout = tile_layout_k_major[
-            BF16, BM, BK, TensorMapSwizzle.SWIZZLE_128B
-        ]()
-        comptime b_smem_layout = tile_layout_k_major[
-            BF16, BN, BK, TensorMapSwizzle.SWIZZLE_128B
-        ]()
-        comptime a_bytes = a_smem_layout.size() * 2
-        comptime b_bytes = b_smem_layout.size() * 2
-        comptime a_stage_bytes = ((a_bytes + 255) // 256) * 256
-        comptime b_stage_bytes = ((b_bytes + 255) // 256) * 256
-        comptime stage_bytes = a_stage_bytes + b_stage_bytes
-        comptime smem_use = NUM_PIPELINE_STAGES * stage_bytes
-
         gpu_ctx.enqueue_function[kernel, kernel](
-            a_tma_op,
+            a_dev,
+            a_stride0,
+            a_stride1,
             P,
             K,
             expert_start_dev,
@@ -1053,11 +1229,9 @@ struct MXFP4GroupedMatmulRaggedBF16:
             w_scales_dev,
             Kblocks,
             c_dev,
+            out_stride0,
+            out_stride1,
             N,
             grid_dim=(grid_x, grid_y, grid_z),
-            block_dim=(Int(WARPGROUP_SIZE) * (NUM_WARP_GROUPS + 1), 1, 1),
-            shared_mem_bytes=Int(smem_use),
-            func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
-                Int(smem_use)
-            ),
+            block_dim=(WARP_SIZE, 1, 1),
         )
