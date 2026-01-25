@@ -1092,16 +1092,17 @@ struct MXFP4GroupedMatmulRaggedBF16:
         var P = a.dim_size(0)
         var K = a.dim_size(1)
         var N = c.dim_size(1)
-        var a_stride0 = a.stride_length[0]()
-        var a_stride1 = a.stride_length[1]()
-        var out_stride0 = c.stride_length[0]()
-        var out_stride1 = c.stride_length[1]()
-        var w_blocks_stride0 = w_blocks.stride_length[0]()
-        var w_blocks_stride1 = w_blocks.stride_length[1]()
-        var w_blocks_stride2 = w_blocks.stride_length[2]()
-        var w_scales_stride0 = w_scales.stride_length[0]()
-        var w_scales_stride1 = w_scales.stride_length[1]()
-        var w_scales_stride2 = w_scales.stride_length[2]()
+        var a_stride0 = a.stride_length(0)
+        var a_stride1 = a.stride_length(1)
+        var out_stride0 = c.stride_length(0)
+        var out_stride1 = c.stride_length(1)
+        var w_blocks_stride0 = w_blocks.stride_length(0)
+        var w_blocks_stride1 = w_blocks.stride_length(1)
+        var w_blocks_stride2 = w_blocks.stride_length(2)
+        var w_blocks_stride3 = w_blocks.stride_length(3)
+        var w_scales_stride0 = w_scales.stride_length(0)
+        var w_scales_stride1 = w_scales.stride_length(1)
+        var w_scales_stride2 = w_scales.stride_length(2)
         var Kblocks = w_blocks.dim_size(1)
 
         if P == 0 or K == 0 or N == 0:
@@ -1181,10 +1182,7 @@ struct MXFP4GroupedMatmulRaggedBF16:
         #   w_blocks: [E, K/32, N, 16] row-major contiguous
         #   w_scales: [E, K/32, N] row-major contiguous
         # since the kernel uses fixed-stride pointer math for coalesced loads.
-        if (
-            w_blocks_stride2 != BYTES_PER_BLOCK
-            or w_blocks.stride_length[3]() != 1
-        ):
+        if w_blocks_stride2 != BYTES_PER_BLOCK or w_blocks_stride3 != 1:
             raise Error("w_blocks must be contiguous with inner dims [N,16]")
         if w_scales_stride2 != 1:
             raise Error("w_scales must be contiguous with inner dim [N]")
