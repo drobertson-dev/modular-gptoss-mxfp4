@@ -19,12 +19,8 @@ from max.tensor import Tensor
 
 from gpt_oss_mxfp4_v3.kernels import (
     MXFP4_VALUES_PER_BLOCK,
-    mxfp4_grouped_matmul_ragged_bf16_swizzled,
+    mxfp4_grouped_matmul_ragged_bf16,
 )
-from gpt_oss_mxfp4_v3.weight_adapters import _mxfp4_swizzle_values_hopper
-
-HOPPER_SCALE_NUM_WARPS = 4
-HOPPER_SCALE_ALIGN_M = 32 * HOPPER_SCALE_NUM_WARPS
 
 
 def _build_expert_segments(
@@ -71,12 +67,6 @@ def main() -> None:
         raise ValueError(
             "intermediate must be divisible by 32 for MXFP4 packing"
         )
-    if (args.hidden // MXFP4_VALUES_PER_BLOCK) % 2 != 0:
-        raise ValueError("hidden must be divisible by 64 for Hopper scales")
-    if (args.intermediate // MXFP4_VALUES_PER_BLOCK) % 2 != 0:
-        raise ValueError(
-            "intermediate must be divisible by 64 for Hopper scales"
-        )
 
     try:
         device = Accelerator() if args.device == "gpu" else CPU()
@@ -85,19 +75,14 @@ def main() -> None:
 
     rng = np.random.default_rng(args.seed)
     total_rows = args.tokens * args.topk
-    kbytes = args.hidden // 2
+    k_blocks = args.hidden // MXFP4_VALUES_PER_BLOCK
 
     a_f32 = rng.standard_normal((total_rows, args.hidden), dtype=np.float32)
-    w_blocks_logical = np.zeros(
-        (args.experts, args.intermediate, kbytes), dtype=np.uint8
+    w_blocks = np.zeros(
+        (args.experts, k_blocks, args.intermediate, 16), dtype=np.uint8
     )
-    w_blocks = _mxfp4_swizzle_values_hopper(w_blocks_logical, mx_axis=2)
-    scales_m2 = (
-        (args.intermediate + HOPPER_SCALE_ALIGN_M - 1)
-        // HOPPER_SCALE_ALIGN_M
-    ) * HOPPER_SCALE_NUM_WARPS
     w_scales = np.zeros(
-        (args.experts, scales_m2, args.hidden), dtype=np.uint8
+        (args.experts, k_blocks, args.intermediate), dtype=np.uint8
     )
     expert_start, expert_ids, expert_usage_stats = _build_expert_segments(
         total_rows=total_rows, num_experts=args.experts
@@ -112,7 +97,7 @@ def main() -> None:
     expert_usage_stats_t = Tensor.from_dlpack(expert_usage_stats).to(CPU())
 
     def _run_once() -> float:
-        y = mxfp4_grouped_matmul_ragged_bf16_swizzled(
+        y = mxfp4_grouped_matmul_ragged_bf16(
             a_bf16,
             w_blocks_t,
             w_scales_t,

@@ -26,8 +26,6 @@ Profiling hooks
 Kernel benchmarking (kbench)
 - `pixi run mxfp4-moe-kbench` runs kbench using
   `max/examples/custom-models/benchmarks/mxfp4_moe_kbench.yaml`.
-- `pixi run mxfp4-moe-bench -- --check` runs the grouped matmul correctness
-  check (small shapes, packbits decode) before the perf sweep.
 - The task sets `KERNEL_BENCHMARKS_ROOT` and uses `--build-opts "-I .../custom_ops"`
   so the Mojo compiler can find the MXFP4 kernels.
 - Results land in `kbench-output/` with `.txt/.csv/.pkl` summaries.
