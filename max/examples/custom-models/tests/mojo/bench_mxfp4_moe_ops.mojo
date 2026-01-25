@@ -18,11 +18,13 @@ from benchmark import (
     ThroughputMeasure,
 )
 from buffer.dimlist import DimList
+from gpu import WARP_SIZE
 from gpu.host import DeviceBuffer, DeviceContext
 from kernels import (
     MXFP4MoETopKReduceBF16,
     MXFP4MoEW1SwiGlu,
     MXFP4MoEW2PairsBF16,
+    grouped_matmul_mxfp4_bf16_warp_mma_sm90,
 )
 from sys import argv, has_nvidia_gpu_accelerator
 from tensor import Input, IOSpec, ManagedTensorSlice, Output, StaticTensorSpec
@@ -123,7 +125,12 @@ fn run_bench[
     # 20B uses 32 experts; 120B uses 128. The CLI selects the preset.
     NUM_EXPERTS: Int = 32,
     TOPK: Int = 4,
-](run_w1: Bool = True, run_w2: Bool = True, run_reduce: Bool = True) raises:
+](
+    run_w1: Bool = True,
+    run_w2: Bool = True,
+    run_reduce: Bool = True,
+    run_grouped: Bool = True,
+) raises:
     var ctx = DeviceContext()
     if _skip_if_no_sm90(ctx):
         return
@@ -213,6 +220,19 @@ fn run_bench[
     var w2_bias = Tensor[Input, w2_bias_spec](ctx)
     ctx.enqueue_memset(w2_bias.buffer, 0)
 
+    # Grouped matmul weights: [E, I/32, D, 16] blocks + [E, I/32, D] scales.
+    comptime wgm_blocks_spec = StaticTensorSpec[DType.uint8, 4](
+        DimList(NUM_EXPERTS, kblocks_w2, HIDDEN, 16)
+    )
+    var wgm_blocks = Tensor[Input, wgm_blocks_spec](ctx)
+    ctx.enqueue_memset(wgm_blocks.buffer, 0)
+
+    comptime wgm_scales_spec = StaticTensorSpec[DType.uint8, 3](
+        DimList(NUM_EXPERTS, kblocks_w2, HIDDEN)
+    )
+    var wgm_scales = Tensor[Input, wgm_scales_spec](ctx)
+    ctx.enqueue_memset(wgm_scales.buffer, 0)
+
     # Outputs.
     comptime h_spec = StaticTensorSpec[DType.bfloat16, 2](
         DimList(P, INTERMEDIATE)
@@ -238,10 +258,58 @@ fn run_bench[
         y_pairs_bf16_spec.strides.into_index_list[2](),
     )
 
+    comptime y_grouped_spec = StaticTensorSpec[DType.bfloat16, 2](
+        DimList(P, HIDDEN)
+    )
+    var y_grouped = Tensor[Output, y_grouped_spec](ctx)
+
     comptime y_bf16_spec = StaticTensorSpec[DType.bfloat16, 2](
         DimList(TOKENS, HIDDEN)
     )
     var y_bf16 = Tensor[Output, y_bf16_spec](ctx)
+
+    @parameter
+    @always_inline
+    fn launch_grouped_matmul(ctx: DeviceContext) raises:
+        comptime BM = 64
+        comptime BN = 64
+        comptime BK = 64
+        comptime kernel = grouped_matmul_mxfp4_bf16_warp_mma_sm90[
+            BM=BM,
+            BN=BN,
+            BK=BK,
+            WM=BM,
+            WN=BN,
+            MMA_M=16,
+            MMA_N=8,
+            MMA_K=16,
+        ]
+
+        var grid_x = (HIDDEN + BN - 1) // BN
+        var grid_y = (max_tokens_per_expert + BM - 1) // BM
+        if grid_y <= 0:
+            return
+        var grid_z = NUM_EXPERTS
+
+        ctx.enqueue_function[kernel, kernel](
+            h_sorted.buffer,
+            INTERMEDIATE,
+            1,
+            P,
+            INTERMEDIATE,
+            expert_start.buffer,
+            expert_ids.buffer,
+            grid_z,
+            wgm_blocks.buffer,
+            wgm_scales.buffer,
+            kblocks_w2,
+            y_grouped.buffer,
+            HIDDEN,
+            1,
+            HIDDEN,
+            grid_dim=(grid_x, grid_y, grid_z),
+            block_dim=(WARP_SIZE, 1, 1),
+        )
 
     # Warmup (jit/compile + first-run caches).
     MXFP4MoEW1SwiGlu.execute[target="gpu"](
@@ -271,6 +339,7 @@ fn run_bench[
         w2_bias.slice,
         ctx,
     )
+    launch_grouped_matmul(ctx)
     MXFP4MoETopKReduceBF16.execute[target="gpu"](
         y_bf16.slice,
         y_pairs_bf16_in,
@@ -359,6 +428,16 @@ fn run_bench[
 
         b.iter_custom[kernel_launch](ctx)
 
+    @parameter
+    @always_inline
+    fn bench_grouped_matmul(mut b: Bencher) raises:
+        @parameter
+        @always_inline
+        fn kernel_launch(ctx: DeviceContext) raises:
+            launch_grouped_matmul(ctx)
+
+        b.iter_custom[kernel_launch](ctx)
+
     if run_w1:
         bench.bench_function[bench_w1](
             BenchId("mxfp4_moe_w1_swiglu", "gpu"), w1_metrics
@@ -370,6 +449,10 @@ fn run_bench[
     if run_w2 and run_reduce:
         bench.bench_function[bench_w2_pairs_bf16_reduce](
             BenchId("mxfp4_moe_w2_pairs_bf16_reduce", "gpu"), w2_metrics
+        )
+    if run_grouped:
+        bench.bench_function[bench_grouped_matmul](
+            BenchId("mxfp4_grouped_matmul_ragged_bf16", "gpu"), w2_metrics
         )
 
     print(bench)
@@ -385,6 +468,7 @@ def main():
     #   --w1-only
     #   --w2-only
     #   --no-reduce
+    #   --no-grouped
     #
     # Token-count presets (compile-time specializations):
     #   --tokens1
@@ -396,6 +480,7 @@ def main():
     var run_w1 = True
     var run_w2 = True
     var run_reduce = True
+    var run_grouped = True
 
     for arg in argv():
         if arg == "--120b":
@@ -409,10 +494,13 @@ def main():
         if arg == "--w1-only":
             run_w2 = False
             run_reduce = False
+            run_grouped = False
         if arg == "--w2-only":
             run_w1 = False
         if arg == "--no-reduce":
             run_reduce = False
+        if arg == "--no-grouped":
+            run_grouped = False
 
     if use_120b:
         if tokens1:
@@ -420,18 +508,21 @@ def main():
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
+                run_grouped=run_grouped,
             )
         elif tokens64:
             run_bench[TOKENS=64, NUM_EXPERTS=128](
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
+                run_grouped=run_grouped,
             )
         else:
             run_bench[NUM_EXPERTS=128](
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
+                run_grouped=run_grouped,
             )
     else:
         if tokens1:
@@ -439,16 +530,19 @@ def main():
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
+                run_grouped=run_grouped,
             )
         elif tokens64:
             run_bench[TOKENS=64, NUM_EXPERTS=32](
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
+                run_grouped=run_grouped,
             )
         else:
             run_bench[NUM_EXPERTS=32](
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
+                run_grouped=run_grouped,
             )
