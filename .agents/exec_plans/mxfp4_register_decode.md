@@ -27,14 +27,14 @@ Assumptions:
 - [x] (2026-01-25 20:22Z) Added a warp-level MMA kernel that decodes MXFP4 per fragment and stages only a small B fragment in shared (`grouped_matmul_mxfp4_sm90.mojo`).
 - [x] (2026-01-25 20:25Z) Switched `mxfp4_grouped_matmul_ragged_bf16` to use the new kernel (BM/BN/BK = 64, single-warp block).
 - [x] (2026-01-25 20:27Z) Verified eager smoke executes with the new kernel (`pixi run mxfp4-eager-smoke`).
-- [ ] Build a correctness check comparing the grouped matmul output against numpy decode for small shapes.
-- [ ] Replace shared fragment scratch with a true register-fragment decode path.
+- [x] (2026-01-25 22:10Z) Added a Mojo correctness check for grouped matmul (small shapes, packbits decode) in the bench harness.
+- [x] (2026-01-25 22:18Z) Replaced shared fragment scratch with a register-fragment decode path using the BF16 MMA lane mapping.
 - [ ] Re-evaluate block sizes and tiling for performance once correctness is locked.
 
 ## Surprises & Discoveries
 
 - No existing Mojo kernels decode MXFP4 directly into register fragments; all SM90 paths decode into shared (per repo search).
-- TensorCore load paths (`load_a` / `load_b`) require shared memory; register-fragment mapping is not exposed directly.
+- TensorCore lane mapping for BF16 B fragments is non-trivial (lane gets two K pairs from each half of the 16-wide fragment). Derived mapping from a debug probe.
 
 ## Decision Log
 
@@ -44,4 +44,4 @@ Assumptions:
 
 ## Outcomes & Retrospective
 
-Pending correctness validation for the new kernel. The eager smoke run succeeded (no compile errors).
+Correctness check passes for grouped matmul (max abs err ~0.10 vs FP32 reference). Eager smoke and benchmarks still run.

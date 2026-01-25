@@ -163,13 +163,6 @@ fn grouped_matmul_mxfp4_bf16_warp_mma_sm90[
         address_space = AddressSpace.SHARED,
     ].stack_allocation()
 
-    var B_frag_s = LayoutTensor[
-        BF16,
-        Layout.row_major(MMA_K, MMA_N),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
-
     var mma = TensorCore[F32, BF16, Index(MMA_M, MMA_N, MMA_K)]()
 
     var c_reg = (
@@ -216,59 +209,74 @@ fn grouped_matmul_mxfp4_bf16_warp_mma_sm90[
             @parameter
             for mma_n in range(WN // MMA_N):
                 var n_frag_base = n0 + mma_n * MMA_N
+                __comptime_assert (
+                    MMA_M == 16 and MMA_N == 8 and MMA_K == 16
+                ), "Register decode mapping assumes MMA 16x8x16"
 
                 var lane = Int(lane_id())
-                if lane < MMA_N:
-                    var col = n_frag_base + lane
-                    if col < N and kb < Kblocks:
-                        var scale_exp = w_scales_ptr[
-                            ((expert_id * Kblocks + kb) * N) + col
-                        ]
-                        var scale = e8m0_to_bf16_bits(scale_exp)
-                        var packed_base = (
-                            ((expert_id * Kblocks + kb) * N) + col
-                        ) * BYTES_PER_BLOCK + byte_start
-                        var base_u64 = packed_base // 8
-                        var packed = bitcast[DType.uint8, 8](
-                            UInt64(
-                                w_blocks_u64.load[alignment=8](base_u64)
-                            )
-                        )
+                var lane_k = lane & 3
+                var lane_n = lane >> 2
+                var col = n_frag_base + lane_n
 
-                        @parameter
-                        for group in range(2):
-                            var byte_base = group * 4
-                            var k_local = group * 8
-                            var p = _u32_from_u8x4(
-                                UInt8(packed[byte_base + 0]),
-                                UInt8(packed[byte_base + 1]),
-                                UInt8(packed[byte_base + 2]),
-                                UInt8(packed[byte_base + 3]),
-                            )
-                            var outv = (
-                                decode_mxfp4_packbits_u32_to_8xbf16_scaled(
-                                    p, scale
-                                )
-                            )
-                            @parameter
-                            for i in range(8):
-                                B_frag_s[k_local + i, lane] = outv[i]
-                    else:
-                        @parameter
-                        for i in range(MMA_K):
-                            B_frag_s[i, lane] = 0
-                barrier()
+                comptime b_reg_elems = (MMA_K * MMA_N) // WARP_SIZE
+                var b_reg_tile = LayoutTensor[
+                    BF16,
+                    Layout.row_major(b_reg_elems, 1),
+                    MutAnyOrigin,
+                    address_space = AddressSpace.LOCAL,
+                ].stack_allocation()
+
+                b_reg_tile[0, 0] = 0
+                b_reg_tile[1, 0] = 0
+                b_reg_tile[2, 0] = 0
+                b_reg_tile[3, 0] = 0
+
+                if col < N and kb < Kblocks:
+                    var scale_exp = w_scales_ptr[
+                        ((expert_id * Kblocks + kb) * N) + col
+                    ]
+                    var scale = e8m0_to_bf16_bits(scale_exp)
+                    var packed_base = (
+                        ((expert_id * Kblocks + kb) * N) + col
+                    ) * BYTES_PER_BLOCK + byte_start
+                    var base_u64 = packed_base // 8
+                    var byte_offset = packed_base - base_u64 * 8
+                    var packed = bitcast[DType.uint8, 8](
+                        UInt64(w_blocks_u64.load[alignment=8](base_u64))
+                    )
+
+                    var byte_base = Int(byte_offset)
+                    var p0 = _u32_from_u8x4(
+                        UInt8(packed[byte_base + 0]),
+                        UInt8(packed[byte_base + 1]),
+                        UInt8(packed[byte_base + 2]),
+                        UInt8(packed[byte_base + 3]),
+                    )
+                    var p1 = _u32_from_u8x4(
+                        UInt8(packed[byte_base + 4]),
+                        UInt8(packed[byte_base + 5]),
+                        UInt8(packed[byte_base + 6]),
+                        UInt8(packed[byte_base + 7]),
+                    )
+                    var out0 = decode_mxfp4_packbits_u32_to_8xbf16_scaled(
+                        p0, scale
+                    )
+                    var out1 = decode_mxfp4_packbits_u32_to_8xbf16_scaled(
+                        p1, scale
+                    )
+                    var idx0 = lane_k * 2
+                    b_reg_tile[0, 0] = out0[idx0 + 0]
+                    b_reg_tile[1, 0] = out0[idx0 + 1]
+                    b_reg_tile[2, 0] = out1[idx0 + 0]
+                    b_reg_tile[3, 0] = out1[idx0 + 1]
 
                 @parameter
                 for mma_m in range(WM // MMA_M):
                     var c_tile = c_reg.tile[1, 4](mma_m, mma_n)
                     var A_mma = A_warp_tile.tile[MMA_M, MMA_K](mma_m, mma_k)
-                    var B_mma = B_frag_s
                     var a_reg = mma.load_a(A_mma)
-                    var b_reg = mma.load_b(B_mma)
-                    var d_reg = mma.mma_op(a_reg, b_reg, c_tile)
+                    var d_reg = mma.mma_op(a_reg, b_reg_tile, c_tile)
                     c_tile.copy_from(d_reg)
-                barrier()
         barrier()
 
     var C_warp = C_s.tile[WM, WN](0, 0)

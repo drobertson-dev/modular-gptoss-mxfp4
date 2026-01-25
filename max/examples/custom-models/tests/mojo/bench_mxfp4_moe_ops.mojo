@@ -21,6 +21,8 @@ from buffer.dimlist import DimList
 from gpu import WARP_SIZE
 from gpu.host import DeviceBuffer, DeviceContext
 from kernels import (
+    decode_mxfp4_packbits_u32_to_8xbf16_scaled,
+    e8m0_to_bf16_bits,
     MXFP4MoETopKReduceBF16,
     MXFP4MoEW1SwiGlu,
     MXFP4MoEW2PairsBF16,
@@ -54,6 +56,23 @@ struct Tensor[
             Self.static_spec.shape.into_index_list[Self.rank](),
             Self.static_spec.strides.into_index_list[Self.rank](),
         )
+
+
+@always_inline
+fn _u32_from_u8x4(b0: UInt8, b1: UInt8, b2: UInt8, b3: UInt8) -> UInt32:
+    return (
+        UInt32(b0)
+        | (UInt32(b1) << UInt32(8))
+        | (UInt32(b2) << UInt32(16))
+        | (UInt32(b3) << UInt32(24))
+    )
+
+
+@always_inline
+fn _abs_f32(x: Float32) -> Float32:
+    if x < 0:
+        return -x
+    return x
 
 
 fn _skip_if_no_sm90(ctx: DeviceContext) -> Bool:
@@ -459,6 +478,181 @@ fn run_bench[
     bench.dump_report()
 
 
+fn run_grouped_check() raises:
+    # Small-shape correctness check for grouped matmul (register decode path).
+    comptime TOKENS = 2
+    comptime HIDDEN = 32
+    comptime INTERMEDIATE = 32
+    comptime NUM_EXPERTS = 1
+    comptime TOPK = 1
+    comptime P = TOKENS * TOPK
+
+    var ctx = DeviceContext()
+    if _skip_if_no_sm90(ctx):
+        return
+
+    comptime kblocks = INTERMEDIATE // 32
+
+    comptime a_spec = StaticTensorSpec[DType.bfloat16, 2](
+        DimList(P, INTERMEDIATE)
+    )
+    var a = Tensor[Input, a_spec](ctx)
+    with a.buffer.map_to_host() as host:
+        var ptr = host.unsafe_ptr()
+        for i in range(P * INTERMEDIATE):
+            var v = Float32((i * 7 + 3) % 13) / 13.0
+            ptr[i] = BFloat16(v)
+
+    comptime order_spec = StaticTensorSpec[DType.uint32, 1](DimList(P))
+    var token_expert_order = Tensor[Input, order_spec](ctx)
+
+    comptime start_spec = StaticTensorSpec[DType.uint32, 1](
+        DimList(NUM_EXPERTS + 1)
+    )
+    var expert_start = Tensor[Input, start_spec](ctx)
+
+    comptime ids_spec = StaticTensorSpec[DType.int32, 1](DimList(NUM_EXPERTS))
+    var expert_ids = Tensor[Input, ids_spec](ctx)
+
+    comptime gamma_spec = StaticTensorSpec[DType.bfloat16, 1](DimList(P))
+    var gate_weights = Tensor[Input, gamma_spec](ctx)
+
+    comptime stats_spec = StaticTensorSpec[DType.uint32, 1](DimList(2))
+    var expert_usage_stats = Tensor[Input, stats_spec](ctx)
+
+    var max_tokens_per_expert = _fill_routing_buffers[
+        TOKENS, TOPK, NUM_EXPERTS
+    ](
+        token_expert_order.buffer,
+        expert_start.buffer,
+        expert_ids.buffer,
+        gate_weights.buffer,
+    )
+    with expert_usage_stats.buffer.map_to_host() as host:
+        var ptr = host.unsafe_ptr()
+        ptr[0] = UInt32(max_tokens_per_expert)
+        ptr[1] = UInt32(NUM_EXPERTS)
+
+    comptime w_blocks_spec = StaticTensorSpec[DType.uint8, 4](
+        DimList(NUM_EXPERTS, kblocks, HIDDEN, 16)
+    )
+    var w_blocks = Tensor[Input, w_blocks_spec](ctx)
+    with w_blocks.buffer.map_to_host() as host:
+        var ptr = host.unsafe_ptr()
+        for i in range(NUM_EXPERTS * kblocks * HIDDEN * 16):
+            ptr[i] = UInt8((i * 17 + 5) & 0xFF)
+
+    comptime w_scales_spec = StaticTensorSpec[DType.uint8, 3](
+        DimList(NUM_EXPERTS, kblocks, HIDDEN)
+    )
+    var w_scales = Tensor[Input, w_scales_spec](ctx)
+    with w_scales.buffer.map_to_host() as host:
+        var ptr = host.unsafe_ptr()
+        for i in range(NUM_EXPERTS * kblocks * HIDDEN):
+            ptr[i] = UInt8(0x7F + (i % 3))
+
+    comptime y_spec = StaticTensorSpec[DType.bfloat16, 2](
+        DimList(P, HIDDEN)
+    )
+    var y = Tensor[Output, y_spec](ctx)
+    ctx.enqueue_memset(y.buffer, 0)
+
+    @parameter
+    @always_inline
+    fn launch(ctx: DeviceContext) raises:
+        comptime BM = 64
+        comptime BN = 64
+        comptime BK = 64
+        comptime kernel = grouped_matmul_mxfp4_bf16_warp_mma_sm90[
+            BM=BM,
+            BN=BN,
+            BK=BK,
+            WM=BM,
+            WN=BN,
+            MMA_M=16,
+            MMA_N=8,
+            MMA_K=16,
+        ]
+
+        var grid_x = (HIDDEN + BN - 1) // BN
+        var grid_y = (max_tokens_per_expert + BM - 1) // BM
+        if grid_y <= 0:
+            return
+        var grid_z = NUM_EXPERTS
+
+        ctx.enqueue_function[kernel, kernel](
+            a.buffer,
+            INTERMEDIATE,
+            1,
+            P,
+            INTERMEDIATE,
+            expert_start.buffer,
+            expert_ids.buffer,
+            grid_z,
+            w_blocks.buffer,
+            w_scales.buffer,
+            kblocks,
+            y.buffer,
+            HIDDEN,
+            1,
+            HIDDEN,
+            grid_dim=(grid_x, grid_y, grid_z),
+            block_dim=(WARP_SIZE, 1, 1),
+        )
+
+    launch(ctx)
+    ctx.synchronize()
+
+    var max_err = Float32(0)
+    with a.buffer.map_to_host() as a_host:
+        with w_blocks.buffer.map_to_host() as w_host:
+            with w_scales.buffer.map_to_host() as s_host:
+                with y.buffer.map_to_host() as y_host:
+                    var a_ptr = a_host.unsafe_ptr()
+                    var w_ptr = w_host.unsafe_ptr()
+                    var s_ptr = s_host.unsafe_ptr()
+                    var y_ptr = y_host.unsafe_ptr()
+
+                    for r in range(P):
+                        for c in range(HIDDEN):
+                            var acc = Float32(0)
+                            for k in range(INTERMEDIATE):
+                                var a_val = Float32(a_ptr[r * INTERMEDIATE + k])
+                                var kb = k // 32
+                                var in_block = k - kb * 32
+                                var group = in_block // 8
+                                var idx = in_block - group * 8
+                                var scale_exp = s_ptr[kb * HIDDEN + c]
+                                var scale = e8m0_to_bf16_bits(scale_exp)
+                                var packed_base = (
+                                    (kb * HIDDEN + c) * 16
+                                    + group * 4
+                                )
+                                var p = _u32_from_u8x4(
+                                    UInt8(w_ptr[packed_base + 0]),
+                                    UInt8(w_ptr[packed_base + 1]),
+                                    UInt8(w_ptr[packed_base + 2]),
+                                    UInt8(w_ptr[packed_base + 3]),
+                                )
+                                var outv = (
+                                    decode_mxfp4_packbits_u32_to_8xbf16_scaled(
+                                        p, scale
+                                    )
+                                )
+                                var w_val = Float32(outv[idx])
+                                acc += a_val * w_val
+                            var out = y_ptr[r * HIDDEN + c]
+                            var err = _abs_f32(Float32(out) - acc)
+                            if err > max_err:
+                                max_err = err
+
+    if max_err > Float32(0.25):
+        print("grouped matmul check FAILED (max err)", max_err)
+    else:
+        print("grouped matmul check OK (max err)", max_err)
+
+
+
 def main():
     # Presets:
     #   --20b (default): hidden=2880, intermediate=2880, experts=32
@@ -481,6 +675,7 @@ def main():
     var run_w2 = True
     var run_reduce = True
     var run_grouped = True
+    var run_check = False
 
     for arg in argv():
         if arg == "--120b":
@@ -501,6 +696,11 @@ def main():
             run_reduce = False
         if arg == "--no-grouped":
             run_grouped = False
+        if arg == "--check":
+            run_check = True
+
+    if run_check:
+        run_grouped_check()
 
     if use_120b:
         if tokens1:
