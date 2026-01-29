@@ -8,6 +8,13 @@
 from math import exp
 from memory import bitcast
 
+from .hopper_mxfp4_layout import (
+    MXFP4_PACK_MASK_U32,
+    MXFP4_D1_MASK_U32,
+    MXFP4_D3_MASK_U32,
+    MXFP4_D6_MASK_U32,
+)
+
 comptime BF16 = DType.bfloat16
 comptime F16 = DType.float16
 comptime F32 = DType.float32
@@ -130,10 +137,6 @@ fn decode_mxfp4_byte_to_2xbf16_scaled(
     return out
 
 
-comptime _MXFP4_PACK_MASK_U32 = UInt32(0x81C081C0)
-comptime _MXFP4_D1_MASK_U32 = UInt32(0x80008000)
-comptime _MXFP4_D3_MASK_U32 = UInt32(0x01800180)
-comptime _MXFP4_D6_MASK_U32 = UInt32(0x00400040)
 comptime _MXFP4_FP4_BIAS_BF16 = bitcast[BF16, 1](UInt16(0x7E80))  # 2**126
 
 
@@ -152,13 +155,13 @@ fn decode_mxfp4_packbits_u32_to_8xbf16_scaled(
     """
     var x = packed_bits
 
-    var y0_bits = x & _MXFP4_PACK_MASK_U32
-    var y1_bits = (x << UInt32(3)) & _MXFP4_PACK_MASK_U32
-    var y2_bits = (x << UInt32(6)) & _MXFP4_PACK_MASK_U32
+    var y0_bits = x & MXFP4_PACK_MASK_U32
+    var y1_bits = (x << UInt32(3)) & MXFP4_PACK_MASK_U32
+    var y2_bits = (x << UInt32(6)) & MXFP4_PACK_MASK_U32
 
-    var d1 = (x << UInt32(1)) & _MXFP4_D1_MASK_U32
-    var d3 = (x >> UInt32(3)) & _MXFP4_D3_MASK_U32
-    var d6 = (x >> UInt32(7)) & _MXFP4_D6_MASK_U32
+    var d1 = (x << UInt32(1)) & MXFP4_D1_MASK_U32
+    var d3 = (x >> UInt32(3)) & MXFP4_D3_MASK_U32
+    var d6 = (x >> UInt32(7)) & MXFP4_D6_MASK_U32
     var y3_bits = d1 | d3 | d6
 
     var bias2 = SIMD[BF16, 2](_MXFP4_FP4_BIAS_BF16, _MXFP4_FP4_BIAS_BF16)

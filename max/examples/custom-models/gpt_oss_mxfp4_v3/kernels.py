@@ -12,6 +12,7 @@ from max.tensor import Tensor
 
 MXFP4_VALUES_PER_BLOCK = 32
 MXFP4_BYTES_PER_BLOCK = 16
+HOPPER_SCALE_NUM_WARPS = 4
 
 
 def get_mxfp4_kernels_path() -> Path:
@@ -47,7 +48,7 @@ def mxfp4_grouped_matmul_ragged_bf16(
     """Compute grouped matmul with MXFP4 weights (BF16 in/out, FP32 accum in kernel).
 
     Calls `mxfp4_grouped_matmul_ragged_bf16` registered by
-    `examples/custom_ops/kernels/grouped_matmul_mxfp4_sm90.mojo`.
+    `examples/custom_ops/mxfp4_grouped_kernels/grouped_matmul_mxfp4_sm90.mojo`.
     """
 
     a_t = _as_tensor(a_bf16)
@@ -104,6 +105,28 @@ def mxfp4_grouped_matmul_ragged_bf16(
         if k_dim != k_blocks_dim * MXFP4_VALUES_PER_BLOCK:
             raise ValueError(
                 "K must be divisible by 32 and match w_blocks Kblocks dimension"
+            )
+        if (k_blocks_dim % 2) != 0:
+            raise ValueError(
+                "Hopper scale swizzle requires Kblocks to be even (K % 64 == 0)"
+            )
+
+    scales_m2 = _try_int(w_scales_t.shape[1])
+    scales_k = _try_int(w_scales_t.shape[2])
+    n_dim = _try_int(N)
+    if scales_m2 is not None and n_dim is not None:
+        if scales_m2 * 32 < n_dim:
+            raise ValueError(
+                "w_scales dim1 must cover N (expected >= N/32, with padding)"
+            )
+        if (scales_m2 % HOPPER_SCALE_NUM_WARPS) != 0:
+            raise ValueError(
+                "w_scales dim1 must be a multiple of HOPPER_SCALE_NUM_WARPS"
+            )
+    if scales_k is not None and k_dim is not None:
+        if scales_k != k_dim:
+            raise ValueError(
+                "w_scales dim2 must match K (Kblocks*32)"
             )
 
     out_type = TensorType(dtype=DType.bfloat16, shape=[P, N], device=a_t.device)

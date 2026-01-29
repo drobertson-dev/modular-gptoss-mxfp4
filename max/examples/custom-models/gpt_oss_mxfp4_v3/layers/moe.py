@@ -32,6 +32,9 @@ mxfp4_grouped_matmul_ragged_bf16 = F.functional(
     _mxfp4_grouped_matmul_ragged_bf16
 )
 
+HOPPER_SCALE_NUM_WARPS = 4
+HOPPER_SCALE_ALIGN_M = 32 * HOPPER_SCALE_NUM_WARPS
+
 _MOE_DEBUG = os.environ.get("MXFP4_V3_MOE_DEBUG", "") == "1"
 _MOE_DEBUG_LAYER = int(os.environ.get("MXFP4_V3_MOE_DEBUG_LAYER", "-1"))
 _MOE_NAN_SCAN = os.environ.get("MXFP4_V3_MOE_NAN_SCAN", "") == "1"
@@ -81,11 +84,26 @@ class MXFP4Experts(Module):
             raise ValueError(
                 "intermediate_size must be divisible by 32 for MXFP4 packing"
             )
+        if (hidden_dim // MXFP4_VALUES_PER_BLOCK) % 2 != 0:
+            raise ValueError(
+                "hidden_dim must be divisible by 64 for Hopper scale swizzle"
+            )
+        if (moe_dim // MXFP4_VALUES_PER_BLOCK) % 2 != 0:
+            raise ValueError(
+                "intermediate_size must be divisible by 64 for Hopper scale swizzle"
+            )
 
         kblocks_w1 = hidden_dim // MXFP4_VALUES_PER_BLOCK
         kblocks_w2 = moe_dim // MXFP4_VALUES_PER_BLOCK
 
-        # W1 (prepacked): [E, D/32, 2*I, 16] blocks + [E, D/32, 2*I] scales + BF16 bias.
+        n_pad_w1 = (
+            (2 * moe_dim + HOPPER_SCALE_ALIGN_M - 1)
+            // HOPPER_SCALE_ALIGN_M
+        ) * HOPPER_SCALE_ALIGN_M
+        scale_m2_w1 = n_pad_w1 // 32
+
+        # W1 (prepacked): [E, D/32, 2*I, 16] blocks +
+        # [E, ceildiv(2*I, 32*num_warps)*num_warps, D] scales + BF16 bias.
         # This matches the SM90 kernel's preferred access pattern: fixed `kb` reads
         # contiguous columns.
         self.gate_up_proj_blocks = Tensor.zeros(
@@ -93,7 +111,7 @@ class MXFP4Experts(Module):
             dtype=DType.uint8,
         )
         self.gate_up_proj_scales = Tensor.zeros(
-            shape=[num_experts, kblocks_w1, 2 * moe_dim],
+            shape=[num_experts, scale_m2_w1, hidden_dim],
             dtype=DType.uint8,
         )
         self.gate_up_proj_bias = Tensor.zeros(
@@ -101,13 +119,19 @@ class MXFP4Experts(Module):
             dtype=DType.bfloat16,
         )
 
-        # W2 (prepacked): [E, I/32, D, 16] blocks + [E, I/32, D] scales + BF16 bias.
+        n_pad_w2 = (
+            (hidden_dim + HOPPER_SCALE_ALIGN_M - 1) // HOPPER_SCALE_ALIGN_M
+        ) * HOPPER_SCALE_ALIGN_M
+        scale_m2_w2 = n_pad_w2 // 32
+
+        # W2 (prepacked): [E, I/32, D, 16] blocks +
+        # [E, ceildiv(D, 32*num_warps)*num_warps, I] scales + BF16 bias.
         self.down_proj_blocks = Tensor.zeros(
             shape=[num_experts, kblocks_w2, hidden_dim, 16],
             dtype=DType.uint8,
         )
         self.down_proj_scales = Tensor.zeros(
-            shape=[num_experts, kblocks_w2, hidden_dim],
+            shape=[num_experts, scale_m2_w2, moe_dim],
             dtype=DType.uint8,
         )
         self.down_proj_bias = Tensor.zeros(

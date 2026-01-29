@@ -22,6 +22,9 @@ from gpt_oss_mxfp4_v3.kernels import (
     mxfp4_grouped_matmul_ragged_bf16,
 )
 
+HOPPER_SCALE_NUM_WARPS = 4
+HOPPER_SCALE_ALIGN_M = 32 * HOPPER_SCALE_NUM_WARPS
+
 
 def _build_expert_segments(
     *, total_rows: int, num_experts: int
@@ -67,6 +70,12 @@ def main() -> None:
         raise ValueError(
             "intermediate must be divisible by 32 for MXFP4 packing"
         )
+    if (args.hidden // MXFP4_VALUES_PER_BLOCK) % 2 != 0:
+        raise ValueError("hidden must be divisible by 64 for Hopper scales")
+    if (args.intermediate // MXFP4_VALUES_PER_BLOCK) % 2 != 0:
+        raise ValueError(
+            "intermediate must be divisible by 64 for Hopper scales"
+        )
 
     try:
         device = Accelerator() if args.device == "gpu" else CPU()
@@ -81,8 +90,12 @@ def main() -> None:
     w_blocks = np.zeros(
         (args.experts, k_blocks, args.intermediate, 16), dtype=np.uint8
     )
+    scales_m2 = (
+        (args.intermediate + HOPPER_SCALE_ALIGN_M - 1)
+        // HOPPER_SCALE_ALIGN_M
+    ) * HOPPER_SCALE_NUM_WARPS
     w_scales = np.zeros(
-        (args.experts, k_blocks, args.intermediate), dtype=np.uint8
+        (args.experts, scales_m2, args.hidden), dtype=np.uint8
     )
     expert_start, expert_ids, expert_usage_stats = _build_expert_segments(
         total_rows=total_rows, num_experts=args.experts

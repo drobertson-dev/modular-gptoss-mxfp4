@@ -1,5 +1,8 @@
 # fp4_utils.mojo
 #
+# DEPRECATED: legacy FP4 utilities for the older MXFP4 kernel path. Use
+# `max/examples/custom_ops/mxfp4_grouped_kernels/mxfp4_decode.mojo` instead.
+#
 # Small FP4(E2M1) + MXFP4 scale helpers used by the MXFP4 test suite.
 #
 # Keep this file self-contained (no imports from upstream `max/` sources) so it

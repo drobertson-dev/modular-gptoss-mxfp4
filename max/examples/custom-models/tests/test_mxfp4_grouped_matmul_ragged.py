@@ -14,7 +14,10 @@ from gpt_oss_mxfp4_v3.kernels import (
     get_mxfp4_kernels_path,
     mxfp4_grouped_matmul_ragged_bf16,
 )
-from gpt_oss_mxfp4_v3.weight_adapters import _mxfp4_pack_bits_u8
+from gpt_oss_mxfp4_v3.weight_adapters import (
+    _mxfp4_pack_bits_u8,
+    _mxfp4_swizzle_scales_hopper,
+)
 from max.driver import Buffer, CPU, Accelerator
 from max.dtype import DType
 from max.engine import InferenceSession
@@ -95,6 +98,31 @@ def _decode_mxfp4_rows(
     return out
 
 
+def _prepare_mxfp4_weights(
+    w_blocks_all: np.ndarray,
+    w_scales_all: np.ndarray,
+    *,
+    num_experts: int,
+    n_cols: int,
+    k_blocks: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return (blocks_raw, blocks_packed, scales_swizzled, scales_ref)."""
+    w_blocks_raw = np.ascontiguousarray(
+        np.transpose(
+            w_blocks_all[:num_experts, :n_cols, :k_blocks, :], (0, 2, 1, 3)
+        )
+    )
+    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
+    w_scales_logical = np.ascontiguousarray(
+        w_scales_all[:num_experts, :n_cols, :k_blocks]
+    )
+    w_scales = _mxfp4_swizzle_scales_hopper(w_scales_logical)
+    w_scales_ref = np.ascontiguousarray(
+        np.transpose(w_scales_logical, (0, 2, 1))
+    )
+    return w_blocks_raw, w_blocks, w_scales, w_scales_ref
+
+
 def _find_gpt_oss_20b_file() -> Path | None:
     """Find the first shard that contains layer0 MoE weights."""
     hub_root = (
@@ -147,15 +175,14 @@ def test_mxfp4_grouped_matmul_single_expert_matches_reference(P: int) -> None:
             "model.layers.0.mlp.experts.down_proj_scales"
         )
 
-    # Prepack for kernel access: [E, N, K/32, 16] -> [E, K/32, N, 16]
-    # Then apply Hopper `_pack_bits` so the kernel can use the fast bit-unpack
-    # decode path.
-    w_blocks_raw = np.ascontiguousarray(
-        np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
-    )
-    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = np.ascontiguousarray(
-        np.transpose(w_scales_all[:num_experts, :N, :k_blocks], (0, 2, 1))
+    # Prepack for kernel access: blocks -> [E, K/32, N, 16],
+    # scales -> Hopper swizzled [E, N/32, K].
+    w_blocks_raw, w_blocks, w_scales, w_scales_ref = _prepare_mxfp4_weights(
+        w_blocks_all,
+        w_scales_all,
+        num_experts=num_experts,
+        n_cols=N,
+        k_blocks=k_blocks,
     )
 
     # Bias is not part of this op, but confirm it exists and is BF16 (checkpoint contract).
@@ -169,7 +196,7 @@ def test_mxfp4_grouped_matmul_single_expert_matches_reference(P: int) -> None:
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
-    w_dense = _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+    w_dense = _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
     w_dense = _bf16_round_to_f32(w_dense)
 
     ref = a_bf16 @ w_dense.T
@@ -254,20 +281,24 @@ def test_mxfp4_grouped_matmul_two_experts_segments_match_reference() -> None:
             "model.layers.0.mlp.experts.down_proj_scales"
         )
 
-    w_blocks_raw = np.ascontiguousarray(
-        np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
-    )
-    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = np.ascontiguousarray(
-        np.transpose(w_scales_all[:num_experts, :N, :k_blocks], (0, 2, 1))
+    w_blocks_raw, w_blocks, w_scales, w_scales_ref = _prepare_mxfp4_weights(
+        w_blocks_all,
+        w_scales_all,
+        num_experts=num_experts,
+        n_cols=N,
+        k_blocks=k_blocks,
     )
 
     rng = np.random.default_rng(1)
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
-    w0 = _bf16_round_to_f32(_decode_mxfp4_rows(w_blocks_raw[0], w_scales[0]))
-    w1 = _bf16_round_to_f32(_decode_mxfp4_rows(w_blocks_raw[1], w_scales[1]))
+    w0 = _bf16_round_to_f32(
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
+    )
+    w1 = _bf16_round_to_f32(
+        _decode_mxfp4_rows(w_blocks_raw[1], w_scales_ref[1])
+    )
 
     ref0 = a_bf16[:P0] @ w0.T
     ref1 = a_bf16[P0:] @ w1.T
@@ -356,12 +387,12 @@ def test_mxfp4_grouped_matmul_multi_bn_tiles_matches_reference() -> None:
             "model.layers.0.mlp.experts.down_proj_scales"
         )
 
-    w_blocks_raw = np.ascontiguousarray(
-        np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
-    )
-    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = np.ascontiguousarray(
-        np.transpose(w_scales_all[:num_experts, :N, :k_blocks], (0, 2, 1))
+    w_blocks_raw, w_blocks, w_scales, w_scales_ref = _prepare_mxfp4_weights(
+        w_blocks_all,
+        w_scales_all,
+        num_experts=num_experts,
+        n_cols=N,
+        k_blocks=k_blocks,
     )
 
     rng = np.random.default_rng(123)
@@ -369,7 +400,7 @@ def test_mxfp4_grouped_matmul_multi_bn_tiles_matches_reference() -> None:
     a_bf16 = _bf16_round_to_f32(a_f32)
 
     w_dense = _bf16_round_to_f32(
-        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
     )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
@@ -456,26 +487,30 @@ def test_mxfp4_grouped_matmul_strided_weight_views_match_reference() -> None:
             "model.layers.0.mlp.experts.down_proj_scales"
         )
 
-    w_blocks_raw = np.ascontiguousarray(
-        np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
-    )
-    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = np.ascontiguousarray(
-        np.transpose(w_scales_all[:num_experts, :N, :k_blocks], (0, 2, 1))
+    w_blocks_raw, w_blocks, w_scales, w_scales_ref = _prepare_mxfp4_weights(
+        w_blocks_all,
+        w_scales_all,
+        num_experts=num_experts,
+        n_cols=N,
+        k_blocks=k_blocks,
     )
 
     # Create padded tensors and slice views inside the graph to induce
     # non-trivial strides on the weight tensors.
     w_blocks_big = np.zeros((num_experts, k_blocks, N_pad, 16), dtype=np.uint8)
-    w_scales_big = np.zeros((num_experts, k_blocks, N_pad), dtype=np.uint8)
     w_blocks_big[:, :, :N, :] = w_blocks
-    w_scales_big[:, :, :N] = w_scales
+    scales_m2 = w_scales.shape[1]
+    scales_m2_pad = scales_m2 + 4
+    w_scales_big = np.zeros(
+        (num_experts, scales_m2_pad, w_scales.shape[2]), dtype=np.uint8
+    )
+    w_scales_big[:, :scales_m2, :] = w_scales
 
     rng = np.random.default_rng(0)
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
-    w_dense = _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+    w_dense = _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
     w_dense = _bf16_round_to_f32(w_dense)
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
@@ -507,7 +542,8 @@ def test_mxfp4_grouped_matmul_strided_weight_views_match_reference() -> None:
             (slice(None), slice(None), slice(0, N), slice(None)),
         )
         scales_view = ops.slice_tensor(
-            scales_big_in.tensor, (slice(None), slice(None), slice(0, N))
+            scales_big_in.tensor,
+            (slice(None), slice(0, scales_m2), slice(None)),
         )
 
         out_bf16 = mxfp4_grouped_matmul_ragged_bf16(
@@ -568,12 +604,12 @@ def test_mxfp4_grouped_matmul_large_kblocks_matches_reference() -> None:
             "model.layers.0.mlp.experts.down_proj_scales"
         )
 
-    w_blocks_raw = np.ascontiguousarray(
-        np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
-    )
-    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = np.ascontiguousarray(
-        np.transpose(w_scales_all[:num_experts, :N, :k_blocks], (0, 2, 1))
+    w_blocks_raw, w_blocks, w_scales, w_scales_ref = _prepare_mxfp4_weights(
+        w_blocks_all,
+        w_scales_all,
+        num_experts=num_experts,
+        n_cols=N,
+        k_blocks=k_blocks,
     )
 
     rng = np.random.default_rng(2)
@@ -581,7 +617,7 @@ def test_mxfp4_grouped_matmul_large_kblocks_matches_reference() -> None:
     a_bf16 = _bf16_round_to_f32(a_f32)
 
     w_dense = _bf16_round_to_f32(
-        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
     )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
@@ -663,12 +699,12 @@ def test_mxfp4_grouped_matmul_small_m_many_ktiles_matches_reference() -> None:
             "model.layers.0.mlp.experts.down_proj_scales"
         )
 
-    w_blocks_raw = np.ascontiguousarray(
-        np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
-    )
-    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = np.ascontiguousarray(
-        np.transpose(w_scales_all[:num_experts, :N, :k_blocks], (0, 2, 1))
+    w_blocks_raw, w_blocks, w_scales, w_scales_ref = _prepare_mxfp4_weights(
+        w_blocks_all,
+        w_scales_all,
+        num_experts=num_experts,
+        n_cols=N,
+        k_blocks=k_blocks,
     )
 
     rng = np.random.default_rng(5)
@@ -676,7 +712,7 @@ def test_mxfp4_grouped_matmul_small_m_many_ktiles_matches_reference() -> None:
     a_bf16 = _bf16_round_to_f32(a_f32)
 
     w_dense = _bf16_round_to_f32(
-        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
     )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
@@ -756,9 +792,10 @@ def test_mxfp4_grouped_matmul_is_deterministic_under_repeats() -> None:
         0, 256, size=(num_experts, k_blocks, N, 16), dtype=np.uint8
     )
     w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = rng.integers(
-        118, 125, size=(num_experts, k_blocks, N), dtype=np.uint8
+    w_scales_logical = rng.integers(
+        118, 125, size=(num_experts, N, k_blocks), dtype=np.uint8
     )
+    w_scales = _mxfp4_swizzle_scales_hopper(w_scales_logical)
 
     expert_start = np.array([0, P], dtype=np.uint32)
     expert_ids = np.array([0], dtype=np.int32)
@@ -840,12 +877,12 @@ def test_mxfp4_grouped_matmul_max_m1_wgmma_matches_reference() -> None:
             "model.layers.0.mlp.experts.down_proj_scales"
         )
 
-    w_blocks_raw = np.ascontiguousarray(
-        np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
-    )
-    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = np.ascontiguousarray(
-        np.transpose(w_scales_all[:num_experts, :N, :k_blocks], (0, 2, 1))
+    w_blocks_raw, w_blocks, w_scales, w_scales_ref = _prepare_mxfp4_weights(
+        w_blocks_all,
+        w_scales_all,
+        num_experts=num_experts,
+        n_cols=N,
+        k_blocks=k_blocks,
     )
 
     rng = np.random.default_rng(6)
@@ -853,7 +890,7 @@ def test_mxfp4_grouped_matmul_max_m1_wgmma_matches_reference() -> None:
     a_bf16 = _bf16_round_to_f32(a_f32)
 
     w_dense = _bf16_round_to_f32(
-        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
     )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
@@ -939,12 +976,12 @@ def test_mxfp4_grouped_matmul_gate_up_wgmma_matches_reference() -> None:
             "model.layers.0.mlp.experts.gate_up_proj_scales"
         )
 
-    w_blocks_raw = np.ascontiguousarray(
-        np.transpose(w_blocks_all[:num_experts, :N, :k_blocks, :], (0, 2, 1, 3))
-    )
-    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = np.ascontiguousarray(
-        np.transpose(w_scales_all[:num_experts, :N, :k_blocks], (0, 2, 1))
+    w_blocks_raw, w_blocks, w_scales, w_scales_ref = _prepare_mxfp4_weights(
+        w_blocks_all,
+        w_scales_all,
+        num_experts=num_experts,
+        n_cols=N,
+        k_blocks=k_blocks,
     )
 
     rng = np.random.default_rng(3)
@@ -952,7 +989,7 @@ def test_mxfp4_grouped_matmul_gate_up_wgmma_matches_reference() -> None:
     a_bf16 = _bf16_round_to_f32(a_f32)
 
     w_dense = _bf16_round_to_f32(
-        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
     )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 
@@ -1028,18 +1065,21 @@ def test_mxfp4_grouped_matmul_synthetic_many_ktiles_matches_reference() -> None:
         dtype=np.uint8,
     )
     w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = rng.integers(
+    w_scales_logical = rng.integers(
         117,
         130,
-        size=(num_experts, k_blocks, N),
+        size=(num_experts, N, k_blocks),
         dtype=np.uint8,
     )
+    w_scales = _mxfp4_swizzle_scales_hopper(w_scales_logical)
 
     a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
     a_bf16 = _bf16_round_to_f32(a_f32)
 
     w_dense = _bf16_round_to_f32(
-        _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+        _decode_mxfp4_rows(
+            w_blocks_raw[0], np.transpose(w_scales_logical[0], (1, 0))
+        )
     )
     ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
 

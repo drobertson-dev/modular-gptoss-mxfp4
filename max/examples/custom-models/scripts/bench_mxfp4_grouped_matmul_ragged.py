@@ -21,7 +21,10 @@ from gpt_oss_mxfp4_v3.kernels import (
     get_mxfp4_kernels_path,
     mxfp4_grouped_matmul_ragged_bf16,
 )
-from gpt_oss_mxfp4_v3.weight_adapters import _mxfp4_pack_bits_u8
+from gpt_oss_mxfp4_v3.weight_adapters import (
+    _mxfp4_pack_bits_u8,
+    _mxfp4_swizzle_scales_hopper,
+)
 from max.driver import Buffer, CPU, Accelerator
 from max.dtype import DType
 from max.engine import InferenceSession
@@ -167,19 +170,25 @@ def main() -> None:
     k_blocks = args.K // MXFP4_VALUES_PER_BLOCK
     if args.K != k_blocks * MXFP4_VALUES_PER_BLOCK:
         raise SystemExit("K must be divisible by 32 for MXFP4 weights.")
+    if (k_blocks % 2) != 0:
+        raise SystemExit("K must be divisible by 64 for Hopper scales.")
 
     with safe_open(str(ckpt), framework="numpy") as f:
         w_blocks_all = f.get_tensor(w_blocks_key)
         w_scales_all = f.get_tensor(w_scales_key)
 
-    # Prepack for our MXFP4 kernel: [E, N, K/32, 16] -> [E, K/32, N, 16]
-    # Then apply Hopper `_pack_bits` for the fast decode path.
+    # Prepack for our MXFP4 kernel: blocks -> [E, K/32, N, 16],
+    # scales -> Hopper swizzled [E, N/32, K].
     w_blocks_raw = np.ascontiguousarray(
         np.transpose(w_blocks_all[:1, : args.N, :k_blocks, :], (0, 2, 1, 3))
     )
     w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
-    w_scales = np.ascontiguousarray(
-        np.transpose(w_scales_all[:1, : args.N, :k_blocks], (0, 2, 1))
+    w_scales_logical = np.ascontiguousarray(
+        w_scales_all[:1, : args.N, :k_blocks]
+    )
+    w_scales = _mxfp4_swizzle_scales_hopper(w_scales_logical)
+    w_scales_ref = np.ascontiguousarray(
+        np.transpose(w_scales_logical, (0, 2, 1))
     )
 
     rng = np.random.default_rng(args.seed)
@@ -190,7 +199,7 @@ def main() -> None:
     expert_usage_stats = np.array([args.P, 1], dtype=np.uint32)
 
     # Dense BF16 baseline weights.
-    w_dense = _decode_mxfp4_rows(w_blocks_raw[0], w_scales[0])
+    w_dense = _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
     w_dense = _bf16_round_to_f32(w_dense).reshape(1, args.N, args.K)
 
     device = Accelerator()

@@ -18,7 +18,6 @@ from benchmark import (
     ThroughputMeasure,
 )
 from buffer.dimlist import DimList
-from gpu import WARP_SIZE
 from gpu.host import DeviceBuffer, DeviceContext
 from kernels import (
     decode_mxfp4_packbits_u32_to_8xbf16_scaled,
@@ -26,7 +25,11 @@ from kernels import (
     MXFP4MoETopKReduceBF16,
     MXFP4MoEW1SwiGlu,
     MXFP4MoEW2PairsBF16,
-    grouped_matmul_mxfp4_bf16_warp_mma_sm90,
+)
+from mxfp4_grouped_kernels import MXFP4GroupedMatmulRaggedBF16
+from mxfp4_grouped_kernels.hopper_mxfp4_layout import (
+    HOPPER_SCALE_NUM_WARPS,
+    hopper_scale_swizzle_index,
 )
 from sys import argv, has_nvidia_gpu_accelerator
 from tensor import Input, IOSpec, ManagedTensorSlice, Output, StaticTensorSpec
@@ -239,15 +242,20 @@ fn run_bench[
     var w2_bias = Tensor[Input, w2_bias_spec](ctx)
     ctx.enqueue_memset(w2_bias.buffer, 0)
 
-    # Grouped matmul weights: [E, I/32, D, 16] blocks + [E, I/32, D] scales.
+    # Grouped matmul weights: [E, I/32, D, 16] blocks +
+    # [E, ceildiv(D, 32*num_warps)*num_warps, I] Hopper scales.
     comptime wgm_blocks_spec = StaticTensorSpec[DType.uint8, 4](
         DimList(NUM_EXPERTS, kblocks_w2, HIDDEN, 16)
     )
     var wgm_blocks = Tensor[Input, wgm_blocks_spec](ctx)
     ctx.enqueue_memset(wgm_blocks.buffer, 0)
 
+    comptime scales_m2 = (
+        (HIDDEN + (32 * HOPPER_SCALE_NUM_WARPS) - 1)
+        // (32 * HOPPER_SCALE_NUM_WARPS)
+    ) * HOPPER_SCALE_NUM_WARPS
     comptime wgm_scales_spec = StaticTensorSpec[DType.uint8, 3](
-        DimList(NUM_EXPERTS, kblocks_w2, HIDDEN)
+        DimList(NUM_EXPERTS, scales_m2, INTERMEDIATE)
     )
     var wgm_scales = Tensor[Input, wgm_scales_spec](ctx)
     ctx.enqueue_memset(wgm_scales.buffer, 0)
@@ -290,44 +298,16 @@ fn run_bench[
     @parameter
     @always_inline
     fn launch_grouped_matmul(ctx: DeviceContext) raises:
-        comptime BM = 64
-        comptime BN = 64
-        comptime BK = 64
-        comptime kernel = grouped_matmul_mxfp4_bf16_warp_mma_sm90[
-            BM=BM,
-            BN=BN,
-            BK=BK,
-            WM=BM,
-            WN=BN,
-            MMA_M=16,
-            MMA_N=8,
-            MMA_K=16,
-        ]
-
-        var grid_x = (HIDDEN + BN - 1) // BN
-        var grid_y = (max_tokens_per_expert + BM - 1) // BM
-        if grid_y <= 0:
-            return
-        var grid_z = NUM_EXPERTS
-
-        ctx.enqueue_function[kernel, kernel](
-            h_sorted.buffer,
-            INTERMEDIATE,
-            1,
-            P,
-            INTERMEDIATE,
-            expert_start.buffer,
-            expert_ids.buffer,
-            grid_z,
-            wgm_blocks.buffer,
-            wgm_scales.buffer,
-            kblocks_w2,
-            y_grouped.buffer,
-            HIDDEN,
-            1,
-            HIDDEN,
-            grid_dim=(grid_x, grid_y, grid_z),
-            block_dim=(WARP_SIZE, 1, 1),
+        MXFP4GroupedMatmulRaggedBF16.execute[target="gpu"](
+            y_grouped.slice,
+            h_sorted_in,
+            wgm_blocks.slice,
+            wgm_scales.slice,
+            expert_start.slice,
+            expert_ids.slice,
+            UInt32(max_tokens_per_expert),
+            UInt32(NUM_EXPERTS),
+            ctx,
         )
 
     # Warmup (jit/compile + first-run caches).
@@ -482,7 +462,7 @@ fn run_grouped_check() raises:
     # Small-shape correctness check for grouped matmul (register decode path).
     comptime TOKENS = 2
     comptime HIDDEN = 32
-    comptime INTERMEDIATE = 32
+    comptime INTERMEDIATE = 64
     comptime NUM_EXPERTS = 1
     comptime TOPK = 1
     comptime P = TOKENS * TOPK
@@ -492,6 +472,10 @@ fn run_grouped_check() raises:
         return
 
     comptime kblocks = INTERMEDIATE // 32
+    comptime scales_m2 = (
+        (HIDDEN + (32 * HOPPER_SCALE_NUM_WARPS) - 1)
+        // (32 * HOPPER_SCALE_NUM_WARPS)
+    ) * HOPPER_SCALE_NUM_WARPS
 
     comptime a_spec = StaticTensorSpec[DType.bfloat16, 2](
         DimList(P, INTERMEDIATE)
@@ -543,12 +527,12 @@ fn run_grouped_check() raises:
             ptr[i] = UInt8((i * 17 + 5) & 0xFF)
 
     comptime w_scales_spec = StaticTensorSpec[DType.uint8, 3](
-        DimList(NUM_EXPERTS, kblocks, HIDDEN)
+        DimList(NUM_EXPERTS, scales_m2, INTERMEDIATE)
     )
     var w_scales = Tensor[Input, w_scales_spec](ctx)
     with w_scales.buffer.map_to_host() as host:
         var ptr = host.unsafe_ptr()
-        for i in range(NUM_EXPERTS * kblocks * HIDDEN):
+        for i in range(NUM_EXPERTS * scales_m2 * INTERMEDIATE):
             ptr[i] = UInt8(0x7F + (i % 3))
 
     comptime y_spec = StaticTensorSpec[DType.bfloat16, 2](
@@ -557,50 +541,17 @@ fn run_grouped_check() raises:
     var y = Tensor[Output, y_spec](ctx)
     ctx.enqueue_memset(y.buffer, 0)
 
-    @parameter
-    @always_inline
-    fn launch(ctx: DeviceContext) raises:
-        comptime BM = 64
-        comptime BN = 64
-        comptime BK = 64
-        comptime kernel = grouped_matmul_mxfp4_bf16_warp_mma_sm90[
-            BM=BM,
-            BN=BN,
-            BK=BK,
-            WM=BM,
-            WN=BN,
-            MMA_M=16,
-            MMA_N=8,
-            MMA_K=16,
-        ]
-
-        var grid_x = (HIDDEN + BN - 1) // BN
-        var grid_y = (max_tokens_per_expert + BM - 1) // BM
-        if grid_y <= 0:
-            return
-        var grid_z = NUM_EXPERTS
-
-        ctx.enqueue_function[kernel, kernel](
-            a.buffer,
-            INTERMEDIATE,
-            1,
-            P,
-            INTERMEDIATE,
-            expert_start.buffer,
-            expert_ids.buffer,
-            grid_z,
-            w_blocks.buffer,
-            w_scales.buffer,
-            kblocks,
-            y.buffer,
-            HIDDEN,
-            1,
-            HIDDEN,
-            grid_dim=(grid_x, grid_y, grid_z),
-            block_dim=(WARP_SIZE, 1, 1),
-        )
-
-    launch(ctx)
+    MXFP4GroupedMatmulRaggedBF16.execute[target="gpu"](
+        y.slice,
+        a.slice,
+        w_blocks.slice,
+        w_scales.slice,
+        expert_start.slice,
+        expert_ids.slice,
+        UInt32(max_tokens_per_expert),
+        UInt32(NUM_EXPERTS),
+        ctx,
+    )
     ctx.synchronize()
 
     var max_err = Float32(0)
@@ -622,7 +573,12 @@ fn run_grouped_check() raises:
                                 var in_block = k - kb * 32
                                 var group = in_block // 8
                                 var idx = in_block - group * 8
-                                var scale_exp = s_ptr[kb * HIDDEN + c]
+                                var swz_idx = hopper_scale_swizzle_index[
+                                    HOPPER_SCALE_NUM_WARPS
+                                ](c, kb)
+                                var scale_exp = s_ptr[
+                                    swz_idx[0] * INTERMEDIATE + swz_idx[1]
+                                ]
                                 var scale = e8m0_to_bf16_bits(scale_exp)
                                 var packed_base = (
                                     (kb * HIDDEN + c) * 16

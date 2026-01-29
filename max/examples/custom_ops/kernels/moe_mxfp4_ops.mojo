@@ -1,5 +1,8 @@
 # moe_mxfp4_ops.mojo
 #
+# DEPRECATED: legacy MXFP4 MoE ops. Use
+# `max/examples/custom_ops/mxfp4_grouped_kernels/` for the active Hopper path.
+#
 # Correctness-first MXFP4 MoE kernels + custom op entrypoints.
 #
 # Contract (matches `examples/custom-models/triton_example/moe.py` at a high level):
