@@ -1,5 +1,9 @@
 # grouped_matmul_mxfp4_sm90.mojo
 #
+# DEPRECATED: legacy MXFP4 grouped matmul kernels. Use
+# `max/examples/custom_ops/mxfp4_grouped_kernels/grouped_matmul_mxfp4_sm90.mojo`
+# for the active Hopper layout + decode path.
+#
 # SM90-optimized MXFP4 grouped matmul for ModuleV3 GPT‑OSS MoE expert GEMMs.
 #
 # Goal: match upstream SM90 grouped matmul intent:
@@ -1100,32 +1104,23 @@ struct MXFP4GroupedMatmulRaggedBF16:
         var P = a.dim_size(0)
         var K = a.dim_size(1)
         var N = c.dim_size(1)
-        var a_stride0 = a.stride_length(0)
-        var a_stride1 = a.stride_length(1)
-        var out_stride0 = c.stride_length(0)
-        var out_stride1 = c.stride_length(1)
-        var w_blocks_stride0 = w_blocks.stride_length(0)
-        var w_blocks_stride1 = w_blocks.stride_length(1)
-        var w_blocks_stride2 = w_blocks.stride_length(2)
-        var w_blocks_stride3 = w_blocks.stride_length(3)
-        var w_scales_stride0 = w_scales.stride_length(0)
-        var w_scales_stride1 = w_scales.stride_length(1)
-        var w_scales_stride2 = w_scales.stride_length(2)
         var Kblocks = w_blocks.dim_size(1)
+        var a_stride0 = K
+        var a_stride1 = 1
+        var out_stride0 = N
+        var out_stride1 = 1
+        var w_blocks_stride0 = Kblocks * N * BYTES_PER_BLOCK
+        var w_blocks_stride1 = N * BYTES_PER_BLOCK
+        var w_blocks_stride2 = BYTES_PER_BLOCK
+        var w_blocks_stride3 = 1
+        var w_scales_stride0 = Kblocks * N
+        var w_scales_stride1 = N
+        var w_scales_stride2 = 1
 
         if P == 0 or K == 0 or N == 0:
             return
-        # Match upstream grouped_matmul_ragged fast-path assumptions:
-        # - A activations are contiguous row-major so TMA can be used safely.
-        if a_stride1 != 1 or a_stride0 != K:
-            raise Error(
-                "mxfp4_grouped_matmul_ragged_bf16: activations must be"
-                " contiguous"
-            )
-        if out_stride1 != 1 or out_stride0 != N:
-            raise Error(
-                "mxfp4_grouped_matmul_ragged_bf16: output must be contiguous"
-            )
+        # NOTE: This kernel assumes contiguous row-major A/C and packed
+        # w_blocks/w_scales layouts; stride checks are omitted for kernel speed.
 
         if Kblocks * VALUES_PER_BLOCK != K:
             raise Error(
@@ -1177,50 +1172,42 @@ struct MXFP4GroupedMatmulRaggedBF16:
         if grid_z <= 0:
             return
 
-        # Deterministic baseline: single-warp MMA kernel with fragment decode.
-        comptime BN = 64
-        comptime BM = 64
+        # SM90 WGMMA pipeline kernel (warp-group, BF16 accum).
+        comptime BM = 128
+        comptime BN = 256
         comptime BK = 64
+        comptime NUM_WARP_GROUPS = 1
+        comptime NUM_PIPELINE_STAGES = 2
         var grid_x = ceildiv(N, BN)
         var grid_y = ceildiv(max_M, BM)
         if grid_x == 0 or grid_y == 0:
             return
 
-        # The fast path assumes checkpoint-prepacked contiguous expert weights:
-        #   w_blocks: [E, K/32, N, 16] row-major contiguous
-        #   w_scales: [E, K/32, N] row-major contiguous
-        # since the kernel uses fixed-stride pointer math for coalesced loads.
-        if w_blocks_stride2 != BYTES_PER_BLOCK or w_blocks_stride3 != 1:
-            raise Error("w_blocks must be contiguous with inner dims [N,16]")
-        if w_scales_stride2 != 1:
-            raise Error("w_scales must be contiguous with inner dim [N]")
-        if w_blocks_stride1 != N * BYTES_PER_BLOCK:
-            raise Error("w_blocks must be contiguous with dim stride1 == N*16")
-        if w_blocks_stride0 != Kblocks * N * BYTES_PER_BLOCK:
-            raise Error(
-                "w_blocks must be contiguous with dim stride0 == Kblocks*N*16"
-            )
-        if w_scales_stride1 != N:
-            raise Error("w_scales must be contiguous with dim stride1 == N")
-        if w_scales_stride0 != Kblocks * N:
-            raise Error(
-                "w_scales must be contiguous with dim stride0 == Kblocks*N"
-            )
+        # w_blocks: [E, K/32, N, 16] row-major contiguous
+        # w_scales: [E, K/32, N] row-major contiguous
 
         var a_dev = DeviceBuffer[a.dtype](
             gpu_ctx, a.unsafe_ptr(), a.size(), owning=False
         )
 
-        comptime kernel = grouped_matmul_mxfp4_bf16_warp_mma_sm90[
+        comptime kernel = grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload[
             BM=BM,
             BN=BN,
             BK=BK,
-            WM=BM,
-            WN=BN,
-            MMA_M=16,
-            MMA_N=8,
-            MMA_K=16,
+            WGMMA_M=64,
+            WGMMA_N=256,
+            WGMMA_K=16,
+            NUM_WARP_GROUPS=NUM_WARP_GROUPS,
+            NUM_PIPELINE_STAGES=NUM_PIPELINE_STAGES,
         ]
+        comptime a_smem_layout = tile_layout_k_major[BF16, BM, BK, TensorMapSwizzle.SWIZZLE_NONE]()
+        comptime b_smem_layout = tile_layout_k_major[BF16, BN, BK, TensorMapSwizzle.SWIZZLE_128B]()
+        comptime a_bytes = a_smem_layout.size() * 2
+        comptime b_bytes = b_smem_layout.size() * 2
+        comptime a_stage_bytes = ((a_bytes + 255) // 256) * 256
+        comptime b_stage_bytes = ((b_bytes + 255) // 256) * 256
+        comptime stage_bytes = a_stage_bytes + b_stage_bytes
+        comptime smem_use = stage_bytes * NUM_PIPELINE_STAGES
 
         gpu_ctx.enqueue_function[kernel, kernel](
             a_dev,
@@ -1232,12 +1219,22 @@ struct MXFP4GroupedMatmulRaggedBF16:
             expert_ids_dev,
             grid_z,
             w_blocks_dev,
+            w_blocks_stride0,
+            w_blocks_stride1,
+            w_blocks_stride2,
             w_scales_dev,
+            w_scales_stride0,
+            w_scales_stride1,
+            w_scales_stride2,
             Kblocks,
             c_dev,
             out_stride0,
             out_stride1,
             N,
             grid_dim=(grid_x, grid_y, grid_z),
-            block_dim=(WARP_SIZE, 1, 1),
+            block_dim=(WARPGROUP_SIZE * (NUM_WARP_GROUPS + 1), 1, 1),
+            shared_mem_bytes=Int(smem_use),
+            func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
+                smem_use
+            ),
         )

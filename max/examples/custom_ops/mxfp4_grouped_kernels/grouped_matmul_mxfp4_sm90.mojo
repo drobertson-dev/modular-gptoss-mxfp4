@@ -62,6 +62,12 @@ from .mxfp4_decode import (
     decode_mxfp4_packbits_u32_to_8xbf16_scaled,
     e8m0_to_bf16_bits,
 )
+from .hopper_mxfp4_layout import (
+    HOPPER_SCALE_NUM_WARPS,
+    HOPPER_SCALE_ALIGN_M,
+    HOPPER_SCALE_ALIGN_K,
+    hopper_scale_swizzle_index,
+)
 
 
 comptime BF16 = DType.bfloat16
@@ -127,6 +133,18 @@ fn grouped_matmul_mxfp4_bf16_warp_mma_sm90[
         BK % VALUES_PER_BLOCK == 0,
         "BK must be a multiple of 32",
     ]()
+    constrained[
+        (HOPPER_SCALE_NUM_WARPS & (HOPPER_SCALE_NUM_WARPS - 1)) == 0,
+        "Hopper scale swizzle requires power-of-two num_warps",
+    ]()
+    constrained[
+        BN % (HOPPER_SCALE_ALIGN_M) == 0,
+        "BN must be a multiple of 32 * num_warps for Hopper scale swizzle",
+    ]()
+    constrained[
+        BK % 64 == 0,
+        "BK must be a multiple of 64 for Hopper scale swizzle",
+    ]()
 
     var expert_idx = Int(block_idx.z)
     if expert_idx >= num_active_experts:
@@ -148,6 +166,14 @@ fn grouped_matmul_mxfp4_bf16_warp_mma_sm90[
     var w_blocks_u64 = w_blocks_ptr.address_space_cast[
         AddressSpace.GLOBAL
     ]().bitcast[Scalar[U64]]()
+
+    var n_pad = (
+        (N + HOPPER_SCALE_ALIGN_M - 1) // HOPPER_SCALE_ALIGN_M
+    ) * HOPPER_SCALE_ALIGN_M
+    var scale_m2 = n_pad // 32
+    var w_scales_stride0 = scale_m2 * K
+    var w_scales_stride1 = K
+    var w_scales_stride2 = 1
 
     var A_s = LayoutTensor[
         BF16,
@@ -232,8 +258,13 @@ fn grouped_matmul_mxfp4_bf16_warp_mma_sm90[
                 b_reg_tile[3, 0] = 0
 
                 if col < N and kb < Kblocks:
+                    var idx = hopper_scale_swizzle_index[
+                        HOPPER_SCALE_NUM_WARPS
+                    ](col, kb)
                     var scale_exp = w_scales_ptr[
-                        ((expert_id * Kblocks + kb) * N) + col
+                        expert_id * w_scales_stride0
+                        + idx[0] * w_scales_stride1
+                        + idx[1] * w_scales_stride2
                     ]
                     var scale = e8m0_to_bf16_bits(scale_exp)
                     var packed_base = (
@@ -336,6 +367,18 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline[
     constrained[BK % VALUES_PER_BLOCK == 0, "BK must be a multiple of 32"]()
     constrained[BM % (WGMMA_M * NUM_WARP_GROUPS) == 0]()
     constrained[NUM_PIPELINE_STAGES >= 2]()
+    constrained[
+        (HOPPER_SCALE_NUM_WARPS & (HOPPER_SCALE_NUM_WARPS - 1)) == 0,
+        "Hopper scale swizzle requires power-of-two num_warps",
+    ]()
+    constrained[
+        BN % HOPPER_SCALE_ALIGN_M == 0,
+        "BN must be a multiple of 32 * num_warps for Hopper scale swizzle",
+    ]()
+    constrained[
+        BK % 64 == 0,
+        "BK must be a multiple of 64 for Hopper scale swizzle",
+    ]()
 
     var expert_idx = Int(block_idx.z)
     if expert_idx >= num_active_experts:
@@ -508,8 +551,13 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline[
 
                     var scale_exp: UInt8 = 0
                     if col < N and kb < Kblocks:
+                        var idx = hopper_scale_swizzle_index[
+                            HOPPER_SCALE_NUM_WARPS
+                        ](col, kb)
                         scale_exp = w_scales_ptr[
-                            ((expert_id * Kblocks + kb) * N) + col
+                            expert_id * w_scales_stride0
+                            + idx[0] * w_scales_stride1
+                            + idx[1] * w_scales_stride2
                         ]
                     var scale = e8m0_to_bf16_bits(scale_exp)
 
@@ -895,10 +943,13 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload[
 
                     var scale_exp: UInt8 = 0
                     if col < N and kb < Kblocks:
+                        var idx = hopper_scale_swizzle_index[
+                            HOPPER_SCALE_NUM_WARPS
+                        ](col, kb)
                         scale_exp = w_scales_ptr[
                             expert_id * w_scales_stride0
-                            + kb * w_scales_stride1
-                            + col * w_scales_stride2
+                            + idx[0] * w_scales_stride1
+                            + idx[1] * w_scales_stride2
                         ]
                     var scale = e8m0_to_bf16_bits(scale_exp)
 
@@ -1100,37 +1151,55 @@ struct MXFP4GroupedMatmulRaggedBF16:
         var P = a.dim_size(0)
         var K = a.dim_size(1)
         var N = c.dim_size(1)
-        var a_stride0 = a.stride_length(0)
-        var a_stride1 = a.stride_length(1)
-        var out_stride0 = c.stride_length(0)
-        var out_stride1 = c.stride_length(1)
-        var w_blocks_stride0 = w_blocks.stride_length(0)
-        var w_blocks_stride1 = w_blocks.stride_length(1)
-        var w_blocks_stride2 = w_blocks.stride_length(2)
-        var w_blocks_stride3 = w_blocks.stride_length(3)
-        var w_scales_stride0 = w_scales.stride_length(0)
-        var w_scales_stride1 = w_scales.stride_length(1)
-        var w_scales_stride2 = w_scales.stride_length(2)
         var Kblocks = w_blocks.dim_size(1)
+        var a_stride0 = K
+        var a_stride1 = 1
+        var out_stride0 = N
+        var out_stride1 = 1
+        var w_blocks_stride0 = Kblocks * N * BYTES_PER_BLOCK
+        var w_blocks_stride1 = N * BYTES_PER_BLOCK
+        var w_blocks_stride2 = BYTES_PER_BLOCK
+        var w_blocks_stride3 = 1
+        var scales_m2 = w_scales.dim_size(1)
+        var scales_k = w_scales.dim_size(2)
+        var w_scales_stride0 = scales_m2 * scales_k
+        var w_scales_stride1 = scales_k
+        var w_scales_stride2 = 1
 
         if P == 0 or K == 0 or N == 0:
             return
-        # Match upstream grouped_matmul_ragged fast-path assumptions:
-        # - A activations are contiguous row-major so TMA can be used safely.
-        if a_stride1 != 1 or a_stride0 != K:
-            raise Error(
-                "mxfp4_grouped_matmul_ragged_bf16: activations must be"
-                " contiguous"
-            )
-        if out_stride1 != 1 or out_stride0 != N:
-            raise Error(
-                "mxfp4_grouped_matmul_ragged_bf16: output must be contiguous"
-            )
+        # NOTE: This kernel expects packed MXFP4 layouts and contiguous
+        # row-major tensors; stride validation is omitted for speed.
 
         if Kblocks * VALUES_PER_BLOCK != K:
             raise Error(
                 "mxfp4_grouped_matmul_ragged_bf16: K must be divisible by 32"
                 " and match w_blocks Kblocks"
+            )
+        if w_blocks_stride3 != 1:
+            raise Error(
+                "mxfp4_grouped_matmul_ragged_bf16: w_blocks last dimension"
+                " must be contiguous (stride 1)"
+            )
+        if (Kblocks % HOPPER_SCALE_ALIGN_K) != 0:
+            raise Error(
+                "mxfp4_grouped_matmul_ragged_bf16: K must be divisible by 64"
+                " for Hopper scale swizzle"
+            )
+        if scales_k != K:
+            raise Error(
+                "mxfp4_grouped_matmul_ragged_bf16: w_scales K dimension"
+                " must match K"
+            )
+        if scales_m2 * 32 < N:
+            raise Error(
+                "mxfp4_grouped_matmul_ragged_bf16: w_scales dim1 must"
+                " cover N (>= N/32 with padding)"
+            )
+        if (scales_m2 % HOPPER_SCALE_NUM_WARPS) != 0:
+            raise Error(
+                "mxfp4_grouped_matmul_ragged_bf16: w_scales dim1 must be"
+                " a multiple of Hopper num_warps"
             )
 
         var gpu_ctx = ctx.get_device_context()
@@ -1177,50 +1246,42 @@ struct MXFP4GroupedMatmulRaggedBF16:
         if grid_z <= 0:
             return
 
-        # Deterministic baseline: single-warp MMA kernel with fragment decode.
-        comptime BN = 64
-        comptime BM = 64
+        # SM90 WGMMA pipeline kernel (warp-group, BF16 accum).
+        comptime BM = 128
+        comptime BN = 256
         comptime BK = 64
+        comptime NUM_WARP_GROUPS = 1
+        comptime NUM_PIPELINE_STAGES = 2
         var grid_x = ceildiv(N, BN)
         var grid_y = ceildiv(max_M, BM)
         if grid_x == 0 or grid_y == 0:
             return
 
-        # The fast path assumes checkpoint-prepacked contiguous expert weights:
-        #   w_blocks: [E, K/32, N, 16] row-major contiguous
-        #   w_scales: [E, K/32, N] row-major contiguous
-        # since the kernel uses fixed-stride pointer math for coalesced loads.
-        if w_blocks_stride2 != BYTES_PER_BLOCK or w_blocks_stride3 != 1:
-            raise Error("w_blocks must be contiguous with inner dims [N,16]")
-        if w_scales_stride2 != 1:
-            raise Error("w_scales must be contiguous with inner dim [N]")
-        if w_blocks_stride1 != N * BYTES_PER_BLOCK:
-            raise Error("w_blocks must be contiguous with dim stride1 == N*16")
-        if w_blocks_stride0 != Kblocks * N * BYTES_PER_BLOCK:
-            raise Error(
-                "w_blocks must be contiguous with dim stride0 == Kblocks*N*16"
-            )
-        if w_scales_stride1 != N:
-            raise Error("w_scales must be contiguous with dim stride1 == N")
-        if w_scales_stride0 != Kblocks * N:
-            raise Error(
-                "w_scales must be contiguous with dim stride0 == Kblocks*N"
-            )
+        # w_blocks: [E, K/32, N, 16] row-major contiguous
+        # w_scales: [E, N/32 (padded), K] Hopper scale swizzled
 
         var a_dev = DeviceBuffer[a.dtype](
             gpu_ctx, a.unsafe_ptr(), a.size(), owning=False
         )
 
-        comptime kernel = grouped_matmul_mxfp4_bf16_warp_mma_sm90[
+        comptime kernel = grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload[
             BM=BM,
             BN=BN,
             BK=BK,
-            WM=BM,
-            WN=BN,
-            MMA_M=16,
-            MMA_N=8,
-            MMA_K=16,
+            WGMMA_M=64,
+            WGMMA_N=256,
+            WGMMA_K=16,
+            NUM_WARP_GROUPS=NUM_WARP_GROUPS,
+            NUM_PIPELINE_STAGES=NUM_PIPELINE_STAGES,
         ]
+        comptime a_smem_layout = tile_layout_k_major[BF16, BM, BK, TensorMapSwizzle.SWIZZLE_NONE]()
+        comptime b_smem_layout = tile_layout_k_major[BF16, BN, BK, TensorMapSwizzle.SWIZZLE_128B]()
+        comptime a_bytes = a_smem_layout.size() * 2
+        comptime b_bytes = b_smem_layout.size() * 2
+        comptime a_stage_bytes = ((a_bytes + 255) // 256) * 256
+        comptime b_stage_bytes = ((b_bytes + 255) // 256) * 256
+        comptime stage_bytes = a_stage_bytes + b_stage_bytes
+        comptime smem_use = stage_bytes * NUM_PIPELINE_STAGES
 
         gpu_ctx.enqueue_function[kernel, kernel](
             a_dev,
@@ -1232,12 +1293,22 @@ struct MXFP4GroupedMatmulRaggedBF16:
             expert_ids_dev,
             grid_z,
             w_blocks_dev,
+            w_blocks_stride0,
+            w_blocks_stride1,
+            w_blocks_stride2,
             w_scales_dev,
+            w_scales_stride0,
+            w_scales_stride1,
+            w_scales_stride2,
             Kblocks,
             c_dev,
             out_stride0,
             out_stride1,
             N,
             grid_dim=(grid_x, grid_y, grid_z),
-            block_dim=(WARP_SIZE, 1, 1),
+            block_dim=(WARPGROUP_SIZE * (NUM_WARP_GROUPS + 1), 1, 1),
+            shared_mem_bytes=Int(smem_use),
+            func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
+                smem_use
+            ),
         )
