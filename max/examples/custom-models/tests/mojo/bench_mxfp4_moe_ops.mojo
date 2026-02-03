@@ -22,6 +22,7 @@ from gpu.host import DeviceBuffer, DeviceContext
 from mxfp4 import (
     decode_mxfp4_packbits_u32_to_8xbf16_scaled,
     e8m0_to_bf16_bits,
+    MXFP4GroupedMatmulRaggedBF16Swizzled,
     MXFP4MoETopKReduceBF16,
     MXFP4MoEW1SwiGluSwizzled,
     MXFP4MoEW2PairsBF16Swizzled,
