@@ -15,6 +15,7 @@ from max.pipelines.lib import (
 
 from . import weight_adapters
 from .model import GptOssModel
+from .model_config import GptOssConfig
 
 gpt_oss_arch = SupportedArchitecture(
     # Match the legacy architecture name so this package overrides it when
@@ -38,6 +39,7 @@ gpt_oss_arch = SupportedArchitecture(
     weight_adapters={
         WeightsFormat.safetensors: weight_adapters.convert_safetensor_state_dict,
     },
+    config=GptOssConfig,
 )
 
 __all__ = ["WeightsFormat", "gpt_oss_arch"]
