@@ -29,8 +29,30 @@ def convert_safetensor_state_dict(
 ) -> dict[str, WeightData]:
     """Convert safetensor state dict to MAX format."""
 
+    # OpenAI gpt-oss repos contain both:
+    #  - "original/" weights with `block.*`/`embedding.*` naming, and
+    #  - HF-converted weights with `model.*`/`lm_head.*` naming.
+    # We prefer the HF-converted keys because they already match the split
+    # q/k/v + MoE expert layout expected by this architecture.
+    has_converted = any(
+        key.startswith(
+            (
+                "model.layers.",
+                "model.embed_tokens.",
+                "model.norm.",
+                "lm_head.",
+            )
+        )
+        for key in state_dict
+    )
+
     new_state_dict: dict[str, WeightData] = {}
     for weight_name, value in state_dict.items():
+        if has_converted and weight_name.startswith(
+            ("block.", "embedding.", "unembedding.", "norm.")
+        ):
+            # Skip "original" weight names when converted weights exist.
+            continue
         mapped = weight_name
         for before, after in GPT_OSS_SAFETENSOR_MAP.items():
             mapped = mapped.replace(before, after)

@@ -22,8 +22,8 @@ MXFP4_TOPK = 4
 def get_mxfp4_kernels_path() -> Path:
     """Return the Mojo package path containing the registered MXFP4 custom ops."""
     examples_dir = Path(__file__).resolve().parents[2]
-    # Legacy kernels live under the deprecated package.
-    return examples_dir / "custom_ops" / "kernels" / "deprecated"
+    # MXFP4 kernels live under the dedicated custom_ops/mxfp4 package.
+    return examples_dir / "custom_ops" / "mxfp4"
 
 
 def _as_tensor(value: Any) -> TensorValue:
