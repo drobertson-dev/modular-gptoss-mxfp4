@@ -14,6 +14,7 @@ from max.pipelines.lib import (
 )
 
 from gpt_oss_mxfp4_v3.model import GptOssModelModuleV3MXFP4
+from gpt_oss_mxfp4_v3.model_config import GptOssConfig
 from gpt_oss_mxfp4_v3.weight_adapters import convert_safetensor_state_dict
 
 gpt_oss_module_v3_arch = SupportedArchitecture(
@@ -38,6 +39,7 @@ gpt_oss_module_v3_arch = SupportedArchitecture(
     weight_adapters={
         WeightsFormat.safetensors: convert_safetensor_state_dict,
     },
+    config=GptOssConfig,
 )
 
 __all__ = ["WeightsFormat", "gpt_oss_module_v3_arch"]
