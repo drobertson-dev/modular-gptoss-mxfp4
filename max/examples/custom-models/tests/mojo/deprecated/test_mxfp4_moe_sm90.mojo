@@ -1,4 +1,6 @@
 # ===----------------------------------------------------------------------=== #
+# DEPRECATED: legacy SM90 MoE tests for the old kernels in `kernels.deprecated`.
+# ===----------------------------------------------------------------------=== #
 # SM90 MXFP4 MoE kernel targets.
 #
 # GPU tests that pin down:
@@ -15,17 +17,17 @@ from buffer import Dim
 from buffer.dimlist import DimList
 from gpu.host import DeviceContext
 from ndbuffer_utils import DeviceNDBuffer, HostNDBuffer, zero
-from kernels.moe_mxfp4 import (
+from kernels.deprecated.moe_mxfp4 import (
     GroupedMXFP4Matmul,
     GroupedMXFP4MatmulSwiGLU,
 )
-from kernels.mxfp4 import (
+from mxfp4 import (
     MXFP4_BLOCK_K,
     MXFP4_PACKED_BYTES_PER_BLOCK,
     MXFP4_SF_DTYPE,
     set_mxfp4_scale,
 )
-from kernels.mxfp4.primitives import float32_to_e8m0
+from mxfp4.primitives import float32_to_e8m0
 from layout import Layout, LayoutTensor
 from layout._ndbuffer_stub import from_ndbuffer_row_major
 from math import ceildiv

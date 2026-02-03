@@ -1,7 +1,7 @@
 # mxfp4_decode.mojo
 #
 # DEPRECATED: legacy MXFP4 decode helpers for the older kernel path. Use
-# `max/examples/custom_ops/mxfp4_grouped_kernels/mxfp4_decode.mojo` instead.
+# `max/examples/custom_ops/mxfp4/decode.mojo` instead.
 #
 # Minimal helpers for MXFP4 (FP4 e2m1 packed in uint8 + per-32-value MX scale in float8_e8m0).
 #

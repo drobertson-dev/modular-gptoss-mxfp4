@@ -35,7 +35,7 @@ See [Multi-Head Flash Attention](../multi-head-flash-attention) for details.
 
 When doing context decoding, `Q` and `P` have `group = num_q_heads //
 num_kv_heads` rows. In our models so far, common values are `4` or `8`, with
-one model having `16`, and no models with `group > 16`.  Each `@`
+one model having `16`, and no models with `group > 16`. Each `@`
 instruction is thus performed on a matrix with `group` rows.
 
 Each of the `@` operations executes a WGMMA instruction on Hopper (sm90) or a
@@ -99,7 +99,7 @@ the instruction that loads A from the register file":
 - Dense throughput, `SS`, `N = 8`: 157.6
 - Dense throughput, `SS`, `N = 16`: 283.5
 - Dense throughput, `SS`, `N = 128`: 659.8 (currently used for `S = Q @ K'`)
-  - or 728.5, for zero-initialization
+    - or 728.5, for zero-initialization
 - Dense throughput, `RS`, `N = 128`: 661.7 # currently used for `O += P @ V`
 
 The WGMMA instructions we are currently using achieve over 4x (about 4.2x) the
@@ -160,7 +160,7 @@ will contain rows `0-15, 64-79`, etc.
 Whether on Hopper or Blackwell, operand `B` must be in shared memory.
 
 When performing `O += V' @ P`, our reduction would be across rows of `P` (i.e.
-row `r` is in warp `(r % 16W) // 16`).  As the `B` operand must be in shared
+row `r` is in warp `(r % 16W) // 16`). As the `B` operand must be in shared
 memory, this means we write `P` to shared memory and synchronize on every
 iteration.
 

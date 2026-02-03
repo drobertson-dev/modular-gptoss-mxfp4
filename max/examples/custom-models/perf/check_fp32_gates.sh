@@ -20,10 +20,9 @@ if rg -n "address_space\\s*=\\s*AddressSpace\\.SHARED[\\s\\S]*F32" examples/cust
 fi
 
 echo "== No MoE OutputTensor[dtype=F32] =="
-if rg -n "OutputTensor\\[dtype=F32" examples/custom_ops/kernels/moe_mxfp4_ops.mojo; then
+if rg -n "OutputTensor\\[dtype=F32" examples/custom_ops/kernels/deprecated/moe_mxfp4_ops.mojo; then
   echo "ERROR: Found OutputTensor[dtype=F32] in MoE ops"
   exit 1
 fi
 
 echo "OK"
-

@@ -21,7 +21,7 @@ if rg -n -U "stack_allocation\\[[^\\]]*Scalar\\[F32\\][^\\]]*address_space\\s*=\
 fi
 
 # Rule: No MoE ops should expose F32 output tensors (FP32 only for accumulators/epilogue regs).
-if rg -n "OutputTensor\\[dtype=F32" ../custom_ops/kernels/moe_mxfp4_ops.mojo; then
+if rg -n "OutputTensor\\[dtype=F32" ../custom_ops/kernels/deprecated/moe_mxfp4_ops.mojo; then
   echo >&2
   echo "ERROR: Found MoE op with F32 OutputTensor." >&2
   exit 1

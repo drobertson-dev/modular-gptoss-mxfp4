@@ -13,10 +13,12 @@ from gpt_oss_mxfp4_v3.kernels import (
     MXFP4_VALUES_PER_BLOCK,
     get_mxfp4_kernels_path,
     mxfp4_grouped_matmul_ragged_bf16,
+    mxfp4_grouped_matmul_ragged_bf16_swizzled,
 )
 from gpt_oss_mxfp4_v3.weight_adapters import (
     _mxfp4_pack_bits_u8,
     _mxfp4_swizzle_scales_hopper,
+    _mxfp4_swizzle_values_hopper,
 )
 from max.driver import Buffer, CPU, Accelerator
 from max.dtype import DType
@@ -121,6 +123,31 @@ def _prepare_mxfp4_weights(
         np.transpose(w_scales_logical, (0, 2, 1))
     )
     return w_blocks_raw, w_blocks, w_scales, w_scales_ref
+
+
+def _prepare_mxfp4_weights_swizzled(
+    w_blocks_all: np.ndarray,
+    w_scales_all: np.ndarray,
+    *,
+    num_experts: int,
+    n_cols: int,
+    k_blocks: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return (blocks_raw, blocks_swizzled, scales_swizzled, scales_ref)."""
+    w_blocks_raw = np.ascontiguousarray(
+        w_blocks_all[:num_experts, :n_cols, :k_blocks, :]
+    )
+    kbytes = k_blocks * 16
+    w_blocks_2d = w_blocks_raw.reshape(num_experts, n_cols, kbytes)
+    w_blocks_swz = _mxfp4_swizzle_values_hopper(w_blocks_2d, mx_axis=2)
+    w_scales_logical = np.ascontiguousarray(
+        w_scales_all[:num_experts, :n_cols, :k_blocks]
+    )
+    w_scales = _mxfp4_swizzle_scales_hopper(w_scales_logical)
+    w_scales_ref = np.ascontiguousarray(
+        np.transpose(w_scales_logical, (0, 2, 1))
+    )
+    return w_blocks_raw, w_blocks_swz, w_scales, w_scales_ref
 
 
 def _find_gpt_oss_20b_file() -> Path | None:
@@ -238,6 +265,102 @@ def test_mxfp4_grouped_matmul_single_expert_matches_reference(P: int) -> None:
         model.execute(
             Tensor.from_numpy(a_f32).to(device),
             Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
+
+    assert got.shape == ref.shape
+    assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
+        f"max abs diff {np.max(np.abs(got - ref))}"
+    )
+
+
+@pytest.mark.parametrize("P", [32])
+def test_mxfp4_grouped_matmul_swizzled_matches_reference(P: int) -> None:
+    try:
+        device = Accelerator()
+    except Exception as exc:  # pragma: no cover
+        pytest.skip(f"GPU not available: {exc}")
+
+    ckpt = _find_gpt_oss_20b_file()
+    if ckpt is None:
+        pytest.skip(
+            "GPT-OSS checkpoint not found in HF cache; run `pixi run generate` once"
+        )
+
+    num_experts = 2
+    K = 128
+    N = 128
+    k_blocks = K // MXFP4_VALUES_PER_BLOCK
+
+    with safe_open(str(ckpt), framework="numpy") as f:
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
+
+    w_blocks_raw, w_blocks_swz, w_scales, w_scales_ref = (
+        _prepare_mxfp4_weights_swizzled(
+            w_blocks_all,
+            w_scales_all,
+            num_experts=num_experts,
+            n_cols=N,
+            k_blocks=k_blocks,
+        )
+    )
+
+    rng = np.random.default_rng(0)
+    a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
+    a_bf16 = _bf16_round_to_f32(a_f32)
+
+    w_dense = _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
+    w_dense = _bf16_round_to_f32(w_dense)
+    ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
+
+    expert_start = np.array([0, P, P], dtype=np.uint32)
+    expert_ids = np.array([0, -1], dtype=np.int32)
+    expert_usage_stats = np.array([P, 1], dtype=np.uint32)
+    devref = DeviceRef.from_device(device)
+    session = InferenceSession(devices=[device])
+
+    with Graph(
+        "mxfp4_grouped_matmul_swizzled",
+        input_types=[
+            TensorType(DType.float32, shape=[P, K], device=devref),
+            TensorType(DType.uint8, shape=w_blocks_swz.shape, device=devref),
+            TensorType(DType.uint8, shape=w_scales.shape, device=devref),
+            TensorType(DType.uint32, shape=[num_experts + 1], device=devref),
+            TensorType(DType.int32, shape=[num_experts], device=devref),
+            TensorType(DType.uint32, shape=[2], device=DeviceRef.CPU()),
+        ],
+        custom_extensions=[get_mxfp4_kernels_path()],
+    ) as graph:
+        a_in, blocks_in, scales_in, start_in, ids_in, stats_in = graph.inputs
+        a_bf16_in = ops.cast(a_in.tensor, DType.bfloat16)
+        out_bf16 = mxfp4_grouped_matmul_ragged_bf16_swizzled(
+            a_bf16_in,
+            blocks_in.tensor,
+            scales_in.tensor,
+            start_in.tensor,
+            ids_in.tensor,
+            stats_in.tensor,
+            n_cols=N,
+            target="gpu",
+        )
+        graph.output(ops.cast(out_bf16, DType.float32))
+
+    model = session.load(graph)
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks_swz).to(device),
             Tensor.from_numpy(w_scales).to(device),
             Tensor.from_numpy(expert_start).to(device),
             Tensor.from_numpy(expert_ids).to(device),
@@ -1023,6 +1146,104 @@ def test_mxfp4_grouped_matmul_gate_up_wgmma_matches_reference() -> None:
             target="gpu",
         )
         graph.output(ops.cast(out_bf16, DType.float32))
+
+    model = session.load(graph)
+    got = (
+        model.execute(
+            Tensor.from_numpy(a_f32).to(device),
+            Tensor.from_numpy(w_blocks).to(device),
+            Tensor.from_numpy(w_scales).to(device),
+            Tensor.from_numpy(expert_start).to(device),
+            Tensor.from_numpy(expert_ids).to(device),
+            Tensor.from_numpy(expert_usage_stats).to(CPU()),
+        )[0]
+        .to(CPU())
+        .to_numpy()
+    )
+
+    assert got.shape == ref.shape
+    assert np.allclose(got, ref, atol=1e-1, rtol=1e-1), (
+        f"max abs diff {np.max(np.abs(got - ref))}"
+    )
+
+
+def test_mxfp4_grouped_matmul_down_proj_wgmma_matches_reference() -> None:
+    """Regression guard: WGMMA correctness for down_proj (N=2880 in model).
+
+    We slice N down to 256 for runtime but keep K=2880 and P=257 to
+    exercise the same WGMMA path as the full model.
+    """
+    try:
+        device = Accelerator()
+    except Exception as exc:  # pragma: no cover
+        pytest.skip(f"GPU not available: {exc}")
+
+    ckpt = _find_gpt_oss_20b_file()
+    if ckpt is None:
+        pytest.skip(
+            "GPT-OSS checkpoint not found in HF cache; run `pixi run generate` once"
+        )
+
+    num_experts = 1
+    P = 257
+    K = 2880
+    N = 256
+    k_blocks = K // MXFP4_VALUES_PER_BLOCK
+
+    with safe_open(str(ckpt), framework="numpy") as f:
+        w_blocks_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_blocks"
+        )
+        w_scales_all = f.get_tensor(
+            "model.layers.0.mlp.experts.down_proj_scales"
+        )
+
+    w_blocks_raw, w_blocks, w_scales, w_scales_ref = _prepare_mxfp4_weights(
+        w_blocks_all,
+        w_scales_all,
+        num_experts=num_experts,
+        n_cols=N,
+        k_blocks=k_blocks,
+    )
+
+    rng = np.random.default_rng(7)
+    a_f32 = rng.uniform(-1.0, 1.0, size=(P, K)).astype(np.float32)
+    a_bf16 = _bf16_round_to_f32(a_f32)
+
+    w_dense = _bf16_round_to_f32(
+        _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
+    )
+    ref = _bf16_round_to_f32(a_bf16 @ w_dense.T)
+
+    expert_start = np.array([0, P], dtype=np.uint32)
+    expert_ids = np.array([0], dtype=np.int32)
+    expert_usage_stats = np.array([P, 1], dtype=np.uint32)
+    devref = DeviceRef.from_device(device)
+    session = InferenceSession(devices=[device])
+
+    with Graph(
+        "mxfp4_grouped_matmul_down_proj_wgmma",
+        input_types=[
+            TensorType(DType.float32, shape=[P, K], device=devref),
+            TensorType(DType.uint8, shape=w_blocks.shape, device=devref),
+            TensorType(DType.uint8, shape=w_scales.shape, device=devref),
+            TensorType(DType.uint32, shape=[num_experts + 1], device=devref),
+            TensorType(DType.int32, shape=[num_experts], device=devref),
+            TensorType(DType.uint32, shape=[2], device=DeviceRef.CPU()),
+        ],
+        custom_extensions=[get_mxfp4_kernels_path()],
+    ) as graph:
+        a_in, blocks_in, scales_in, start_in, ids_in, stats_in = graph.inputs
+        a_bf16_in = ops.cast(a_in.tensor, DType.bfloat16)
+        out_bf16 = mxfp4_grouped_matmul_ragged_bf16(
+            a_bf16_in,
+            blocks_in.tensor,
+            scales_in.tensor,
+            start_in.tensor,
+            ids_in.tensor,
+            stats_in.tensor,
+        )
+        graph.output(out_bf16)
 
     model = session.load(graph)
     got = (

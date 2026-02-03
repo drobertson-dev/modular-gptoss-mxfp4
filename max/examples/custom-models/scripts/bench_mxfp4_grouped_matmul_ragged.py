@@ -20,16 +20,24 @@ from gpt_oss_mxfp4_v3.kernels import (
     MXFP4_VALUES_PER_BLOCK,
     get_mxfp4_kernels_path,
     mxfp4_grouped_matmul_ragged_bf16,
+    mxfp4_grouped_matmul_ragged_bf16_swizzled,
 )
 from gpt_oss_mxfp4_v3.weight_adapters import (
     _mxfp4_pack_bits_u8,
     _mxfp4_swizzle_scales_hopper,
+    _mxfp4_swizzle_values_hopper,
 )
 from max.driver import Buffer, CPU, Accelerator
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import DeviceRef, Graph, TensorType, ops
-from max.nn.kernels import grouped_matmul_ragged
+try:
+    from max.nn.kernels import grouped_matmul_ragged
+except Exception:  # pragma: no cover
+    try:
+        from max.nn.legacy.kernels import grouped_matmul_ragged
+    except Exception:  # pragma: no cover
+        grouped_matmul_ragged = None
 from safetensors import safe_open
 
 FP4_VALUES = np.array(
@@ -148,6 +156,7 @@ def main() -> None:
     ap.add_argument("--iters", type=int, default=50)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--value-swizzle", action="store_true")
     args = ap.parse_args()
 
     ckpt = _find_gpt_oss_20b_file()
@@ -177,12 +186,19 @@ def main() -> None:
         w_blocks_all = f.get_tensor(w_blocks_key)
         w_scales_all = f.get_tensor(w_scales_key)
 
-    # Prepack for our MXFP4 kernel: blocks -> [E, K/32, N, 16],
-    # scales -> Hopper swizzled [E, N/32, K].
+    # Prepack for our MXFP4 kernel.
     w_blocks_raw = np.ascontiguousarray(
         np.transpose(w_blocks_all[:1, : args.N, :k_blocks, :], (0, 2, 1, 3))
     )
-    w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
+    if args.value_swizzle:
+        w_blocks_raw_nk = np.ascontiguousarray(
+            w_blocks_all[:1, : args.N, :k_blocks, :]
+        )
+        w_blocks_nk = w_blocks_raw_nk.reshape(1, args.N, k_blocks * 16)
+        w_blocks = _mxfp4_swizzle_values_hopper(w_blocks_nk, mx_axis=2)
+    else:
+        # blocks -> [E, K/32, N, 16] packbits
+        w_blocks = _mxfp4_pack_bits_u8(w_blocks_raw)
     w_scales_logical = np.ascontiguousarray(
         w_scales_all[:1, : args.N, :k_blocks]
     )
@@ -223,42 +239,57 @@ def main() -> None:
             graph_mxfp4.inputs
         )
         a_bf16 = ops.cast(a_in.tensor, DType.bfloat16)
-        out = mxfp4_grouped_matmul_ragged_bf16(
-            a_bf16,
-            blocks_in.tensor,
-            scales_in.tensor,
-            start_in.tensor,
-            ids_in.tensor,
-            stats_in.tensor,
-            target="gpu",
-        )
+        if args.value_swizzle:
+            out = mxfp4_grouped_matmul_ragged_bf16_swizzled(
+                a_bf16,
+                blocks_in.tensor,
+                scales_in.tensor,
+                start_in.tensor,
+                ids_in.tensor,
+                stats_in.tensor,
+                n_cols=args.N,
+                target="gpu",
+            )
+        else:
+            out = mxfp4_grouped_matmul_ragged_bf16(
+                a_bf16,
+                blocks_in.tensor,
+                scales_in.tensor,
+                start_in.tensor,
+                ids_in.tensor,
+                stats_in.tensor,
+                target="gpu",
+            )
         graph_mxfp4.output(ops.cast(out, DType.float32))
 
-    # BF16 baseline graph using upstream grouped_matmul_ragged.
-    with Graph(
-        "bench_bf16_grouped_matmul",
-        input_types=[
-            TensorType(DType.float32, shape=[args.P, args.K], device=devref),
-            TensorType(DType.float32, shape=w_dense.shape, device=devref),
-            TensorType(DType.uint32, shape=[2], device=devref),
-            TensorType(DType.int32, shape=[1], device=devref),
-            TensorType(DType.uint32, shape=[2], device=DeviceRef.CPU()),
-        ],
-    ) as graph_bf16:
-        a_in, w_in, start_in, ids_in, stats_in = graph_bf16.inputs
-        a_bf16 = ops.cast(a_in.tensor, DType.bfloat16)
-        w_bf16 = ops.cast(w_in.tensor, DType.bfloat16)
-        out = grouped_matmul_ragged(
-            a_bf16,
-            w_bf16,
-            start_in.tensor,
-            ids_in.tensor,
-            stats_in.tensor,
-        )
-        graph_bf16.output(ops.cast(out, DType.float32))
+    graph_bf16 = None
+    if grouped_matmul_ragged is not None:
+        # BF16 baseline graph using upstream grouped_matmul_ragged.
+        with Graph(
+            "bench_bf16_grouped_matmul",
+            input_types=[
+                TensorType(DType.float32, shape=[args.P, args.K], device=devref),
+                TensorType(DType.float32, shape=w_dense.shape, device=devref),
+                TensorType(DType.uint32, shape=[2], device=devref),
+                TensorType(DType.int32, shape=[1], device=devref),
+                TensorType(DType.uint32, shape=[2], device=DeviceRef.CPU()),
+            ],
+        ) as graph_bf16_ctx:
+            a_in, w_in, start_in, ids_in, stats_in = graph_bf16_ctx.inputs
+            a_bf16 = ops.cast(a_in.tensor, DType.bfloat16)
+            w_bf16 = ops.cast(w_in.tensor, DType.bfloat16)
+            out = grouped_matmul_ragged(
+                a_bf16,
+                w_bf16,
+                start_in.tensor,
+                ids_in.tensor,
+                stats_in.tensor,
+            )
+            graph_bf16_ctx.output(ops.cast(out, DType.float32))
+        graph_bf16 = graph_bf16_ctx
 
     mxfp4_model = session.load(graph_mxfp4)
-    bf16_model = session.load(graph_bf16)
+    bf16_model = session.load(graph_bf16) if graph_bf16 is not None else None
 
     a_dev = Buffer.from_numpy(a_f32).to(device)
     blocks_dev = Buffer.from_numpy(w_blocks).to(device)
@@ -275,18 +306,23 @@ def main() -> None:
         warmup=args.warmup,
         iters=args.iters,
     )
-    t_bf16 = _bench(
-        bf16_model,
-        device,
-        [a_dev, w_dense_dev, start_dev, ids_dev, stats_cpu],
-        warmup=args.warmup,
-        iters=args.iters,
-    )
+    t_bf16 = None
+    if bf16_model is not None:
+        t_bf16 = _bench(
+            bf16_model,
+            device,
+            [a_dev, w_dense_dev, start_dev, ids_dev, stats_cpu],
+            warmup=args.warmup,
+            iters=args.iters,
+        )
 
     print(f"P={args.P} K={args.K} N={args.N} which={args.which}")
     print(f"MXFP4 grouped matmul: {t_mxfp4 * 1e3:.3f} ms/iter")
-    print(f"BF16  grouped matmul: {t_bf16 * 1e3:.3f} ms/iter")
-    print(f"Speedup (BF16/MXFP4): {t_bf16 / t_mxfp4:.2f}x")
+    if t_bf16 is not None:
+        print(f"BF16  grouped matmul: {t_bf16 * 1e3:.3f} ms/iter")
+        print(f"Speedup (BF16/MXFP4): {t_bf16 / t_mxfp4:.2f}x")
+    else:
+        print("BF16  grouped matmul: skipped (max.nn.kernels.grouped_matmul_ragged not available)")
 
     if args.check:
         out_mxfp4 = (
@@ -296,17 +332,22 @@ def main() -> None:
             .to(CPU())
             .to_numpy()
         )
-        out_bf16 = (
-            bf16_model.execute(
-                a_dev, w_dense_dev, start_dev, ids_dev, stats_cpu
-            )[0]
-            .to(CPU())
-            .to_numpy()
-        )
-        diff = np.max(
-            np.abs(out_mxfp4.astype(np.float32) - out_bf16.astype(np.float32))
-        )
-        print(f"max|MXFP4-BF16| = {diff}")
+        if bf16_model is not None:
+            out_bf16 = (
+                bf16_model.execute(
+                    a_dev, w_dense_dev, start_dev, ids_dev, stats_cpu
+                )[0]
+                .to(CPU())
+                .to_numpy()
+            )
+            diff = np.max(
+                np.abs(
+                    out_mxfp4.astype(np.float32) - out_bf16.astype(np.float32)
+                )
+            )
+            print(f"max|MXFP4-BF16| = {diff}")
+        else:
+            print("max|MXFP4-BF16| = skipped (no BF16 baseline)")
 
 
 if __name__ == "__main__":

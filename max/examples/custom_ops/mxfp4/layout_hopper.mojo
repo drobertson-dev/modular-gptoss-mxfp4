@@ -1,4 +1,4 @@
-# hopper_mxfp4_layout.mojo
+# layout_hopper.mojo
 #
 # Hopper MXFP4 layout contract helpers for value packbits + scale swizzle.
 #
@@ -20,6 +20,33 @@ comptime MXFP4_PACK_MASK_U32 = UInt32(0x81C081C0)
 comptime MXFP4_D1_MASK_U32 = UInt32(0x80008000)
 comptime MXFP4_D3_MASK_U32 = UInt32(0x01800180)
 comptime MXFP4_D6_MASK_U32 = UInt32(0x00400040)
+
+@always_inline
+fn hopper_value_swizzle_index(m: Int, k: Int) -> IndexList[2]:
+    """Forward map logical value coords (m, k_byte) -> swizzled (m2, k2).
+
+    Layout matches HopperMXValueLayout for MMA v3 (u8_kwidth=1):
+      - Input bytes: shape (M, Kbytes)
+      - Output bytes: shape (M/4, Kbytes*4)
+    """
+    var m0 = m >> 4  # M // 16
+    var m_rem = m & 15
+    var b0 = m_rem >> 3          # warp_tile[0]
+    var c0 = (m_rem & 7) >> 1    # threads[0]
+    var s0 = m_rem & 1           # scott_trick[0]
+
+    var k0 = k >> 5              # Kbytes // 32
+    var k_rem = k & 31
+    var c1 = k_rem & 3           # threads[1]
+    var b1 = (k_rem >> 2) & 1    # warp_tile[1]
+    var a1 = (k_rem >> 3) & 3    # k_tile[1]
+
+    var m2 = m0 * 4 + c0
+    var k2 = (
+        (((k0 * 2 + s0) * 4 + c1) * 4 + a1) * 2 + b1
+    ) * 2 + b0
+
+    return IndexList[2](m2, k2)
 
 
 @always_inline
@@ -55,6 +82,27 @@ fn hopper_scale_swizzle_index[
 
 
 @always_inline
+fn hopper_scale_swizzle_index_fast(m: Int, k: Int) -> IndexList[2]:
+    """Fast path for NUM_WARPS=4 using shifts/masks (M aligned to 128)."""
+    # NUM_WARPS == 4 so 32 * NUM_WARPS == 128 and NUM_WARPS * 16 == 64.
+    var m0 = m >> 7
+    var r = m & 127
+    var t1 = r >> 6
+    var w = (r >> 4) & 3
+    var t3 = (r >> 3) & 1
+    var c = r & 7
+
+    var k0 = k >> 1
+    var d = k & 1
+
+    var m2 = m0 * 4 + w
+    var k2 = (
+        (((k0 * 2 + t1) * 8 + c) * 2 + d) * 2 + t3
+    )
+    return IndexList[2](m2, k2)
+
+
+@always_inline
 fn hopper_scale_unswizzle_index[
     NUM_WARPS: Int = HOPPER_SCALE_NUM_WARPS,
 ](m2: Int, k2: Int) -> IndexList[2]:
@@ -81,4 +129,3 @@ fn hopper_scale_unswizzle_index[
     )
 
     return IndexList[2](m, k)
-

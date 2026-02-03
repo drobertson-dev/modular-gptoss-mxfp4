@@ -19,8 +19,9 @@ from max.tensor import Tensor
 
 from gpt_oss_mxfp4_v3.kernels import (
     MXFP4_VALUES_PER_BLOCK,
-    mxfp4_grouped_matmul_ragged_bf16,
+    mxfp4_grouped_matmul_ragged_bf16_swizzled,
 )
+from gpt_oss_mxfp4_v3.weight_adapters import _mxfp4_swizzle_values_hopper
 
 HOPPER_SCALE_NUM_WARPS = 4
 HOPPER_SCALE_ALIGN_M = 32 * HOPPER_SCALE_NUM_WARPS
@@ -84,12 +85,13 @@ def main() -> None:
 
     rng = np.random.default_rng(args.seed)
     total_rows = args.tokens * args.topk
-    k_blocks = args.hidden // MXFP4_VALUES_PER_BLOCK
+    kbytes = args.hidden // 2
 
     a_f32 = rng.standard_normal((total_rows, args.hidden), dtype=np.float32)
-    w_blocks = np.zeros(
-        (args.experts, k_blocks, args.intermediate, 16), dtype=np.uint8
+    w_blocks_logical = np.zeros(
+        (args.experts, args.intermediate, kbytes), dtype=np.uint8
     )
+    w_blocks = _mxfp4_swizzle_values_hopper(w_blocks_logical, mx_axis=2)
     scales_m2 = (
         (args.intermediate + HOPPER_SCALE_ALIGN_M - 1)
         // HOPPER_SCALE_ALIGN_M
@@ -110,7 +112,7 @@ def main() -> None:
     expert_usage_stats_t = Tensor.from_dlpack(expert_usage_stats).to(CPU())
 
     def _run_once() -> float:
-        y = mxfp4_grouped_matmul_ragged_bf16(
+        y = mxfp4_grouped_matmul_ragged_bf16_swizzled(
             a_bf16,
             w_blocks_t,
             w_scales_t,

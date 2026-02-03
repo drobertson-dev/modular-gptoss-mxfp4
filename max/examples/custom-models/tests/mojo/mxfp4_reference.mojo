@@ -15,15 +15,16 @@
 from buffer import Dim
 from buffer.dimlist import DimList
 from ndbuffer_utils import HostNDBuffer, zero
-from kernels.fp4_utils import E2M1_TO_FLOAT32, SF_MN_GROUP_SIZE
-from kernels.mxfp4 import (
+from mxfp4 import (
+    E2M1_TO_FLOAT32,
+    SF_MN_GROUP_SIZE,
     MXFP4_BLOCK_K,
     MXFP4_PACKED_BYTES_PER_BLOCK,
     MXFP4_SF_DTYPE,
     get_mxfp4_scale,
     set_mxfp4_scale,
 )
-from kernels.mxfp4.primitives import e8m0_to_float32, float32_to_e8m0
+from mxfp4.primitives import e8m0_to_float32, float32_to_e8m0
 from layout import Layout, LayoutTensor
 from layout._ndbuffer_stub import from_ndbuffer_row_major
 from math import ceildiv, exp
@@ -81,9 +82,9 @@ fn make_scales_host[
     ),
 ]:
     """Create a zero-initialized scale tensor sized for (num_rows, K)."""
-    alias row_groups = max(1, ceildiv(num_rows, SF_MN_GROUP_SIZE))
-    alias col_groups = max(1, ceildiv(k, MXFP4_BLOCK_K * 4))
-    alias scale_shape = DimList(
+    comptime row_groups = max(1, ceildiv(num_rows, SF_MN_GROUP_SIZE))
+    comptime col_groups = max(1, ceildiv(k, MXFP4_BLOCK_K * 4))
+    comptime scale_shape = DimList(
         Dim(row_groups), Dim(col_groups), Dim(32), Dim(4), Dim(4)
     )
     var scales = HostNDBuffer[MXFP4_SF_DTYPE, 5, scale_shape](scale_shape)

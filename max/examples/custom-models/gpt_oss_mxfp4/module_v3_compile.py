@@ -1,7 +1,7 @@
 """Module compilation helpers.
 
 Upstream `max.nn.module.Module.compile()` does not pass `custom_extensions` to
-`max.graph.Graph(...)`, so custom Mojo ops under `examples/custom_ops/kernels/`
+`max.graph.Graph(...)`, so custom Mojo ops under `examples/custom_ops/kernels/deprecated/`
 won't be registered. This helper mirrors `Module.compile()` while injecting the
 needed `custom_extensions` list.
 """

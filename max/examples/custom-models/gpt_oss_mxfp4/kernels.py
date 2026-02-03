@@ -22,7 +22,8 @@ MXFP4_TOPK = 4
 def get_mxfp4_kernels_path() -> Path:
     """Return the Mojo package path containing the registered MXFP4 custom ops."""
     examples_dir = Path(__file__).resolve().parents[2]
-    return examples_dir / "custom_ops" / "kernels"
+    # Legacy kernels live under the deprecated package.
+    return examples_dir / "custom_ops" / "kernels" / "deprecated"
 
 
 def _as_tensor(value: Any) -> TensorValue:
@@ -50,7 +51,7 @@ def mxfp4_matmul_swiglu(
 ) -> TensorValue:
     """Call `gpt_oss.mxfp4.matmul.sm90` (currently CPU-only correctness op).
 
-    Shapes/dtypes must match `examples/custom_ops/kernels/mxfp4_matmul_sm90.mojo`.
+    Shapes/dtypes must match `examples/custom_ops/kernels/deprecated/mxfp4_matmul_sm90.mojo`.
     """
 
     del (

@@ -1,7 +1,7 @@
 # moe_mxfp4.mojo
 #
 # DEPRECATED: legacy MXFP4 MoE kernels. Use
-# `max/examples/custom_ops/mxfp4_grouped_kernels/` for the active Hopper path.
+# `max/examples/custom_ops/mxfp4/` for the active Hopper path.
 #
 # Correctness-first grouped MXFP4 GEMM kernels used by the Mojo test suite.
 #

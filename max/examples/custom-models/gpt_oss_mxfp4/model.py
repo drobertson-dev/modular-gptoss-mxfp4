@@ -10,11 +10,11 @@ from __future__ import annotations
 
 from max.dtype import DType
 from max.graph import DeviceRef, Graph, TensorType
-from max.nn import Signals
-from max.pipelines.architectures.gpt_oss.model import (
+from max.nn.legacy.comm import Signals
+from max.pipelines.architectures.gpt_oss_legacy.model import (
     GptOssInputs,
 )
-from max.pipelines.architectures.gpt_oss.model import (
+from max.pipelines.architectures.gpt_oss_legacy.model import (
     GptOssModel as _BaseGptOssModel,
 )
 

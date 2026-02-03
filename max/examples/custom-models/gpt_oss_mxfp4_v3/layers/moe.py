@@ -24,7 +24,7 @@ from gpt_oss_mxfp4_v3.kernels import (
     MXFP4_VALUES_PER_BLOCK,
 )
 from gpt_oss_mxfp4_v3.kernels import (
-    mxfp4_grouped_matmul_ragged_bf16 as _mxfp4_grouped_matmul_ragged_bf16,
+    mxfp4_grouped_matmul_ragged_bf16_swizzled as _mxfp4_grouped_matmul_ragged_bf16,
 )
 from gpt_oss_mxfp4_v3.model_config import GptOssConfig
 
@@ -38,6 +38,8 @@ HOPPER_SCALE_ALIGN_M = 32 * HOPPER_SCALE_NUM_WARPS
 _MOE_DEBUG = os.environ.get("MXFP4_V3_MOE_DEBUG", "") == "1"
 _MOE_DEBUG_LAYER = int(os.environ.get("MXFP4_V3_MOE_DEBUG_LAYER", "-1"))
 _MOE_NAN_SCAN = os.environ.get("MXFP4_V3_MOE_NAN_SCAN", "") == "1"
+_USE_OGS = os.environ.get("MXFP4_V3_USE_OGS", "") == "1"
+_KEEP_OGS_RAW = os.environ.get("MXFP4_V3_OGS_KEEP_RAW", "") == "1"
 
 
 class GptOssMoEGate(MoEGate):
@@ -96,18 +98,27 @@ class MXFP4Experts(Module):
         kblocks_w1 = hidden_dim // MXFP4_VALUES_PER_BLOCK
         kblocks_w2 = moe_dim // MXFP4_VALUES_PER_BLOCK
 
+        def _value_swizzle_shape(m: int, k: int) -> tuple[int, int]:
+            # Matches _mxfp4_swizzle_values_hopper padding for mma v3:
+            # M padded to 16, Kbytes padded to 32.
+            kbytes = k // 2
+            m_pad = ((m + 15) // 16) * 16
+            k_pad = ((kbytes + 31) // 32) * 32
+            return m_pad // 4, k_pad * 4
+
         n_pad_w1 = (
             (2 * moe_dim + HOPPER_SCALE_ALIGN_M - 1)
             // HOPPER_SCALE_ALIGN_M
         ) * HOPPER_SCALE_ALIGN_M
         scale_m2_w1 = n_pad_w1 // 32
 
-        # W1 (prepacked): [E, D/32, 2*I, 16] blocks +
+        # W1 (prepacked): [E, (2*I)/4, (D/2)*4] swizzled value bytes +
         # [E, ceildiv(2*I, 32*num_warps)*num_warps, D] scales + BF16 bias.
         # This matches the SM90 kernel's preferred access pattern: fixed `kb` reads
         # contiguous columns.
+        w1_m2, w1_k2 = _value_swizzle_shape(2 * moe_dim, hidden_dim)
         self.gate_up_proj_blocks = Tensor.zeros(
-            shape=[num_experts, kblocks_w1, 2 * moe_dim, 16],
+            shape=[num_experts, w1_m2, w1_k2],
             dtype=DType.uint8,
         )
         self.gate_up_proj_scales = Tensor.zeros(
@@ -124,10 +135,11 @@ class MXFP4Experts(Module):
         ) * HOPPER_SCALE_ALIGN_M
         scale_m2_w2 = n_pad_w2 // 32
 
-        # W2 (prepacked): [E, I/32, D, 16] blocks +
+        # W2 (prepacked): [E, D/4, (I/2)*4] swizzled value bytes +
         # [E, ceildiv(D, 32*num_warps)*num_warps, I] scales + BF16 bias.
+        w2_m2, w2_k2 = _value_swizzle_shape(hidden_dim, moe_dim)
         self.down_proj_blocks = Tensor.zeros(
-            shape=[num_experts, kblocks_w2, hidden_dim, 16],
+            shape=[num_experts, w2_m2, w2_k2],
             dtype=DType.uint8,
         )
         self.down_proj_scales = Tensor.zeros(
@@ -138,6 +150,27 @@ class MXFP4Experts(Module):
             shape=[num_experts, hidden_dim],
             dtype=DType.bfloat16,
         )
+
+        if _KEEP_OGS_RAW:
+            kbytes_w1 = hidden_dim // 2
+            kbytes_w2 = moe_dim // 2
+            # Raw (unswizzled) MXFP4 blocks/scales for OGS layout conversion.
+            self.gate_up_proj_blocks_raw = Tensor.zeros(
+                shape=[num_experts, 2 * moe_dim, kbytes_w1],
+                dtype=DType.uint8,
+            )
+            self.gate_up_proj_scales_raw = Tensor.zeros(
+                shape=[num_experts, 2 * moe_dim, kblocks_w1],
+                dtype=DType.uint8,
+            )
+            self.down_proj_blocks_raw = Tensor.zeros(
+                shape=[num_experts, hidden_dim, kbytes_w2],
+                dtype=DType.uint8,
+            )
+            self.down_proj_scales_raw = Tensor.zeros(
+                shape=[num_experts, hidden_dim, kblocks_w2],
+                dtype=DType.uint8,
+            )
 
 
 class GptOssMoE(MoE):
@@ -179,6 +212,40 @@ class GptOssMoE(MoE):
         seq_len = x.shape[0]
 
         x_bf16 = x if x.dtype == DType.bfloat16 else F.cast(x, DType.bfloat16)
+
+        if _USE_OGS:
+            if F.in_graph_context():
+                raise RuntimeError(
+                    "MXFP4_V3_USE_OGS requires eager execution (no graph context)."
+                )
+            experts = self._mxfp4_experts()
+            if not hasattr(experts, "gate_up_proj_blocks_raw"):
+                raise RuntimeError(
+                    "OGS path requires raw MXFP4 weights. "
+                    "Set MXFP4_V3_OGS_KEEP_RAW=1 before loading weights."
+                )
+            from gpt_oss_mxfp4_v3.ogs_backend import ogs_moe_forward
+
+            if not hasattr(self, "_ogs_cache"):
+                self._ogs_cache = {}
+
+            return ogs_moe_forward(
+                x=x_bf16,
+                gate_weight=self.gate.gate_score.weight,
+                gate_bias=self.gate.gate_score.bias,
+                w1_blocks_raw=experts.gate_up_proj_blocks_raw,
+                w1_scales_raw=experts.gate_up_proj_scales_raw,
+                w1_bias=experts.gate_up_proj_bias,
+                w2_blocks_raw=experts.down_proj_blocks_raw,
+                w2_scales_raw=experts.down_proj_scales_raw,
+                w2_bias=experts.down_proj_bias,
+                topk=self.num_experts_per_token,
+                swiglu_alpha=self.alpha,
+                swiglu_limit=self.limit,
+                num_experts=self.num_experts,
+                num_warps=HOPPER_SCALE_NUM_WARPS,
+                _cache=self._ogs_cache,
+            )
 
         def _debug_any_nan(label: str, t: Tensor) -> None:
             t_flat = F.reshape(t, [1, -1])

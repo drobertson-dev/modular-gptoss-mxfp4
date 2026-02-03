@@ -1,5 +1,9 @@
 # grouped_matmul_mxfp4_sm90.mojo
 #
+# DEPRECATED: legacy MXFP4 grouped matmul kernels. Use
+# `max/examples/custom_ops/mxfp4/grouped_matmul_sm90_entrypoints.mojo`
+# for the active Hopper layout + decode path.
+#
 # SM90-optimized MXFP4 grouped matmul for ModuleV3 GPT‑OSS MoE expert GEMMs.
 #
 # Goal: match upstream SM90 grouped matmul intent:
@@ -61,12 +65,6 @@ from gpu.host.nvidia.tma import TensorMapSwizzle
 from .mxfp4_decode import (
     decode_mxfp4_packbits_u32_to_8xbf16_scaled,
     e8m0_to_bf16_bits,
-)
-from .hopper_mxfp4_layout import (
-    HOPPER_SCALE_NUM_WARPS,
-    HOPPER_SCALE_ALIGN_M,
-    HOPPER_SCALE_ALIGN_K,
-    hopper_scale_swizzle_index,
 )
 
 
@@ -133,18 +131,6 @@ fn grouped_matmul_mxfp4_bf16_warp_mma_sm90[
         BK % VALUES_PER_BLOCK == 0,
         "BK must be a multiple of 32",
     ]()
-    constrained[
-        (HOPPER_SCALE_NUM_WARPS & (HOPPER_SCALE_NUM_WARPS - 1)) == 0,
-        "Hopper scale swizzle requires power-of-two num_warps",
-    ]()
-    constrained[
-        BN % (HOPPER_SCALE_ALIGN_M) == 0,
-        "BN must be a multiple of 32 * num_warps for Hopper scale swizzle",
-    ]()
-    constrained[
-        BK % 64 == 0,
-        "BK must be a multiple of 64 for Hopper scale swizzle",
-    ]()
 
     var expert_idx = Int(block_idx.z)
     if expert_idx >= num_active_experts:
@@ -166,14 +152,6 @@ fn grouped_matmul_mxfp4_bf16_warp_mma_sm90[
     var w_blocks_u64 = w_blocks_ptr.address_space_cast[
         AddressSpace.GLOBAL
     ]().bitcast[Scalar[U64]]()
-
-    var n_pad = (
-        (N + HOPPER_SCALE_ALIGN_M - 1) // HOPPER_SCALE_ALIGN_M
-    ) * HOPPER_SCALE_ALIGN_M
-    var scale_m2 = n_pad // 32
-    var w_scales_stride0 = scale_m2 * K
-    var w_scales_stride1 = K
-    var w_scales_stride2 = 1
 
     var A_s = LayoutTensor[
         BF16,
@@ -258,13 +236,8 @@ fn grouped_matmul_mxfp4_bf16_warp_mma_sm90[
                 b_reg_tile[3, 0] = 0
 
                 if col < N and kb < Kblocks:
-                    var idx = hopper_scale_swizzle_index[
-                        HOPPER_SCALE_NUM_WARPS
-                    ](col, kb)
                     var scale_exp = w_scales_ptr[
-                        expert_id * w_scales_stride0
-                        + idx[0] * w_scales_stride1
-                        + idx[1] * w_scales_stride2
+                        ((expert_id * Kblocks + kb) * N) + col
                     ]
                     var scale = e8m0_to_bf16_bits(scale_exp)
                     var packed_base = (
@@ -367,18 +340,6 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline[
     constrained[BK % VALUES_PER_BLOCK == 0, "BK must be a multiple of 32"]()
     constrained[BM % (WGMMA_M * NUM_WARP_GROUPS) == 0]()
     constrained[NUM_PIPELINE_STAGES >= 2]()
-    constrained[
-        (HOPPER_SCALE_NUM_WARPS & (HOPPER_SCALE_NUM_WARPS - 1)) == 0,
-        "Hopper scale swizzle requires power-of-two num_warps",
-    ]()
-    constrained[
-        BN % HOPPER_SCALE_ALIGN_M == 0,
-        "BN must be a multiple of 32 * num_warps for Hopper scale swizzle",
-    ]()
-    constrained[
-        BK % 64 == 0,
-        "BK must be a multiple of 64 for Hopper scale swizzle",
-    ]()
 
     var expert_idx = Int(block_idx.z)
     if expert_idx >= num_active_experts:
@@ -551,13 +512,8 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline[
 
                     var scale_exp: UInt8 = 0
                     if col < N and kb < Kblocks:
-                        var idx = hopper_scale_swizzle_index[
-                            HOPPER_SCALE_NUM_WARPS
-                        ](col, kb)
                         scale_exp = w_scales_ptr[
-                            expert_id * w_scales_stride0
-                            + idx[0] * w_scales_stride1
-                            + idx[1] * w_scales_stride2
+                            ((expert_id * Kblocks + kb) * N) + col
                         ]
                     var scale = e8m0_to_bf16_bits(scale_exp)
 
@@ -943,13 +899,10 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload[
 
                     var scale_exp: UInt8 = 0
                     if col < N and kb < Kblocks:
-                        var idx = hopper_scale_swizzle_index[
-                            HOPPER_SCALE_NUM_WARPS
-                        ](col, kb)
                         scale_exp = w_scales_ptr[
                             expert_id * w_scales_stride0
-                            + idx[0] * w_scales_stride1
-                            + idx[1] * w_scales_stride2
+                            + kb * w_scales_stride1
+                            + col * w_scales_stride2
                         ]
                     var scale = e8m0_to_bf16_bits(scale_exp)
 
@@ -1160,46 +1113,19 @@ struct MXFP4GroupedMatmulRaggedBF16:
         var w_blocks_stride1 = N * BYTES_PER_BLOCK
         var w_blocks_stride2 = BYTES_PER_BLOCK
         var w_blocks_stride3 = 1
-        var scales_m2 = w_scales.dim_size(1)
-        var scales_k = w_scales.dim_size(2)
-        var w_scales_stride0 = scales_m2 * scales_k
-        var w_scales_stride1 = scales_k
+        var w_scales_stride0 = Kblocks * N
+        var w_scales_stride1 = N
         var w_scales_stride2 = 1
 
         if P == 0 or K == 0 or N == 0:
             return
-        # NOTE: This kernel expects packed MXFP4 layouts and contiguous
-        # row-major tensors; stride validation is omitted for speed.
+        # NOTE: This kernel assumes contiguous row-major A/C and packed
+        # w_blocks/w_scales layouts; stride checks are omitted for kernel speed.
 
         if Kblocks * VALUES_PER_BLOCK != K:
             raise Error(
                 "mxfp4_grouped_matmul_ragged_bf16: K must be divisible by 32"
                 " and match w_blocks Kblocks"
-            )
-        if w_blocks_stride3 != 1:
-            raise Error(
-                "mxfp4_grouped_matmul_ragged_bf16: w_blocks last dimension"
-                " must be contiguous (stride 1)"
-            )
-        if (Kblocks % HOPPER_SCALE_ALIGN_K) != 0:
-            raise Error(
-                "mxfp4_grouped_matmul_ragged_bf16: K must be divisible by 64"
-                " for Hopper scale swizzle"
-            )
-        if scales_k != K:
-            raise Error(
-                "mxfp4_grouped_matmul_ragged_bf16: w_scales K dimension"
-                " must match K"
-            )
-        if scales_m2 * 32 < N:
-            raise Error(
-                "mxfp4_grouped_matmul_ragged_bf16: w_scales dim1 must"
-                " cover N (>= N/32 with padding)"
-            )
-        if (scales_m2 % HOPPER_SCALE_NUM_WARPS) != 0:
-            raise Error(
-                "mxfp4_grouped_matmul_ragged_bf16: w_scales dim1 must be"
-                " a multiple of Hopper num_warps"
             )
 
         var gpu_ctx = ctx.get_device_context()
@@ -1258,7 +1184,7 @@ struct MXFP4GroupedMatmulRaggedBF16:
             return
 
         # w_blocks: [E, K/32, N, 16] row-major contiguous
-        # w_scales: [E, N/32 (padded), K] Hopper scale swizzled
+        # w_scales: [E, K/32, N] row-major contiguous
 
         var a_dev = DeviceBuffer[a.dtype](
             gpu_ctx, a.unsafe_ptr(), a.size(), owning=False

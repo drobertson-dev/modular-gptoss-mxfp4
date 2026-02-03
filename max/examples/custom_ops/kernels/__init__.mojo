@@ -25,9 +25,5 @@ from .vector_addition import *
 
 # MXFP4 kernels (custom architecture support).
 # NOTE: These are legacy MXFP4 kernels kept for reference. The active Hopper
-# layout + decode path lives under `max/examples/custom_ops/mxfp4_grouped_kernels/`.
-from .fp4_utils import *
-from .grouped_matmul_mxfp4_sm90 import *
-from .moe_mxfp4 import *
-from .moe_mxfp4_ops import *
-from .mxfp4_matmul_sm90 import *
+# layout + decode path lives under `max/examples/custom_ops/mxfp4/`.
+# MXFP4 deprecated kernels live under `kernels.deprecated.*`.

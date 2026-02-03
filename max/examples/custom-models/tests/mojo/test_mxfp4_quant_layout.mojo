@@ -9,16 +9,16 @@
 from buffer import Dim
 from buffer.dimlist import DimList
 from ndbuffer_utils import HostNDBuffer
-from kernels.fp4_utils import E2M1_TO_FLOAT32
-from kernels.mxfp4 import (
+from mxfp4 import (
     dequant_row_cpu,
     mxfp4_address,
+    E2M1_TO_FLOAT32,
     MXFP4_BLOCK_K,
     MXFP4_PACKED_BYTES_PER_BLOCK,
     MXFP4_SF_DTYPE,
     set_mxfp4_scale,
 )
-from kernels.mxfp4.primitives import float32_to_e8m0
+from mxfp4.primitives import float32_to_e8m0
 from layout._ndbuffer_stub import from_ndbuffer_row_major
 from testing import assert_almost_equal, assert_equal, TestSuite
 
@@ -62,8 +62,8 @@ fn test_decode_e2m1_pair_known_bytes() raises:
 
 
 fn test_e8m0_scale_to_float() raises:
-    alias num_rows = 3
-    alias K = MXFP4_BLOCK_K
+    comptime num_rows = 3
+    comptime K = MXFP4_BLOCK_K
     var scales_host = make_scales_host[num_rows, K]()
     var scales_tensor = from_ndbuffer_row_major(scales_host.tensor)
 
@@ -81,10 +81,10 @@ fn test_e8m0_scale_to_float() raises:
 
 fn test_mxfp4_block_addressing_and_scales() raises:
     # Verify the mapping (k -> byte/nibble) and matching scale selection.
-    alias num_experts = 1
-    alias N = 4
-    alias K = MXFP4_BLOCK_K * 2  # two MXFP4 blocks
-    alias packed_shape = DimList(
+    comptime num_experts = 1
+    comptime N = 4
+    comptime K = MXFP4_BLOCK_K * 2  # two MXFP4 blocks
+    comptime packed_shape = DimList(
         num_experts, N, K // MXFP4_BLOCK_K, MXFP4_PACKED_BYTES_PER_BLOCK
     )
 
@@ -125,7 +125,7 @@ fn test_mxfp4_block_addressing_and_scales() raises:
         )
 
     # Dequantize on CPU and confirm each k maps to the right nibble and scale.
-    alias out_shape = DimList(Dim(K))
+    comptime out_shape = DimList(Dim(K))
     var out_row = HostNDBuffer[DType.float32, 1, out_shape](out_shape)
     var out_tensor = from_ndbuffer_row_major(out_row.tensor)
     for n in range(N):

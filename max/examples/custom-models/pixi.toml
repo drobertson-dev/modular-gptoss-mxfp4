@@ -32,13 +32,11 @@ benchmark-20b-sharegpt-500-r16 = "max benchmark --model openai/gpt-oss-20b --bac
 benchmark-120b-sharegpt-100-r32-seed123 = "max benchmark --model openai/gpt-oss-120b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 100 --seed 123 --request-rate 32 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
 benchmark-20b-baseline = "max benchmark --model openai/gpt-oss-20b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 500 --seed 123 --request-rate 32 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
 benchmark-120b-baseline = "max benchmark --model openai/gpt-oss-120b --backend modular --endpoint /v1/chat/completions --dataset-name sharegpt --num-prompts 100 --seed 123 --request-rate 32 --dataset-path ${SHAREGPT_PATH:-$PIXI_PROJECT_ROOT/../../../ShareGPT_V3_unfiltered_cleaned_split.json}"
-mxfp4-matmul-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_mxfp4_matmul.py -q"
-mxfp4-bootstrap-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_modular_home_bootstrap.py -q"
-mxfp4-moe-reference-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_mxfp4_moe_reference.py -q"
+mxfp4-scale-swizzle-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_mxfp4_scale_swizzle_reference.py -q"
+mxfp4-value-layout-test = "PYTHONPATH=$PIXI_PROJECT_ROOT pytest $PIXI_PROJECT_ROOT/tests/test_mxfp4_value_layout_hopper.py -q"
 mxfp4-py-tests = { depends-on = [
-  "mxfp4-matmul-test",
-  "mxfp4-bootstrap-test",
-  "mxfp4-moe-reference-test",
+  "mxfp4-scale-swizzle-test",
+  "mxfp4-value-layout-test",
 ] }
 
 # Mojo tests (use Mojo runner; include `../custom_ops` so `kernels.*` resolves).
@@ -49,15 +47,30 @@ mxfp4-mojo-tests = { depends-on = [
   "mxfp4-mojo-swiglu-math-test",
 ] }
 
-# SM90-only Mojo tests (expected to run only on NVIDIA sm90+; currently under active development).
-mxfp4-mojo-sm90-clean-tile-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/test_mxfp4_sm90_clean_tile_wgmma.mojo"
-mxfp4-mojo-sm90-moe-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/test_mxfp4_moe_sm90.mojo"
+# Deprecated SM90-only Mojo tests (legacy kernels kept for reference).
+deprecated-mxfp4-mojo-sm90-clean-tile-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/deprecated/test_mxfp4_sm90_clean_tile_wgmma.mojo"
+deprecated-mxfp4-mojo-sm90-moe-test = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/deprecated/test_mxfp4_moe_sm90.mojo"
 mxfp4-moe-bench = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo"
 mxfp4-moe-bench-20b = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo --20b"
 mxfp4-moe-bench-120b = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo --120b"
 mxfp4-moe-bench-20b-tokens64 = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo --20b --tokens64"
 mxfp4-moe-bench-120b-tokens64 = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo --120b --tokens64"
+mxfp4-moe-bench-vllm = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops_vllm.mojo"
+mxfp4-moe-bench-vllm-20b = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops_vllm.mojo --20b"
+mxfp4-moe-bench-vllm-120b = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops_vllm.mojo --120b"
+mxfp4-ogs-bench = "PYTHONPATH=$PIXI_PROJECT_ROOT MXFP4_V3_TRITON_KERNELS_PATH=/workspace/triton/python/triton_kernels python $PIXI_PROJECT_ROOT/tests/bench_mxfp4_moe_ops_vllm_ogs.py"
+mxfp4-ogs-bench-tokens64 = "PYTHONPATH=$PIXI_PROJECT_ROOT MXFP4_V3_TRITON_KERNELS_PATH=/workspace/triton/python/triton_kernels python $PIXI_PROJECT_ROOT/tests/bench_mxfp4_moe_ops_vllm_ogs.py --tokens 64"
+mxfp4-ogs-bench-tokens256 = "PYTHONPATH=$PIXI_PROJECT_ROOT MXFP4_V3_TRITON_KERNELS_PATH=/workspace/triton/python/triton_kernels python $PIXI_PROJECT_ROOT/tests/bench_mxfp4_moe_ops_vllm_ogs.py --tokens 256"
+mxfp4-ogs-bench-tokens1024 = "PYTHONPATH=$PIXI_PROJECT_ROOT MXFP4_V3_TRITON_KERNELS_PATH=/workspace/triton/python/triton_kernels python $PIXI_PROJECT_ROOT/tests/bench_mxfp4_moe_ops_vllm_ogs.py --tokens 1024"
+mxfp4-moe-bench-e2e = "PYTHONPATH=$PIXI_PROJECT_ROOT USE_EXPERIMENTAL_KERNELS=1 python $PIXI_PROJECT_ROOT/tests/bench_mxfp4_moe_ops_end_to_end.py"
+mxfp4-moe-bench-e2e-tokens64 = "PYTHONPATH=$PIXI_PROJECT_ROOT USE_EXPERIMENTAL_KERNELS=1 python $PIXI_PROJECT_ROOT/tests/bench_mxfp4_moe_ops_end_to_end.py --tokens 64"
+mxfp4-moe-bench-e2e-tokens256 = "PYTHONPATH=$PIXI_PROJECT_ROOT USE_EXPERIMENTAL_KERNELS=1 python $PIXI_PROJECT_ROOT/tests/bench_mxfp4_moe_ops_end_to_end.py --tokens 256"
+mxfp4-moe-bench-e2e-tokens1024 = "PYTHONPATH=$PIXI_PROJECT_ROOT USE_EXPERIMENTAL_KERNELS=1 python $PIXI_PROJECT_ROOT/tests/bench_mxfp4_moe_ops_end_to_end.py --tokens 1024"
+mxfp4-grouped-bench = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_grouped_matmul.mojo"
+mxfp4-grouped-bench-20b = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_grouped_matmul.mojo --20b"
+mxfp4-grouped-bench-120b = "mojo run -I $PIXI_PROJECT_ROOT/../custom_ops $PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_grouped_matmul.mojo --120b"
 mxfp4-eager-smoke = "USE_EXPERIMENTAL_KERNELS=1 python $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3/eager_mxfp4_moe_smoke.py"
+mxfp4-ogs-eager-smoke = "USE_EXPERIMENTAL_KERNELS=1 PYTHONPATH=$PIXI_PROJECT_ROOT MXFP4_V3_TRITON_KERNELS_PATH=/workspace/triton/python/triton_kernels python $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3/eager_mxfp4_moe_ogs_smoke.py"
 
 # Debug/profiling helpers (CLI-only; see `.agents/skills/debugging-mojo/`).
 setup-cuda-gdb = "bash -lc 'set -euo pipefail; echo \"mojo: $(mojo --version)\"; echo \"cuda-gdb: $(cuda-gdb --version | head -n 1)\"; echo \"nsys: $(nsys --version)\"; echo \"ncu: $(ncu --version | head -n 1)\"; nvidia-smi -L'"
@@ -74,8 +87,8 @@ profile-moe-bench-w1-ncu = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PRO
 profile-moe-bench-w1-tokens64-ncu = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; sudo env MODULAR_HOME=\\\"$MODULAR_HOME\\\" /usr/local/cuda/bin/ncu --target-processes all --set basic --kernel-name-base function -k regex:kernels_moe_mxfp4_ops_moe_w1 -s 10 -c 1 --force-overwrite -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_w1_tokens64_ncu\\\" \\\"$PIXI_PROJECT_ROOT/.pixi/envs/default/bin/mojo\\\" run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\" --tokens64 --w1-only\""
 profile-moe-bench-w2-ncu = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; sudo env MODULAR_HOME=\\\"$MODULAR_HOME\\\" /usr/local/cuda/bin/ncu --target-processes all --set basic --kernel-name-base function -k regex:kernels_moe_mxfp4_ops_moe_w2 -s 10 -c 1 --force-overwrite -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_w2_ncu\\\" \\\"$PIXI_PROJECT_ROOT/.pixi/envs/default/bin/mojo\\\" run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\" --w2-only\""
 profile-moe-bench-w2-tokens64-ncu = "bash -lc \"set -euo pipefail; mkdir -p \\\"$PIXI_PROJECT_ROOT/profiles\\\"; sudo env MODULAR_HOME=\\\"$MODULAR_HOME\\\" /usr/local/cuda/bin/ncu --target-processes all --set basic --kernel-name-base function -k regex:kernels_moe_mxfp4_ops_moe_w2 -s 10 -c 1 --force-overwrite -o \\\"$PIXI_PROJECT_ROOT/profiles/moe_w2_tokens64_ncu\\\" \\\"$PIXI_PROJECT_ROOT/.pixi/envs/default/bin/mojo\\\" run -I \\\"$PIXI_PROJECT_ROOT/../custom_ops\\\" \\\"$PIXI_PROJECT_ROOT/tests/mojo/bench_mxfp4_moe_ops.mojo\\\" --tokens64 --w2-only\""
-format = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff format $PIXI_PROJECT_ROOT/gpt_oss_mxfp4"
-lint = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff check --fix $PIXI_PROJECT_ROOT/gpt_oss_mxfp4"
+format = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff format $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3"
+lint = "PYTHONPATH=$PIXI_PROJECT_ROOT ruff check --fix $PIXI_PROJECT_ROOT/gpt_oss_mxfp4_v3"
 
 [dependencies]
 python = ">=3.9,<3.14"

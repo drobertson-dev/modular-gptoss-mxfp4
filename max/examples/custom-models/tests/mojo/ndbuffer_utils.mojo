@@ -21,14 +21,16 @@ struct HostNDBuffer[
     rank: Int,
     shape: DimList,
 ](Movable):
-    var _ptr: LegacyUnsafePointer[Scalar[Self.dtype]]
+    var _ptr: LegacyUnsafePointer[mut=True, Scalar[Self.dtype], origin=MutAnyOrigin]
     var tensor: NDBuffer[
         mut=True, Self.dtype, Self.rank, MutAnyOrigin, Self.shape
     ]
 
     fn __init__(out self, dynamic_shape: DimList):
         var numel = Int(dynamic_shape.product())
-        self._ptr = LegacyUnsafePointer[Scalar[Self.dtype]].alloc(numel)
+        self._ptr = LegacyUnsafePointer[
+            mut=True, Scalar[Self.dtype], origin=MutAnyOrigin
+        ].alloc(numel)
         self.tensor = NDBuffer[
             mut=True, Self.dtype, Self.rank, MutAnyOrigin, Self.shape
         ](self._ptr, dynamic_shape)
@@ -36,10 +38,14 @@ struct HostNDBuffer[
     fn __moveinit__(out self, deinit existing: Self):
         self._ptr = existing._ptr
         self.tensor = existing.tensor
-        existing._ptr = LegacyUnsafePointer[Scalar[Self.dtype]]()
+        existing._ptr = LegacyUnsafePointer[
+            mut=True, Scalar[Self.dtype], origin=MutAnyOrigin
+        ]()
+        _ = existing._ptr
         existing.tensor = NDBuffer[
             mut=True, Self.dtype, Self.rank, MutAnyOrigin, Self.shape
         ]()
+        _ = existing.tensor
 
     fn __del__(deinit self):
         if self._ptr:

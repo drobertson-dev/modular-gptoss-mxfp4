@@ -1,9 +1,11 @@
-# mxfp4/__init__.mojo
+# quant_layout.mojo
 #
 # MXFP4 packing conventions + scale layout helpers for tests.
 
-from ..fp4_utils import (
+from .constants import (
     E2M1_TO_FLOAT32,
+    MXFP4_BLOCK_K,
+    MXFP4_PACKED_BYTES_PER_BLOCK,
     MXFP4_SF_DTYPE,
     MXFP4_SF_VECTOR_SIZE,
     SF_ATOM_K,
@@ -16,10 +18,6 @@ from layout import Layout, LayoutTensor
 
 comptime U8 = DType.uint8
 comptime F32 = DType.float32
-
-comptime MXFP4_BLOCK_K = 32
-comptime MXFP4_PACKED_BYTES_PER_BLOCK = 16
-
 
 @always_inline
 fn mxfp4_address(k: Int, block_k: Int = MXFP4_BLOCK_K) -> SIMD[DType.int32, 3]:

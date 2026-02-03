@@ -1,4 +1,6 @@
 # ===----------------------------------------------------------------------=== #
+# DEPRECATED: legacy clean-tile test for kernels in `kernels.deprecated`.
+# ===----------------------------------------------------------------------=== #
 # SM90 MXFP4 clean-tile WGMMA smoke test.
 # Exercises the guarded TMA+WGMMA path: CTA_M=64, CTA_N=64, CTA_K=64
 # single expert, dequantized BF16 weights.
@@ -8,14 +10,14 @@ from buffer import Dim
 from buffer.dimlist import DimList
 from gpu.host import DeviceContext
 from ndbuffer_utils import DeviceNDBuffer, HostNDBuffer, zero
-from kernels.moe_mxfp4 import GroupedMXFP4Matmul
-from kernels.mxfp4 import (
+from kernels.deprecated.moe_mxfp4 import GroupedMXFP4Matmul
+from mxfp4 import (
     MXFP4_BLOCK_K,
     MXFP4_PACKED_BYTES_PER_BLOCK,
     MXFP4_SF_DTYPE,
     set_mxfp4_scale,
 )
-from kernels.mxfp4.primitives import float32_to_e8m0
+from mxfp4.primitives import float32_to_e8m0
 from layout._ndbuffer_stub import from_ndbuffer_row_major
 from testing import assert_almost_equal, assert_true
 from testing import TestSuite

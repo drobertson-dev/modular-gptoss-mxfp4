@@ -5,7 +5,10 @@
 # reference exactly, including clamp behavior at the ±SWIGLU_LIMIT boundary.
 # ===----------------------------------------------------------------------=== #
 
-from kernels.moe_mxfp4 import swiglu_activation, swiglu_activation_simd
+from mxfp4 import (
+    swiglu_activation,
+    swiglu_activation_simd,
+)
 from testing import assert_almost_equal, assert_equal, TestSuite
 
 from mxfp4_reference import (

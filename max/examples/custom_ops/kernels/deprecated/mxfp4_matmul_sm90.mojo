@@ -1,7 +1,7 @@
 # mxfp4_matmul_sm90.mojo
 #
 # DEPRECATED: legacy MXFP4 matmul kernel (correctness-first). Use the
-# MXFP4 grouped matmul kernels under `max/examples/custom_ops/mxfp4_grouped_kernels/`.
+# MXFP4 grouped matmul kernels under `max/examples/custom_ops/mxfp4/`.
 #
 # Correctness-first MXFP4 matmul + fused SwiGLU custom op.
 #

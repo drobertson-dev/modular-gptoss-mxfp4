@@ -4,7 +4,7 @@
 
 from math import exp2, log2
 
-from ..fp4_utils import MXFP4_SF_DTYPE
+from .constants import MXFP4_SF_DTYPE
 
 comptime U8 = DType.uint8
 comptime F32 = DType.float32
