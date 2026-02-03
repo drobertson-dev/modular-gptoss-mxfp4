@@ -19,17 +19,17 @@ from benchmark import (
 )
 from buffer.dimlist import DimList
 from gpu.host import DeviceBuffer, DeviceContext
-from kernels import (
+from mxfp4 import (
     decode_mxfp4_packbits_u32_to_8xbf16_scaled,
     e8m0_to_bf16_bits,
     MXFP4MoETopKReduceBF16,
-    MXFP4MoEW1SwiGlu,
-    MXFP4MoEW2PairsBF16,
+    MXFP4MoEW1SwiGluSwizzled,
+    MXFP4MoEW2PairsBF16Swizzled,
 )
-from mxfp4_grouped_kernels import MXFP4GroupedMatmulRaggedBF16
-from mxfp4_grouped_kernels.hopper_mxfp4_layout import (
+from mxfp4.layout_hopper import (
     HOPPER_SCALE_NUM_WARPS,
     hopper_scale_swizzle_index,
+    hopper_value_swizzle_index,
 )
 from sys import argv, has_nvidia_gpu_accelerator
 from tensor import Input, IOSpec, ManagedTensorSlice, Output, StaticTensorSpec
@@ -151,7 +151,7 @@ fn run_bench[
     run_w1: Bool = True,
     run_w2: Bool = True,
     run_reduce: Bool = True,
-    run_grouped: Bool = True,
+    skip_warmup: Bool = False,
 ) raises:
     var ctx = DeviceContext()
     if _skip_if_no_sm90(ctx):
@@ -202,10 +202,15 @@ fn run_bench[
         ptr[0] = UInt32(max_tokens_per_expert)
         ptr[1] = UInt32(NUM_EXPERTS)
 
-    # W1 weights: [E, 2I, D/32, 16] blocks + [E, 2I, D/32] scales, plus FP32 bias.
+    # W1 weights: swizzled Hopper value layout + [E, 2I, D/32] scales.
     comptime kblocks_w1 = HIDDEN // 32
-    comptime w1_blocks_spec = StaticTensorSpec[DType.uint8, 4](
-        DimList(NUM_EXPERTS, 2 * INTERMEDIATE, kblocks_w1, 16)
+    comptime w1_kbytes = HIDDEN // 2
+    comptime w1_m_pad = ((2 * INTERMEDIATE + 15) // 16) * 16
+    comptime w1_k_pad = ((w1_kbytes + 31) // 32) * 32
+    comptime w1_m2 = w1_m_pad // 4
+    comptime w1_k2 = w1_k_pad * 4
+    comptime w1_blocks_spec = StaticTensorSpec[DType.uint8, 3](
+        DimList(NUM_EXPERTS, w1_m2, w1_k2)
     )
     var w1_blocks = Tensor[Input, w1_blocks_spec](ctx)
     ctx.enqueue_memset(w1_blocks.buffer, 0)
@@ -222,10 +227,15 @@ fn run_bench[
     var w1_bias = Tensor[Input, w1_bias_spec](ctx)
     ctx.enqueue_memset(w1_bias.buffer, 0)
 
-    # W2 weights: [E, D, I/32, 16] blocks + [E, D, I/32] scales, plus FP32 bias.
+    # W2 weights: swizzled Hopper value layout + [E, D, I/32] scales.
     comptime kblocks_w2 = INTERMEDIATE // 32
-    comptime w2_blocks_spec = StaticTensorSpec[DType.uint8, 4](
-        DimList(NUM_EXPERTS, HIDDEN, kblocks_w2, 16)
+    comptime w2_kbytes = INTERMEDIATE // 2
+    comptime w2_m_pad = ((HIDDEN + 15) // 16) * 16
+    comptime w2_k_pad = ((w2_kbytes + 31) // 32) * 32
+    comptime w2_m2 = w2_m_pad // 4
+    comptime w2_k2 = w2_k_pad * 4
+    comptime w2_blocks_spec = StaticTensorSpec[DType.uint8, 3](
+        DimList(NUM_EXPERTS, w2_m2, w2_k2)
     )
     var w2_blocks = Tensor[Input, w2_blocks_spec](ctx)
     ctx.enqueue_memset(w2_blocks.buffer, 0)
@@ -242,23 +252,6 @@ fn run_bench[
     var w2_bias = Tensor[Input, w2_bias_spec](ctx)
     ctx.enqueue_memset(w2_bias.buffer, 0)
 
-    # Grouped matmul weights: [E, I/32, D, 16] blocks +
-    # [E, ceildiv(D, 32*num_warps)*num_warps, I] Hopper scales.
-    comptime wgm_blocks_spec = StaticTensorSpec[DType.uint8, 4](
-        DimList(NUM_EXPERTS, kblocks_w2, HIDDEN, 16)
-    )
-    var wgm_blocks = Tensor[Input, wgm_blocks_spec](ctx)
-    ctx.enqueue_memset(wgm_blocks.buffer, 0)
-
-    comptime scales_m2 = (
-        (HIDDEN + (32 * HOPPER_SCALE_NUM_WARPS) - 1)
-        // (32 * HOPPER_SCALE_NUM_WARPS)
-    ) * HOPPER_SCALE_NUM_WARPS
-    comptime wgm_scales_spec = StaticTensorSpec[DType.uint8, 3](
-        DimList(NUM_EXPERTS, scales_m2, INTERMEDIATE)
-    )
-    var wgm_scales = Tensor[Input, wgm_scales_spec](ctx)
-    ctx.enqueue_memset(wgm_scales.buffer, 0)
 
     # Outputs.
     comptime h_spec = StaticTensorSpec[DType.bfloat16, 2](
@@ -285,66 +278,49 @@ fn run_bench[
         y_pairs_bf16_spec.strides.into_index_list[2](),
     )
 
-    comptime y_grouped_spec = StaticTensorSpec[DType.bfloat16, 2](
-        DimList(P, HIDDEN)
-    )
-    var y_grouped = Tensor[Output, y_grouped_spec](ctx)
-
     comptime y_bf16_spec = StaticTensorSpec[DType.bfloat16, 2](
         DimList(TOKENS, HIDDEN)
     )
     var y_bf16 = Tensor[Output, y_bf16_spec](ctx)
 
-    @parameter
-    @always_inline
-    fn launch_grouped_matmul(ctx: DeviceContext) raises:
-        MXFP4GroupedMatmulRaggedBF16.execute[target="gpu"](
-            y_grouped.slice,
-            h_sorted_in,
-            wgm_blocks.slice,
-            wgm_scales.slice,
-            expert_start.slice,
-            expert_ids.slice,
-            UInt32(max_tokens_per_expert),
-            UInt32(NUM_EXPERTS),
-            ctx,
-        )
-
-    # Warmup (jit/compile + first-run caches).
-    MXFP4MoEW1SwiGlu.execute[target="gpu"](
-        h_sorted.slice,
-        x.slice,
-        token_expert_order.slice,
-        expert_start.slice,
-        expert_ids.slice,
-        expert_usage_stats.slice,
-        w1_blocks.slice,
-        w1_scales.slice,
-        w1_bias.slice,
-        1.702,
-        7.0,
-        ctx,
-    )
-    MXFP4MoEW2PairsBF16.execute[target="gpu"](
-        y_pairs_bf16.slice,
-        h_sorted_in,
-        token_expert_order.slice,
-        expert_start.slice,
-        expert_ids.slice,
-        expert_usage_stats.slice,
-        gate_weights.slice,
-        w2_blocks.slice,
-        w2_scales.slice,
-        w2_bias.slice,
-        ctx,
-    )
-    launch_grouped_matmul(ctx)
-    MXFP4MoETopKReduceBF16.execute[target="gpu"](
-        y_bf16.slice,
-        y_pairs_bf16_in,
-        ctx,
-    )
-    ctx.synchronize()
+    if not skip_warmup:
+        # Warmup (jit/compile + first-run caches).
+        if run_w1:
+            MXFP4MoEW1SwiGluSwizzled.execute[target="gpu"](
+                h_sorted.slice,
+                x.slice,
+                token_expert_order.slice,
+                expert_start.slice,
+                expert_ids.slice,
+                expert_usage_stats.slice,
+                w1_blocks.slice,
+                w1_scales.slice,
+                w1_bias.slice,
+                1.702,
+                7.0,
+                ctx,
+            )
+        if run_w2:
+            MXFP4MoEW2PairsBF16Swizzled.execute[target="gpu"](
+                y_pairs_bf16.slice,
+                h_sorted_in,
+                token_expert_order.slice,
+                expert_start.slice,
+                expert_ids.slice,
+                expert_usage_stats.slice,
+                gate_weights.slice,
+                w2_blocks.slice,
+                w2_scales.slice,
+                w2_bias.slice,
+                ctx,
+            )
+        if run_w2 and run_reduce:
+            MXFP4MoETopKReduceBF16.execute[target="gpu"](
+                y_bf16.slice,
+                y_pairs_bf16_in,
+                ctx,
+            )
+        ctx.synchronize()
 
     # Benchmark.
     var bench = Bench()
@@ -361,7 +337,7 @@ fn run_bench[
         @parameter
         @always_inline
         fn kernel_launch(ctx: DeviceContext) raises:
-            MXFP4MoEW1SwiGlu.execute[target="gpu"](
+            MXFP4MoEW1SwiGluSwizzled.execute[target="gpu"](
                 h_sorted.slice,
                 x.slice,
                 token_expert_order.slice,
@@ -384,7 +360,7 @@ fn run_bench[
         @parameter
         @always_inline
         fn kernel_launch(ctx: DeviceContext) raises:
-            MXFP4MoEW2PairsBF16.execute[target="gpu"](
+            MXFP4MoEW2PairsBF16Swizzled.execute[target="gpu"](
                 y_pairs_bf16.slice,
                 h_sorted_in,
                 token_expert_order.slice,
@@ -406,7 +382,7 @@ fn run_bench[
         @parameter
         @always_inline
         fn kernel_launch(ctx: DeviceContext) raises:
-            MXFP4MoEW2PairsBF16.execute[target="gpu"](
+            MXFP4MoEW2PairsBF16Swizzled.execute[target="gpu"](
                 y_pairs_bf16.slice,
                 h_sorted_in,
                 token_expert_order.slice,
@@ -427,16 +403,6 @@ fn run_bench[
 
         b.iter_custom[kernel_launch](ctx)
 
-    @parameter
-    @always_inline
-    fn bench_grouped_matmul(mut b: Bencher) raises:
-        @parameter
-        @always_inline
-        fn kernel_launch(ctx: DeviceContext) raises:
-            launch_grouped_matmul(ctx)
-
-        b.iter_custom[kernel_launch](ctx)
-
     if run_w1:
         bench.bench_function[bench_w1](
             BenchId("mxfp4_moe_w1_swiglu", "gpu"), w1_metrics
@@ -448,10 +414,6 @@ fn run_bench[
     if run_w2 and run_reduce:
         bench.bench_function[bench_w2_pairs_bf16_reduce](
             BenchId("mxfp4_moe_w2_pairs_bf16_reduce", "gpu"), w2_metrics
-        )
-    if run_grouped:
-        bench.bench_function[bench_grouped_matmul](
-            BenchId("mxfp4_grouped_matmul_ragged_bf16", "gpu"), w2_metrics
         )
 
     print(bench)
@@ -517,13 +479,19 @@ fn run_grouped_check() raises:
         ptr[0] = UInt32(max_tokens_per_expert)
         ptr[1] = UInt32(NUM_EXPERTS)
 
-    comptime w_blocks_spec = StaticTensorSpec[DType.uint8, 4](
-        DimList(NUM_EXPERTS, kblocks, HIDDEN, 16)
+    comptime kbytes = INTERMEDIATE // 2
+    comptime m_pad = ((HIDDEN + 15) // 16) * 16
+    comptime k_pad = ((kbytes + 31) // 32) * 32
+    comptime m2 = m_pad // 4
+    comptime k2 = k_pad * 4
+
+    comptime w_blocks_spec = StaticTensorSpec[DType.uint8, 3](
+        DimList(NUM_EXPERTS, m2, k2)
     )
     var w_blocks = Tensor[Input, w_blocks_spec](ctx)
     with w_blocks.buffer.map_to_host() as host:
         var ptr = host.unsafe_ptr()
-        for i in range(NUM_EXPERTS * kblocks * HIDDEN * 16):
+        for i in range(NUM_EXPERTS * m2 * k2):
             ptr[i] = UInt8((i * 17 + 5) & 0xFF)
 
     comptime w_scales_spec = StaticTensorSpec[DType.uint8, 3](
@@ -541,7 +509,7 @@ fn run_grouped_check() raises:
     var y = Tensor[Output, y_spec](ctx)
     ctx.enqueue_memset(y.buffer, 0)
 
-    MXFP4GroupedMatmulRaggedBF16.execute[target="gpu"](
+    MXFP4GroupedMatmulRaggedBF16Swizzled.execute[target="gpu"](
         y.slice,
         a.slice,
         w_blocks.slice,
@@ -580,15 +548,25 @@ fn run_grouped_check() raises:
                                     swz_idx[0] * INTERMEDIATE + swz_idx[1]
                                 ]
                                 var scale = e8m0_to_bf16_bits(scale_exp)
-                                var packed_base = (
-                                    (kb * HIDDEN + c) * 16
-                                    + group * 4
+                                var kbyte_base = kb * 16 + group * 4
+                                var idx0 = hopper_value_swizzle_index(
+                                    c, kbyte_base + 0
                                 )
+                                var idx1 = hopper_value_swizzle_index(
+                                    c, kbyte_base + 1
+                                )
+                                var idx2 = hopper_value_swizzle_index(
+                                    c, kbyte_base + 2
+                                )
+                                var idx3 = hopper_value_swizzle_index(
+                                    c, kbyte_base + 3
+                                )
+                                var stride_k2 = k2
                                 var p = _u32_from_u8x4(
-                                    UInt8(w_ptr[packed_base + 0]),
-                                    UInt8(w_ptr[packed_base + 1]),
-                                    UInt8(w_ptr[packed_base + 2]),
-                                    UInt8(w_ptr[packed_base + 3]),
+                                    UInt8(w_ptr[idx0[0] * stride_k2 + idx0[1]]),
+                                    UInt8(w_ptr[idx1[0] * stride_k2 + idx1[1]]),
+                                    UInt8(w_ptr[idx2[0] * stride_k2 + idx2[1]]),
+                                    UInt8(w_ptr[idx3[0] * stride_k2 + idx3[1]]),
                                 )
                                 var outv = (
                                     decode_mxfp4_packbits_u32_to_8xbf16_scaled(
@@ -618,20 +596,24 @@ def main():
     #   --w1-only
     #   --w2-only
     #   --no-reduce
-    #   --no-grouped
     #
     # Token-count presets (compile-time specializations):
     #   --tokens1
     #   --tokens64
     #   --tokens256 (default)
+    #   --tokens512
+    #   --tokens1024
+    #   --skip-warmup
     var use_120b = False
     var tokens1 = False
     var tokens64 = False
+    var tokens512 = False
+    var tokens1024 = False
     var run_w1 = True
     var run_w2 = True
     var run_reduce = True
-    var run_grouped = True
     var run_check = False
+    var skip_warmup = False
 
     for arg in argv():
         if arg == "--120b":
@@ -642,6 +624,10 @@ def main():
             tokens1 = True
         if arg == "--tokens64":
             tokens64 = True
+        if arg == "--tokens512":
+            tokens512 = True
+        if arg == "--tokens1024":
+            tokens1024 = True
         if arg == "--w1-only":
             run_w2 = False
             run_reduce = False
@@ -650,10 +636,10 @@ def main():
             run_w1 = False
         if arg == "--no-reduce":
             run_reduce = False
-        if arg == "--no-grouped":
-            run_grouped = False
         if arg == "--check":
             run_check = True
+        if arg == "--skip-warmup":
+            skip_warmup = True
 
     if run_check:
         run_grouped_check()
@@ -664,21 +650,35 @@ def main():
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
-                run_grouped=run_grouped,
+                skip_warmup=skip_warmup,
             )
         elif tokens64:
             run_bench[TOKENS=64, NUM_EXPERTS=128](
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
-                run_grouped=run_grouped,
+                skip_warmup=skip_warmup,
+            )
+        elif tokens512:
+            run_bench[TOKENS=512, NUM_EXPERTS=128](
+                run_w1=run_w1,
+                run_w2=run_w2,
+                run_reduce=run_reduce,
+                skip_warmup=skip_warmup,
+            )
+        elif tokens1024:
+            run_bench[TOKENS=1024, NUM_EXPERTS=128](
+                run_w1=run_w1,
+                run_w2=run_w2,
+                run_reduce=run_reduce,
+                skip_warmup=skip_warmup,
             )
         else:
             run_bench[NUM_EXPERTS=128](
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
-                run_grouped=run_grouped,
+                skip_warmup=skip_warmup,
             )
     else:
         if tokens1:
@@ -686,19 +686,33 @@ def main():
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
-                run_grouped=run_grouped,
+                skip_warmup=skip_warmup,
             )
         elif tokens64:
             run_bench[TOKENS=64, NUM_EXPERTS=32](
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
-                run_grouped=run_grouped,
+                skip_warmup=skip_warmup,
+            )
+        elif tokens512:
+            run_bench[TOKENS=512, NUM_EXPERTS=32](
+                run_w1=run_w1,
+                run_w2=run_w2,
+                run_reduce=run_reduce,
+                skip_warmup=skip_warmup,
+            )
+        elif tokens1024:
+            run_bench[TOKENS=1024, NUM_EXPERTS=32](
+                run_w1=run_w1,
+                run_w2=run_w2,
+                run_reduce=run_reduce,
+                skip_warmup=skip_warmup,
             )
         else:
             run_bench[NUM_EXPERTS=32](
                 run_w1=run_w1,
                 run_w2=run_w2,
                 run_reduce=run_reduce,
-                run_grouped=run_grouped,
+                skip_warmup=skip_warmup,
             )

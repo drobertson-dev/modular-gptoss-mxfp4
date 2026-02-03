@@ -21,7 +21,7 @@ Understand the fundamental hardware unit of GPU parallelism:
 
 Understand the fundamental hardware unit of GPU parallelism:
 
-```
+```text
 GPU Block (e.g., 256 threads)
 |-- Warp 0 (32 threads, SIMT lockstep execution)
 |   |-- Lane 0  -+
@@ -86,7 +86,7 @@ total = sum(partial_product)  # Internally no barriers, no race conditions!
 
 Learn the performance characteristics:
 
-```
+```text
 Problem Scale         Traditional    Warp Operations
 Single warp (32)      Fast          Fastest (no barriers)
 Few warps (128)       Good          Excellent (minimal overhead)
