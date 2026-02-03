@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Sequence
+import os
 
 from max.dtype import DType
 from max.graph import BufferValue, ShardingStrategy, TensorValue, ops
@@ -123,6 +124,7 @@ class GptOssTextModel(Module):
         input_row_offsets: Sequence[TensorValue],
         **kwargs,
     ) -> tuple[TensorValue, ...]:
+        debug_model = os.environ.get("MXFP4_MODEL_DEBUG", "") == "1"
         h_embed = self.embed_tokens(tokens)
         h = [h_embed.to(device) for device in self.devices]
 
@@ -147,6 +149,8 @@ class GptOssTextModel(Module):
                 for h_device, indices in zip(h, last_token_indices, strict=True)
             ]
 
+        if debug_model:
+            ops.print("mxfp4_model: pre_lm_head")
         last_logits = ops.cast(
             self.lm_head(
                 [
@@ -157,6 +161,12 @@ class GptOssTextModel(Module):
             )[0],
             DType.float32,
         )
+        if debug_model:
+            ops.print("mxfp4_model: post_lm_head")
+            ops.print(
+                ops.argmax(last_logits, axis=-1),
+                label="mxfp4_model: argmax_token",
+            )
         return (last_logits,)
 
 

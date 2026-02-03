@@ -11,6 +11,7 @@ must not require Python interface churn.
 from __future__ import annotations
 
 from collections.abc import Iterable
+import os
 
 from max.dtype import DType
 from max.graph import DeviceRef, ShardingStrategy, TensorValue, Weight, ops
@@ -147,6 +148,8 @@ class GptOssMoE(MoE, Shardable):
         # Enforce that these ops run on GPU for now.
         if x.device == DeviceRef.CPU():
             raise ValueError("MXFP4 MoE custom ops are GPU-only")
+        debug_graph = os.environ.get("MXFP4_MOE_DEBUG_GRAPH", "") == "1"
+        debug_stats = os.environ.get("MXFP4_MOE_DEBUG_STATS", "") == "1"
         # Routing.
         router_idx, router_weight = self.gate(x)  # [T, TOPK]
         router_idx_flat = ops.reshape(router_idx, [-1])  # [P]
@@ -162,6 +165,28 @@ class GptOssMoE(MoE, Shardable):
         ) = moe_create_indices(
             ops.cast(router_idx_flat, DType.int32), self.num_experts
         )
+        if debug_graph:
+            ops.print("mxfp4_moe: routing done")
+        if debug_stats:
+            ops.print(
+                ops.min(token_expert_order, axis=0),
+                label="mxfp4_moe_token_expert_order_min",
+            )
+            ops.print(
+                ops.max(token_expert_order, axis=0),
+                label="mxfp4_moe_token_expert_order_max",
+            )
+            ops.print(
+                ops.min(expert_start_indices, axis=0),
+                label="mxfp4_moe_expert_start_min",
+            )
+            ops.print(
+                ops.max(expert_start_indices, axis=0),
+                label="mxfp4_moe_expert_start_max",
+            )
+            ops.print(
+                expert_usage_stats, label="mxfp4_moe_expert_usage_stats"
+            )
         # Mojo kernels expect BF16 activations, BF16 gate weights, and FP32 biases.
         x_bf16 = ops.cast(x, DType.bfloat16) if x.dtype != DType.bfloat16 else x
         gate_weights_bf16 = (
@@ -171,6 +196,8 @@ class GptOssMoE(MoE, Shardable):
         )
         w1_bias_f32 = self._experts_gate_up_proj_bias
         w2_bias_f32 = self._experts_down_proj_bias
+        if debug_graph:
+            ops.print("mxfp4_moe: entering w1")
         h_sorted = mxfp4_moe_w1_swiglu(
             x_bf16,
             token_expert_order,
@@ -184,6 +211,8 @@ class GptOssMoE(MoE, Shardable):
             limit=self.limit,
             target="gpu",
         )
+        if debug_graph:
+            ops.print("mxfp4_moe: w1 done")
         y_pairs = mxfp4_moe_w2_pairs_bf16(
             x_bf16,
             h_sorted,
@@ -197,7 +226,11 @@ class GptOssMoE(MoE, Shardable):
             w2_bias_f32,
             target="gpu",
         )
+        if debug_graph:
+            ops.print("mxfp4_moe: w2 done")
         y = mxfp4_moe_topk_reduce_bf16(x_bf16, y_pairs, target="gpu")
+        if debug_graph:
+            ops.print("mxfp4_moe: reduce done")
         return y if y.dtype == x.dtype else ops.cast(y, x.dtype)
 
     @property
