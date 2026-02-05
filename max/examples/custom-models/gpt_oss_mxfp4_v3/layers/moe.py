@@ -39,6 +39,7 @@ HOPPER_SCALE_ALIGN_M = 32 * HOPPER_SCALE_NUM_WARPS
 _MOE_DEBUG = os.environ.get("MXFP4_V3_MOE_DEBUG", "") == "1"
 _MOE_DEBUG_LAYER = int(os.environ.get("MXFP4_V3_MOE_DEBUG_LAYER", "-1"))
 _MOE_NAN_SCAN = os.environ.get("MXFP4_V3_MOE_NAN_SCAN", "") == "1"
+_MOE_NAN_CLAMP = os.environ.get("MXFP4_V3_MOE_NAN_CLAMP", "") == "1"
 _USE_OGS = os.environ.get("MXFP4_V3_USE_OGS", "") == "1"
 _KEEP_OGS_RAW = os.environ.get("MXFP4_V3_OGS_KEEP_RAW", "") == "1"
 
@@ -291,19 +292,22 @@ class GptOssMoE(MoE):
             _debug_abs_max("mxfp4_v3_moe_x_abs_max", x_bf16)
 
         router_idx, router_weight = self.gate(x_bf16)
-        expected_pairs = seq_len * self.num_experts_per_token
         router_idx = F.reshape(router_idx, [-1])
         router_weight = F.reshape(router_weight, [-1])
-        router_idx = F.slice_tensor(
-            router_idx, [(slice(0, expected_pairs), "num_pairs")]
-        )
-        router_weight = F.slice_tensor(
-            router_weight, [(slice(0, expected_pairs), "num_pairs")]
-        )
         router_weight = F.reshape(
             router_weight, [seq_len, self.num_experts_per_token]
         )
         router_idx_i32 = F.cast(router_idx, DType.int32)
+        # Clamp router indices to valid expert range to avoid downstream OOB.
+        router_min = ops.constant(
+            0, dtype=router_idx_i32.dtype, device=router_idx_i32.device
+        )
+        router_max = ops.constant(
+            self.num_experts - 1,
+            dtype=router_idx_i32.dtype,
+            device=router_idx_i32.device,
+        )
+        router_idx_i32 = F.min(F.max(router_idx_i32, router_min), router_max)
 
         if debug_enabled:
             ops.print(
@@ -322,6 +326,7 @@ class GptOssMoE(MoE):
             expert_ids,
             expert_usage_stats,
         ) = moe_create_indices(router_idx_i32, self.num_experts)
+        token_expert_order_i32 = F.cast(token_expert_order, DType.int32)
         expert_usage_stats_host = expert_usage_stats.to(CPU())
 
         if debug_enabled:
@@ -367,14 +372,14 @@ class GptOssMoE(MoE):
         permutated_states = F.gather(
             x_bf16,
             F.cast(
-                token_expert_order // self.num_experts_per_token, DType.int32
+                token_expert_order_i32 // self.num_experts_per_token, DType.int32
             ),
             axis=0,
         )
 
         if self.apply_router_weight_first:
             permutated_states = permutated_states * F.gather(
-                router_weight.reshape([-1, 1]), token_expert_order, axis=0
+                router_weight.reshape([-1, 1]), token_expert_order_i32, axis=0
             ).cast(x_bf16.dtype)
 
         experts = self._mxfp4_experts()
@@ -394,7 +399,7 @@ class GptOssMoE(MoE):
 
         # Bias per token based on expert assignment.
         expert_assignments = F.gather(
-            router_idx_i32, token_expert_order, axis=0
+            router_idx_i32, token_expert_order_i32, axis=0
         )
         if debug_enabled:
             ops.print(
@@ -439,6 +444,11 @@ class GptOssMoE(MoE):
             experts.down_proj_bias, expert_assignments, axis=0
         )
         down_output = down_output + down_bias_per_token
+        if _MOE_NAN_CLAMP:
+            zero = ops.constant(
+                0, dtype=down_output.dtype, device=down_output.device
+            )
+            down_output = F.where(F.is_nan(down_output), zero, down_output)
         if debug_enabled:
             _debug_any_nan("mxfp4_v3_down_any_nan", down_output)
             _debug_abs_max("mxfp4_v3_down_abs_max", down_output)
@@ -446,9 +456,7 @@ class GptOssMoE(MoE):
         # Restore token order using scatter with OOB-safe indices to avoid
         # gather out-of-bounds failures when indices are corrupted.
         restored_shape0 = seq_len * self.num_experts_per_token
-        restore_indices = F.cast(restore_token_order, DType.int32).clip(
-            min=0, max=restored_shape0 - 1
-        )
+        restore_indices = F.cast(restore_token_order, DType.int32)
         restore_indices_2d = ops.unsqueeze(restore_indices, -1)
         restored = scatter_nd_skip_oob_indices(
             input=ops.broadcast_to(

@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from max import functional as F
 from max.dtype import DType
 from max.tensor import Tensor
-from max.graph import BufferValue, TensorValue
+from max.graph import BufferValue, TensorValue, ops
 from max.kv_cache import PagedKVCacheManager
 from max.nn import Embedding, Linear, Module, ModuleList
 from max.nn.legacy.attention import MHAMaskVariant
@@ -28,6 +28,10 @@ from gpt_oss_mxfp4_v3.layers.moe import GptOssMoE
 from gpt_oss_mxfp4_v3.layers.transformer_block import (
     GptOssTransformerBlock,
 )
+
+import os
+
+_DEBUG_LAST_TOKEN = os.environ.get("MXFP4_V3_DEBUG_LAST_TOKEN", "") == "1"
 from gpt_oss_mxfp4_v3.model_config import GptOssConfig
 
 
@@ -123,6 +127,23 @@ class GptOssTextModel(Module):
             )
 
         last_token_indices = input_row_offsets[1:] - 1
+        # Clamp to valid range to avoid OOB when offsets drift.
+        zero = ops.constant(
+            0, dtype=last_token_indices.dtype, device=last_token_indices.device
+        )
+        last_token_indices = F.max(last_token_indices, zero)
+        total_len = input_row_offsets[-1]
+        last_token_indices = F.min(last_token_indices, total_len - 1)
+
+        if _DEBUG_LAST_TOKEN:
+            ops.print(
+                F.min(last_token_indices, axis=0).__tensorvalue__(),
+                label="mxfp4_v3_last_token_idx_min",
+            )
+            ops.print(
+                F.max(last_token_indices, axis=0).__tensorvalue__(),
+                label="mxfp4_v3_last_token_idx_max",
+            )
         last_token_h = F.gather(h, last_token_indices, axis=0)
         last_logits = F.cast(
             self.lm_head(self.norm(last_token_h)), DType.float32
