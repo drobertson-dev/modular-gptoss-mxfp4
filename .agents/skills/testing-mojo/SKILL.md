@@ -1,3 +1,8 @@
+---
+name: testing-mojo
+description: "Guidance for writing and running Mojo tests with the standard testing framework and TestSuite runner."
+---
+
 # Testing Mojo Latest Conventions
 
 From the internal docs, Mojo’s current testing story is:
