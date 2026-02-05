@@ -125,10 +125,20 @@ class GptOssTextModel(Module):
         **kwargs,
     ) -> tuple[TensorValue, ...]:
         debug_model = os.environ.get("MXFP4_MODEL_DEBUG", "") == "1"
+        debug_layer = int(os.environ.get("MXFP4_MODEL_DEBUG_LAYER", "-1"))
+        debug_last_token = os.environ.get("MXFP4_MODEL_DEBUG_LAST_TOKEN", "") == "1"
+        clamp_last_token = (
+            os.environ.get("MXFP4_MODEL_CLAMP_LAST_TOKEN", "") == "1"
+        )
         h_embed = self.embed_tokens(tokens)
         h = [h_embed.to(device) for device in self.devices]
 
         for idx, layer in enumerate(self.layers):
+            if debug_model and (debug_layer < 0 or idx == debug_layer):
+                ops.print(
+                    ops.constant(idx, DType.int32, device=self.devices[0]),
+                    label="mxfp4_model: enter_layer",
+                )
             layer_idx_tensor = ops.constant(
                 idx, DType.uint32, device=self.devices[0]
             )
@@ -140,14 +150,53 @@ class GptOssTextModel(Module):
                 input_row_offsets=input_row_offsets,
                 **kwargs,
             )
+            if debug_model and (debug_layer < 0 or idx == debug_layer):
+                ops.print(
+                    ops.constant(idx, DType.int32, device=self.devices[0]),
+                    label="mxfp4_model: exit_layer",
+                )
 
         last_token_indices = [offsets[1:] - 1 for offsets in input_row_offsets]
         last_token_h: list[TensorValue] = []
         if h:
-            last_token_h = [
-                ops.gather(h_device, indices, axis=0)
-                for h_device, indices in zip(h, last_token_indices, strict=True)
-            ]
+            if clamp_last_token:
+                # Clamp indices defensively to avoid gather OOB when row offsets are off.
+                clamped_indices: list[TensorValue] = []
+                for h_device, indices, offsets in zip(
+                    h, last_token_indices, input_row_offsets, strict=True
+                ):
+                    total_len = ops.cast(offsets[-1], DType.int32)
+                    indices_i32 = ops.cast(indices, DType.int32)
+                    zero = ops.constant(
+                        0, DType.int32, device=h_device.device
+                    )
+                    upper = total_len - ops.constant(
+                        1, DType.int32, device=h_device.device
+                    )
+                    clamped = ops.min(ops.max(indices_i32, zero), upper)
+                    if debug_last_token:
+                        ops.print(
+                            ops.min(clamped, axis=0),
+                            label="mxfp4_model: last_token_min",
+                        )
+                        ops.print(
+                            ops.max(clamped, axis=0),
+                            label="mxfp4_model: last_token_max",
+                        )
+                    clamped_indices.append(clamped)
+                last_token_h = [
+                    ops.gather(h_device, indices, axis=0)
+                    for h_device, indices in zip(
+                        h, clamped_indices, strict=True
+                    )
+                ]
+            else:
+                last_token_h = [
+                    ops.gather(h_device, indices, axis=0)
+                    for h_device, indices in zip(
+                        h, last_token_indices, strict=True
+                    )
+                ]
 
         if debug_model:
             ops.print("mxfp4_model: pre_lm_head")

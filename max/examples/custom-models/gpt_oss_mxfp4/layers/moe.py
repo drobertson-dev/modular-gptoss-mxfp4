@@ -148,6 +148,9 @@ class GptOssMoE(MoE, Shardable):
         # Enforce that these ops run on GPU for now.
         if x.device == DeviceRef.CPU():
             raise ValueError("MXFP4 MoE custom ops are GPU-only")
+        if os.environ.get("MXFP4_MOE_BYPASS", "") == "1":
+            # Debug/bring-up path: bypass MXFP4 MoE and return activations.
+            return x
         debug_graph = os.environ.get("MXFP4_MOE_DEBUG_GRAPH", "") == "1"
         debug_stats = os.environ.get("MXFP4_MOE_DEBUG_STATS", "") == "1"
         # Routing.
