@@ -59,6 +59,11 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload[
     var seg_end = Int(expert_start_ptr[expert_idx + 1])
     if seg_start >= seg_end:
         return
+    # Grouped tile scheduler guard: skip tiles beyond this expert's segment.
+    var seg_len = seg_end - seg_start
+    var max_tiles = ceildiv(seg_len, BM)
+    if Int(block_idx.y) >= max_tiles:
+        return
 
     var n0 = Int(block_idx.x) * BN
     var row0 = seg_start + Int(block_idx.y) * BM

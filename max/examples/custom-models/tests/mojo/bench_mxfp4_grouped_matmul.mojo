@@ -320,6 +320,3 @@ fn main() raises:
                 skip_warmup=skip_warmup,
                 disable_small_m=disable_small_m,
             )
-
-
-main()

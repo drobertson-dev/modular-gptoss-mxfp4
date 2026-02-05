@@ -11,6 +11,7 @@ from max.dtype import DType
 from max.tensor import Tensor
 from max.graph import ops
 from max.nn import Linear
+from max.nn.legacy.kernels import scatter_nd_skip_oob_indices
 from max.nn.module import Module
 from max.pipelines.architectures.gpt_oss.layers.functional_kernels import (
     moe_create_indices,
@@ -442,9 +443,26 @@ class GptOssMoE(MoE):
             _debug_any_nan("mxfp4_v3_down_any_nan", down_output)
             _debug_abs_max("mxfp4_v3_down_abs_max", down_output)
 
-        down_output = F.gather(
-            down_output, restore_token_order, axis=0
-        ).reshape(
+        # Restore token order using scatter with OOB-safe indices to avoid
+        # gather out-of-bounds failures when indices are corrupted.
+        restored_shape0 = seq_len * self.num_experts_per_token
+        restore_indices = F.cast(restore_token_order, DType.int32).clip(
+            min=0, max=restored_shape0 - 1
+        )
+        restore_indices_2d = ops.unsqueeze(restore_indices, -1)
+        restored = scatter_nd_skip_oob_indices(
+            input=ops.broadcast_to(
+                ops.constant(
+                    0,
+                    dtype=down_output.dtype,
+                    device=down_output.device,
+                ),
+                [restored_shape0, down_output.shape[1]],
+            ),
+            updates=down_output,
+            indices=restore_indices_2d,
+        )
+        down_output = restored.reshape(
             [
                 seq_len,
                 self.num_experts_per_token,
