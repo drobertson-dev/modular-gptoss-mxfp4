@@ -36,6 +36,17 @@ pytestmark = pytest.mark.skipif(
     ),
 )
 
+_NON_SWIZZLED_TESTS_ENABLED = (
+    os.environ.get("MXFP4_GROUPED_NON_SWIZZLED_TEST_ENABLE", "0") == "1"
+)
+non_swizzled_only = pytest.mark.skipif(
+    not _NON_SWIZZLED_TESTS_ENABLED,
+    reason=(
+        "Non-swizzled grouped MXFP4 tests are non-target/noise by default."
+        " Set MXFP4_GROUPED_NON_SWIZZLED_TEST_ENABLE=1 to run them."
+    ),
+)
+
 FP4_VALUES = np.array(
     [
         +0.0,
@@ -185,6 +196,7 @@ def _load_safetensor_bf16_header(path: Path, key: str) -> tuple[str, list[int]]:
 
 
 @pytest.mark.parametrize("P", [32, 512])
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_single_expert_matches_reference(P: int) -> None:
     try:
         device = Accelerator()
@@ -387,6 +399,7 @@ def test_mxfp4_grouped_matmul_swizzled_matches_reference(P: int) -> None:
     )
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_two_experts_segments_match_reference() -> None:
     try:
         device = Accelerator()
@@ -490,6 +503,7 @@ def test_mxfp4_grouped_matmul_two_experts_segments_match_reference() -> None:
     )
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_multi_bn_tiles_matches_reference() -> None:
     """Regression guard: exercise multiple BN tiles (grid_x > 1).
 
@@ -589,6 +603,7 @@ def test_mxfp4_grouped_matmul_multi_bn_tiles_matches_reference() -> None:
     )
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_strided_weight_views_match_reference() -> None:
     """Regression: weights may be stored with padded strides in real models.
 
@@ -711,6 +726,7 @@ def test_mxfp4_grouped_matmul_strided_weight_views_match_reference() -> None:
     )
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_large_kblocks_matches_reference() -> None:
     """Regression guard: exercise many K tiles (K=2880) in WGMMA path."""
     try:
@@ -806,6 +822,7 @@ def test_mxfp4_grouped_matmul_large_kblocks_matches_reference() -> None:
     )
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_small_m_many_ktiles_matches_reference() -> None:
     """Regression guard: many K tiles in the small-M (<=64) dispatch path."""
     try:
@@ -901,6 +918,7 @@ def test_mxfp4_grouped_matmul_small_m_many_ktiles_matches_reference() -> None:
     )
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_is_deterministic_under_repeats() -> None:
     """Guard against producer/consumer races (sporadic NaNs / corruption).
 
@@ -980,6 +998,7 @@ def test_mxfp4_grouped_matmul_is_deterministic_under_repeats() -> None:
         assert np.array_equal(got, first)
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_max_m1_wgmma_matches_reference() -> None:
     """Regression guard: max_M==1 path stays correct.
 
@@ -1079,6 +1098,7 @@ def test_mxfp4_grouped_matmul_max_m1_wgmma_matches_reference() -> None:
     )
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_gate_up_wgmma_matches_reference() -> None:
     """Regression guard: WGMMA correctness for gate_up (N=5760 in model).
 
@@ -1178,6 +1198,7 @@ def test_mxfp4_grouped_matmul_gate_up_wgmma_matches_reference() -> None:
     )
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_down_proj_wgmma_matches_reference() -> None:
     """Regression guard: WGMMA correctness for down_proj (N=2880 in model).
 
@@ -1276,6 +1297,7 @@ def test_mxfp4_grouped_matmul_down_proj_wgmma_matches_reference() -> None:
     )
 
 
+@non_swizzled_only
 def test_mxfp4_grouped_matmul_synthetic_many_ktiles_matches_reference() -> None:
     """Regression guard: synthetic long K-loop stays correct in WGMMA path."""
     try:
