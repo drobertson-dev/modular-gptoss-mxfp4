@@ -51,13 +51,19 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload[
     var expert_idx = Int(block_idx.z)
     if expert_idx >= num_active_experts:
         return
-    var expert_id = Int(expert_ids_ptr[expert_idx])
-    if expert_id < 0:
-        return
 
     var seg_start = Int(expert_start_ptr[expert_idx])
     var seg_end = Int(expert_start_ptr[expert_idx + 1])
+    # Guard against undefined tail entries when host passes a conservative
+    # num_active_experts bound. Only segments fully inside [0, P] are valid.
+    if seg_start < 0 or seg_end < 0 or seg_start > P or seg_end > P:
+        return
     if seg_start >= seg_end:
+        return
+    var expert_id = Int(expert_ids_ptr[expert_idx])
+    # `num_active_experts` is the compacted segment count, not an id upper
+    # bound. Sparse batches can include valid ids larger than this count.
+    if expert_id < 0:
         return
     # Grouped tile scheduler guard: skip tiles beyond this expert's segment.
     var seg_len = seg_end - seg_start

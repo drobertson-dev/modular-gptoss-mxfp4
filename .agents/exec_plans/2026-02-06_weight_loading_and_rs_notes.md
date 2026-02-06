@@ -84,3 +84,26 @@
 - Other validation status remains stable:
   - `tests/mojo/test_mxfp4_decode_e8m0_shift.mojo` passes.
   - legacy checkpoint path test (`test_mxfp4_legacy_rs_moe_pipeline.py -k checkpoint`) passes.
+
+## 2026-02-07 Follow-up (RS fragment micro-order + guard bug)
+- Ran a second 16-variant sweep (within-pair lane flips) on top of best pair-group order.
+  - best refined order now used in transpose RS kernel:
+    `[v00, v04, v01, v05, v03, v07, v06, v02]`.
+  - swizzled grouped diff improved further:
+    `~3.04 -> ~2.703` max abs diff.
+- Tested canonical `_load_a_reg_tile`-style fragment order directly:
+  - `[v00,v01,v02,v03,v04,v05,v06,v07]`.
+  - regression observed (`max abs diff ~3.95`), so reverted to tuned order.
+- Fixed a real runtime guard bug in grouped kernels:
+  - files:
+    - `max/examples/custom_ops/mxfp4/grouped_matmul_sm90_wgmma_swload_transpose.mojo`
+    - `max/examples/custom_ops/mxfp4/grouped_matmul_sm90_wgmma_swload.mojo`
+  - previous check incorrectly rejected valid expert ids when
+    `expert_id >= num_active_experts`.
+  - `num_active_experts` is compacted segment count for the launch, not an id upper bound.
+  - new check only guards negative ids (`expert_id < 0`).
+- Current status after this round:
+  - grouped RS correctness still blocked:
+    - non-swizzled single expert (`P=32`): max abs diff `~4.93`
+    - swizzled single expert (`P=32`): max abs diff `~2.703`
+  - decode and legacy checkpoint harness remain passing.

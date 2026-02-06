@@ -63,7 +63,10 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
     if seg_start >= seg_end:
         return
     var expert_id = Int(expert_ids_ptr[expert_idx])
-    if expert_id < 0 or expert_id >= num_active_experts:
+    # `num_active_experts` is the number of compacted expert segments in this
+    # launch, not the max expert id. Valid GPT-OSS expert ids (e.g., 30) can
+    # legitimately exceed this count for sparse batches.
+    if expert_id < 0:
         return
     # Grouped tile scheduler guard: skip tiles beyond this expert's segment.
     var seg_len = seg_end - seg_start
@@ -732,6 +735,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         )
 
                     var idx = m_mma + k_mma * num_m_mmas
+                    # Tuned RS fragment order for this decode path.
                     a_frags[idx, 0] = rebind[type_of(a_frags[idx, 0])](
                         SIMD[BF16, 8](
                             v00,
@@ -740,8 +744,8 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             v05,
                             v03,
                             v07,
-                            v02,
                             v06,
+                            v02,
                             )
                     )
 
