@@ -275,18 +275,37 @@ fn decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
     packed_bits: UInt32,
     scale_exp: Scalar[U8],
 ) -> SIMD[BF16, 8]:
-    """Decode 4 packed MXFP4 bytes (8 FP4 values) with E8M0 scale byte.
+    """Decode 4 packed MXFP4 bytes (8 FP4 values) using E8M0 exponent-add.
 
-    Route through the same bias-scale path as `decode_mxfp4_packbits_u32_to_8xbf16_scaled`
-    to avoid edge-case NaN generation for valid exponent bytes.
+    This is the arithmetic-free path for MXFP4 E8M0 scales:
+    unpack FP4 bits to BF16 bit patterns, then apply the shared scale exponent
+    by bit-level exponent adjustment (no BF16 multiply in this path).
     """
-    var scale = e8m0_to_bf16_bits(scale_exp)
-    var bias2 = SIMD[BF16, 2](_MXFP4_FP4_BIAS_BF16, _MXFP4_FP4_BIAS_BF16)
-    var scale2 = SIMD[BF16, 2](scale, scale)
-    return decode_mxfp4_packbits_u32_to_8xbf16_bias_scaled(
-        packed_bits,
-        bias2,
-        scale2,
+    var x = packed_bits
+
+    var y0_bits = x & MXFP4_PACK_MASK_U32
+    var y1_bits = (x << UInt32(3)) & MXFP4_PACK_MASK_U32
+    var y2_bits = (x << UInt32(6)) & MXFP4_PACK_MASK_U32
+
+    var d1 = (x << UInt32(1)) & MXFP4_D1_MASK_U32
+    var d3 = (x >> UInt32(3)) & MXFP4_D3_MASK_U32
+    var d6 = (x >> UInt32(7)) & MXFP4_D6_MASK_U32
+    var y3_bits = d1 | d3 | d6
+
+    var v0 = _bf16x2_scale_e8m0_bits(y0_bits, scale_exp)
+    var v1 = _bf16x2_scale_e8m0_bits(y1_bits, scale_exp)
+    var v2 = _bf16x2_scale_e8m0_bits(y2_bits, scale_exp)
+    var v3 = _bf16x2_scale_e8m0_bits(y3_bits, scale_exp)
+
+    return SIMD[BF16, 8](
+        v0[0],
+        v0[1],
+        v1[0],
+        v1[1],
+        v2[0],
+        v2[1],
+        v3[0],
+        v3[1],
     )
 
 
