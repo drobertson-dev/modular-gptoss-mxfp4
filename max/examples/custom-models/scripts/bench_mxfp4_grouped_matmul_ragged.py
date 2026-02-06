@@ -157,6 +157,11 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--value-swizzle", action="store_true")
+    ap.add_argument(
+        "--skip-bf16",
+        action="store_true",
+        help="Skip building/running the BF16 baseline graph.",
+    )
     args = ap.parse_args()
 
     ckpt = _find_gpt_oss_20b_file()
@@ -214,9 +219,11 @@ def main() -> None:
     expert_ids = np.array([0], dtype=np.int32)
     expert_usage_stats = np.array([args.P, 1], dtype=np.uint32)
 
-    # Dense BF16 baseline weights.
-    w_dense = _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
-    w_dense = _bf16_round_to_f32(w_dense).reshape(1, args.N, args.K)
+    w_dense = None
+    if not args.skip_bf16:
+        # Dense BF16 baseline weights.
+        w_dense = _decode_mxfp4_rows(w_blocks_raw[0], w_scales_ref[0])
+        w_dense = _bf16_round_to_f32(w_dense).reshape(1, args.N, args.K)
 
     device = Accelerator()
     devref = DeviceRef.from_device(device)
@@ -263,7 +270,7 @@ def main() -> None:
         graph_mxfp4.output(ops.cast(out, DType.float32))
 
     graph_bf16 = None
-    if grouped_matmul_ragged is not None:
+    if (not args.skip_bf16) and grouped_matmul_ragged is not None:
         # BF16 baseline graph using upstream grouped_matmul_ragged.
         with Graph(
             "bench_bf16_grouped_matmul",
@@ -297,7 +304,7 @@ def main() -> None:
     start_dev = Buffer.from_numpy(expert_start).to(device)
     ids_dev = Buffer.from_numpy(expert_ids).to(device)
     stats_cpu = Buffer.from_numpy(expert_usage_stats).to(CPU())
-    w_dense_dev = Buffer.from_numpy(w_dense).to(device)
+    w_dense_dev = Buffer.from_numpy(w_dense).to(device) if w_dense is not None else None
 
     t_mxfp4 = _bench(
         mxfp4_model,
@@ -307,7 +314,7 @@ def main() -> None:
         iters=args.iters,
     )
     t_bf16 = None
-    if bf16_model is not None:
+    if bf16_model is not None and w_dense_dev is not None:
         t_bf16 = _bench(
             bf16_model,
             device,
@@ -332,7 +339,7 @@ def main() -> None:
             .to(CPU())
             .to_numpy()
         )
-        if bf16_model is not None:
+        if bf16_model is not None and w_dense_dev is not None:
             out_bf16 = (
                 bf16_model.execute(
                     a_dev, w_dense_dev, start_dev, ids_dev, stats_cpu
