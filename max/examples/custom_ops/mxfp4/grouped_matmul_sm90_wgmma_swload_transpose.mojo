@@ -18,6 +18,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
     NUM_WARP_GROUPS: Int = 1,  # number of consumer warp groups
     NUM_PIPELINE_STAGES: Int = 2,
     USE_VALUE_SWIZZLE: Bool = False,
+    USE_FAST_SWIZZLED_DECODE: Bool = True,
 ](
     a_ptr: UnsafePointer[BFloat16, MutAnyOrigin],
     a_stride0: Int,
@@ -189,6 +190,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                 var r = idx // k_vec
                 var base_k8 = idx - r * k_vec
                 var k8 = base_k8
+
                 @parameter
                 if TRANSPOSE_WRITER_MAP == 1:
                     var phase = r & (k_vec - 1)
@@ -206,6 +208,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             global_row * a_stride0 + global_col * a_stride1
                         )
                     else:
+
                         @parameter
                         for t in range(8):
                             var col = global_col + t
@@ -271,15 +274,12 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
             var B_s = B_smem_tile(stage_base.bitcast[Scalar[BF16]]())
 
             # Decode weights directly into A fragments (RS WGMMA path).
-            var a_frag_tile = (
-                LayoutTensor[
-                    BF16,
-                    Layout.row_major(num_m_mmas * num_k_mmas, a_frag_size),
-                    MutAnyOrigin,
-                    address_space = AddressSpace.LOCAL,
-                ]
-                .stack_allocation()
-            )
+            var a_frag_tile = LayoutTensor[
+                BF16,
+                Layout.row_major(num_m_mmas * num_k_mmas, a_frag_size),
+                MutAnyOrigin,
+                address_space = AddressSpace.LOCAL,
+            ].stack_allocation()
             var a_frags = a_frag_tile.vectorize[1, a_frag_size]()
 
             # Use warp/lane coordinates local to this consumer warpgroup.
@@ -320,16 +320,17 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         var base0 = idx0[1] & ~3
                         var byte0 = idx0[1] & 3
                         var p0 = w_scales_u32[
-                            (expert_id * w_scales_stride0
-                             + idx0[0] * w_scales_stride1
-                             + base0) >> 2
+                            (
+                                expert_id * w_scales_stride0
+                                + idx0[0] * w_scales_stride1
+                                + base0
+                            )
+                            >> 2
                         ]
                         var exp0 = UInt8(p0 >> UInt32(byte0 * 8))
                         row0_scale_exp[0] = exp0
                         if kb_abs0 + 1 < Kblocks:
-                            var exp1 = UInt8(
-                                p0 >> UInt32((byte0 + 2) * 8)
-                            )
+                            var exp1 = UInt8(p0 >> UInt32((byte0 + 2) * 8))
                             row0_scale_exp[1] = exp1
 
                     var kb_abs2 = kb0 + 2
@@ -340,16 +341,17 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         var base2 = idx2[1] & ~3
                         var byte2 = idx2[1] & 3
                         var p2 = w_scales_u32[
-                            (expert_id * w_scales_stride0
-                             + idx2[0] * w_scales_stride1
-                             + base2) >> 2
+                            (
+                                expert_id * w_scales_stride0
+                                + idx2[0] * w_scales_stride1
+                                + base2
+                            )
+                            >> 2
                         ]
                         var exp2 = UInt8(p2 >> UInt32(byte2 * 8))
                         row0_scale_exp[2] = exp2
                         if kb_abs2 + 1 < Kblocks:
-                            var exp3 = UInt8(
-                                p2 >> UInt32((byte2 + 2) * 8)
-                            )
+                            var exp3 = UInt8(p2 >> UInt32((byte2 + 2) * 8))
                             row0_scale_exp[3] = exp3
 
                 if row1_abs < N:
@@ -361,16 +363,17 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         var base1 = idx1[1] & ~3
                         var byte1 = idx1[1] & 3
                         var p1 = w_scales_u32[
-                            (expert_id * w_scales_stride0
-                             + idx1[0] * w_scales_stride1
-                             + base1) >> 2
+                            (
+                                expert_id * w_scales_stride0
+                                + idx1[0] * w_scales_stride1
+                                + base1
+                            )
+                            >> 2
                         ]
                         var exp4 = UInt8(p1 >> UInt32(byte1 * 8))
                         row1_scale_exp[0] = exp4
                         if kb_abs0b + 1 < Kblocks:
-                            var exp5 = UInt8(
-                                p1 >> UInt32((byte1 + 2) * 8)
-                            )
+                            var exp5 = UInt8(p1 >> UInt32((byte1 + 2) * 8))
                             row1_scale_exp[1] = exp5
 
                     var kb_abs2b = kb0 + 2
@@ -381,16 +384,17 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         var base3 = idx3[1] & ~3
                         var byte3 = idx3[1] & 3
                         var p3 = w_scales_u32[
-                            (expert_id * w_scales_stride0
-                             + idx3[0] * w_scales_stride1
-                             + base3) >> 2
+                            (
+                                expert_id * w_scales_stride0
+                                + idx3[0] * w_scales_stride1
+                                + base3
+                            )
+                            >> 2
                         ]
                         var exp6 = UInt8(p3 >> UInt32(byte3 * 8))
                         row1_scale_exp[2] = exp6
                         if kb_abs2b + 1 < Kblocks:
-                            var exp7 = UInt8(
-                                p3 >> UInt32((byte3 + 2) * 8)
-                            )
+                            var exp7 = UInt8(p3 >> UInt32((byte3 + 2) * 8))
                             row1_scale_exp[3] = exp7
 
                 @parameter
@@ -413,7 +417,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                     var v07 = Scalar[BF16](0)
 
                     @parameter
-                    if USE_VALUE_SWIZZLE:
+                    if USE_VALUE_SWIZZLE and USE_FAST_SWIZZLED_DECODE:
                         if row0_abs < N:
                             var col0_abs = k0 + col0
                             if col0_abs < K:
@@ -437,24 +441,27 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                                     )
                                     var scale0: UInt8 = 0
                                     if kb_rel0 < Kblocks:
-                                        var sidx0 = hopper_scale_swizzle_index_fast(
-                                            row0_abs, kb_rel0
+                                        var sidx0 = (
+                                            hopper_scale_swizzle_index_fast(
+                                                row0_abs, kb_rel0
+                                            )
                                         )
                                         var sbase0 = sidx0[1] & ~3
                                         var sbyte0 = sidx0[1] & 3
                                         var sp0 = w_scales_u32[
-                                            (expert_id * w_scales_stride0
-                                             + sidx0[0] * w_scales_stride1
-                                             + sbase0) >> 2
+                                            (
+                                                expert_id * w_scales_stride0
+                                                + sidx0[0] * w_scales_stride1
+                                                + sbase0
+                                            )
+                                            >> 2
                                         ]
                                         scale0 = UInt8(
                                             sp0 >> UInt32(sbyte0 * 8)
                                         )
-                                    var vals0 = (
-                                        decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
-                                            p0,
-                                            scale0,
-                                        )
+                                    var vals0 = decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
+                                        p0,
+                                        scale0,
                                     )
                                     var base_idx0 = byte_idx0 * 2
                                     v00 = vals0[base_idx0]
@@ -468,35 +475,41 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                                         k0 >> 1,
                                     )
                                     if kbyte0b < kbytes:
-                                        var p0b, byte_idx0b = load_swizzled_pack_u32(
-                                            w_blocks_ptr,
-                                            w_blocks_stride0,
-                                            w_blocks_stride1,
-                                            w_blocks_stride2,
-                                            expert_id,
-                                            row1_abs,
-                                            kbyte0b,
+                                        var p0b, byte_idx0b = (
+                                            load_swizzled_pack_u32(
+                                                w_blocks_ptr,
+                                                w_blocks_stride0,
+                                                w_blocks_stride1,
+                                                w_blocks_stride2,
+                                                expert_id,
+                                                row1_abs,
+                                                kbyte0b,
+                                            )
                                         )
                                         var scale0b: UInt8 = 0
                                         if kb_rel0 < Kblocks:
-                                            var sidx0b = hopper_scale_swizzle_index_fast(
-                                                row1_abs, kb_rel0
+                                            var sidx0b = (
+                                                hopper_scale_swizzle_index_fast(
+                                                    row1_abs, kb_rel0
+                                                )
                                             )
                                             var sbase0b = sidx0b[1] & ~3
                                             var sbyte0b = sidx0b[1] & 3
                                             var sp0b = w_scales_u32[
-                                                (expert_id * w_scales_stride0
-                                                 + sidx0b[0] * w_scales_stride1
-                                                 + sbase0b) >> 2
+                                                (
+                                                    expert_id * w_scales_stride0
+                                                    + sidx0b[0]
+                                                    * w_scales_stride1
+                                                    + sbase0b
+                                                )
+                                                >> 2
                                             ]
                                             scale0b = UInt8(
                                                 sp0b >> UInt32(sbyte0b * 8)
                                             )
-                                        var vals0b = (
-                                            decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
-                                                p0b,
-                                                scale0b,
-                                            )
+                                        var vals0b = decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
+                                            p0b,
+                                            scale0b,
                                         )
                                         var base_idx0b = byte_idx0b * 2
                                         v04 = vals0b[base_idx0b]
@@ -523,24 +536,27 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                                     )
                                     var scale2: UInt8 = 0
                                     if kb_rel2 < Kblocks:
-                                        var sidx2 = hopper_scale_swizzle_index_fast(
-                                            row0_abs, kb_rel2
+                                        var sidx2 = (
+                                            hopper_scale_swizzle_index_fast(
+                                                row0_abs, kb_rel2
+                                            )
                                         )
                                         var sbase2 = sidx2[1] & ~3
                                         var sbyte2 = sidx2[1] & 3
                                         var sp2 = w_scales_u32[
-                                            (expert_id * w_scales_stride0
-                                             + sidx2[0] * w_scales_stride1
-                                             + sbase2) >> 2
+                                            (
+                                                expert_id * w_scales_stride0
+                                                + sidx2[0] * w_scales_stride1
+                                                + sbase2
+                                            )
+                                            >> 2
                                         ]
                                         scale2 = UInt8(
                                             sp2 >> UInt32(sbyte2 * 8)
                                         )
-                                    var vals2 = (
-                                        decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
-                                            p2,
-                                            scale2,
-                                        )
+                                    var vals2 = decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
+                                        p2,
+                                        scale2,
                                     )
                                     var base_idx2 = byte_idx2 * 2
                                     v02 = vals2[base_idx2]
@@ -554,35 +570,41 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                                         k0 >> 1,
                                     )
                                     if kbyte2b < kbytes:
-                                        var p2b, byte_idx2b = load_swizzled_pack_u32(
-                                            w_blocks_ptr,
-                                            w_blocks_stride0,
-                                            w_blocks_stride1,
-                                            w_blocks_stride2,
-                                            expert_id,
-                                            row1_abs,
-                                            kbyte2b,
+                                        var p2b, byte_idx2b = (
+                                            load_swizzled_pack_u32(
+                                                w_blocks_ptr,
+                                                w_blocks_stride0,
+                                                w_blocks_stride1,
+                                                w_blocks_stride2,
+                                                expert_id,
+                                                row1_abs,
+                                                kbyte2b,
+                                            )
                                         )
                                         var scale2b: UInt8 = 0
                                         if kb_rel2 < Kblocks:
-                                            var sidx2b = hopper_scale_swizzle_index_fast(
-                                                row1_abs, kb_rel2
+                                            var sidx2b = (
+                                                hopper_scale_swizzle_index_fast(
+                                                    row1_abs, kb_rel2
+                                                )
                                             )
                                             var sbase2b = sidx2b[1] & ~3
                                             var sbyte2b = sidx2b[1] & 3
                                             var sp2b = w_scales_u32[
-                                                (expert_id * w_scales_stride0
-                                                 + sidx2b[0] * w_scales_stride1
-                                                 + sbase2b) >> 2
+                                                (
+                                                    expert_id * w_scales_stride0
+                                                    + sidx2b[0]
+                                                    * w_scales_stride1
+                                                    + sbase2b
+                                                )
+                                                >> 2
                                             ]
                                             scale2b = UInt8(
                                                 sp2b >> UInt32(sbyte2b * 8)
                                             )
-                                        var vals2b = (
-                                            decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
-                                                p2b,
-                                                scale2b,
-                                            )
+                                        var vals2b = decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
+                                            p2b,
+                                            scale2b,
                                         )
                                         var base_idx2b = byte_idx2b * 2
                                         v06 = vals2b[base_idx2b]
@@ -735,18 +757,19 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         )
 
                     var idx = m_mma + k_mma * num_m_mmas
-                    # Tuned RS fragment order for this decode path.
+                    # Match TensorCoreAsync A-fragment lane packing used by
+                    # vectorize[1,2] + distribute[Layout.row_major(8, 4)].
                     a_frags[idx, 0] = rebind[type_of(a_frags[idx, 0])](
                         SIMD[BF16, 8](
                             v00,
-                            v04,
                             v01,
+                            v04,
                             v05,
-                            v03,
-                            v07,
-                            v06,
                             v02,
-                            )
+                            v03,
+                            v06,
+                            v07,
+                        )
                     )
 
             warpgroup_fence(c_reg_tile)
@@ -779,8 +802,8 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                 @parameter
                 for r_it in range(row_iters):
                     var row_in_warp = lane_row + r_it * 8
-                    var warp_in_wg = (
-                        Int(warp_group_thread_idx) // Int(WARP_SIZE)
+                    var warp_in_wg = Int(warp_group_thread_idx) // Int(
+                        WARP_SIZE
                     )
                     var n_in_cta = (
                         local_wg_idx * (num_m_mmas * WGMMA_M)
