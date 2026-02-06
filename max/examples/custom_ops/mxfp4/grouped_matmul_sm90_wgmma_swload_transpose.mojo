@@ -53,13 +53,17 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
     var expert_idx = Int(block_idx.z)
     if expert_idx >= num_active_experts:
         return
-    var expert_id = Int(expert_ids_ptr[expert_idx])
-    if expert_id < 0:
-        return
 
     var seg_start = Int(expert_start_ptr[expert_idx])
     var seg_end = Int(expert_start_ptr[expert_idx + 1])
+    # Guard against undefined tail entries when host passes a conservative
+    # num_active_experts bound. Only segments fully inside [0, P] are valid.
+    if seg_start < 0 or seg_end < 0 or seg_start > P or seg_end > P:
+        return
     if seg_start >= seg_end:
+        return
+    var expert_id = Int(expert_ids_ptr[expert_idx])
+    if expert_id < 0 or expert_id >= num_active_experts:
         return
     # Grouped tile scheduler guard: skip tiles beyond this expert's segment.
     var seg_len = seg_end - seg_start
@@ -275,8 +279,10 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
             )
             var a_frags = a_frag_tile.vectorize[1, a_frag_size]()
 
-            var warp = Int(warp_id())
-            var lane = Int(lane_id())
+            # Use warp/lane coordinates local to this consumer warpgroup.
+            # Global warp_id() offsets producer warps and breaks fragment row mapping.
+            var warp = Int(warp_group_thread_idx) // Int(WARP_SIZE)
+            var lane = Int(warp_group_thread_idx) % Int(WARP_SIZE)
             var row_block = warp * (WGMMA_M // 4)
             var lane_row = lane >> 2
             var lane_col = lane & 3
@@ -299,8 +305,6 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                 var row0_abs = n0 + row0_rel
                 var row1_abs = n0 + row1_rel
 
-                var row0_scales = SIMD[BF16, 4](0)
-                var row1_scales = SIMD[BF16, 4](0)
                 var row0_scale_exp = SIMD[U8, 4](0)
                 var row1_scale_exp = SIMD[U8, 4](0)
 
@@ -319,13 +323,11 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         ]
                         var exp0 = UInt8(p0 >> UInt32(byte0 * 8))
                         row0_scale_exp[0] = exp0
-                        row0_scales[0] = e8m0_to_bf16_bits(exp0)
                         if kb_abs0 + 1 < Kblocks:
                             var exp1 = UInt8(
                                 p0 >> UInt32((byte0 + 2) * 8)
                             )
                             row0_scale_exp[1] = exp1
-                            row0_scales[1] = e8m0_to_bf16_bits(exp1)
 
                     var kb_abs2 = kb0 + 2
                     if kb_abs2 < Kblocks:
@@ -341,13 +343,11 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         ]
                         var exp2 = UInt8(p2 >> UInt32(byte2 * 8))
                         row0_scale_exp[2] = exp2
-                        row0_scales[2] = e8m0_to_bf16_bits(exp2)
                         if kb_abs2 + 1 < Kblocks:
                             var exp3 = UInt8(
                                 p2 >> UInt32((byte2 + 2) * 8)
                             )
                             row0_scale_exp[3] = exp3
-                            row0_scales[3] = e8m0_to_bf16_bits(exp3)
 
                 if row1_abs < N:
                     var kb_abs0b = kb0
@@ -364,13 +364,11 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         ]
                         var exp4 = UInt8(p1 >> UInt32(byte1 * 8))
                         row1_scale_exp[0] = exp4
-                        row1_scales[0] = e8m0_to_bf16_bits(exp4)
                         if kb_abs0b + 1 < Kblocks:
                             var exp5 = UInt8(
                                 p1 >> UInt32((byte1 + 2) * 8)
                             )
                             row1_scale_exp[1] = exp5
-                            row1_scales[1] = e8m0_to_bf16_bits(exp5)
 
                     var kb_abs2b = kb0 + 2
                     if kb_abs2b < Kblocks:
@@ -386,13 +384,11 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                         ]
                         var exp6 = UInt8(p3 >> UInt32(byte3 * 8))
                         row1_scale_exp[2] = exp6
-                        row1_scales[2] = e8m0_to_bf16_bits(exp6)
                         if kb_abs2b + 1 < Kblocks:
                             var exp7 = UInt8(
                                 p3 >> UInt32((byte3 + 2) * 8)
                             )
                             row1_scale_exp[3] = exp7
-                            row1_scales[3] = e8m0_to_bf16_bits(exp7)
 
                 @parameter
                 for k_mma in range(num_k_mmas):
@@ -436,7 +432,21 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                                         row0_abs,
                                         kbyte0,
                                     )
-                                    var scale0 = row0_scale_exp[kb_rel0]
+                                    var scale0: UInt8 = 0
+                                    if kb_rel0 < Kblocks:
+                                        var sidx0 = hopper_scale_swizzle_index_fast(
+                                            row0_abs, kb_rel0
+                                        )
+                                        var sbase0 = sidx0[1] & ~3
+                                        var sbyte0 = sidx0[1] & 3
+                                        var sp0 = w_scales_u32[
+                                            (expert_id * w_scales_stride0
+                                             + sidx0[0] * w_scales_stride1
+                                             + sbase0) >> 2
+                                        ]
+                                        scale0 = UInt8(
+                                            sp0 >> UInt32(sbyte0 * 8)
+                                        )
                                     var vals0 = (
                                         decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
                                             p0,
@@ -464,7 +474,21 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                                             row1_abs,
                                             kbyte0b,
                                         )
-                                        var scale0b = row1_scale_exp[kb_rel0]
+                                        var scale0b: UInt8 = 0
+                                        if kb_rel0 < Kblocks:
+                                            var sidx0b = hopper_scale_swizzle_index_fast(
+                                                row1_abs, kb_rel0
+                                            )
+                                            var sbase0b = sidx0b[1] & ~3
+                                            var sbyte0b = sidx0b[1] & 3
+                                            var sp0b = w_scales_u32[
+                                                (expert_id * w_scales_stride0
+                                                 + sidx0b[0] * w_scales_stride1
+                                                 + sbase0b) >> 2
+                                            ]
+                                            scale0b = UInt8(
+                                                sp0b >> UInt32(sbyte0b * 8)
+                                            )
                                         var vals0b = (
                                             decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
                                                 p0b,
@@ -494,7 +518,21 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                                         row0_abs,
                                         kbyte2,
                                     )
-                                    var scale2 = row0_scale_exp[kb_rel2]
+                                    var scale2: UInt8 = 0
+                                    if kb_rel2 < Kblocks:
+                                        var sidx2 = hopper_scale_swizzle_index_fast(
+                                            row0_abs, kb_rel2
+                                        )
+                                        var sbase2 = sidx2[1] & ~3
+                                        var sbyte2 = sidx2[1] & 3
+                                        var sp2 = w_scales_u32[
+                                            (expert_id * w_scales_stride0
+                                             + sidx2[0] * w_scales_stride1
+                                             + sbase2) >> 2
+                                        ]
+                                        scale2 = UInt8(
+                                            sp2 >> UInt32(sbyte2 * 8)
+                                        )
                                     var vals2 = (
                                         decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
                                             p2,
@@ -522,7 +560,21 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                                             row1_abs,
                                             kbyte2b,
                                         )
-                                        var scale2b = row1_scale_exp[kb_rel2]
+                                        var scale2b: UInt8 = 0
+                                        if kb_rel2 < Kblocks:
+                                            var sidx2b = hopper_scale_swizzle_index_fast(
+                                                row1_abs, kb_rel2
+                                            )
+                                            var sbase2b = sidx2b[1] & ~3
+                                            var sbyte2b = sidx2b[1] & 3
+                                            var sp2b = w_scales_u32[
+                                                (expert_id * w_scales_stride0
+                                                 + sidx2b[0] * w_scales_stride1
+                                                 + sbase2b) >> 2
+                                            ]
+                                            scale2b = UInt8(
+                                                sp2b >> UInt32(sbyte2b * 8)
+                                            )
                                         var vals2b = (
                                             decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
                                                 p2b,
@@ -550,7 +602,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             k0,
                             K,
                             N,
-                            row0_scales,
+                            row0_scale_exp,
                         )
                         v01 = decode_mxfp4_unshuffle_value[
                             USE_VALUE_SWIZZLE=USE_VALUE_SWIZZLE
@@ -568,7 +620,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             k0,
                             K,
                             N,
-                            row0_scales,
+                            row0_scale_exp,
                         )
                         v02 = decode_mxfp4_unshuffle_value[
                             USE_VALUE_SWIZZLE=USE_VALUE_SWIZZLE
@@ -586,7 +638,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             k0,
                             K,
                             N,
-                            row0_scales,
+                            row0_scale_exp,
                         )
                         v03 = decode_mxfp4_unshuffle_value[
                             USE_VALUE_SWIZZLE=USE_VALUE_SWIZZLE
@@ -604,7 +656,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             k0,
                             K,
                             N,
-                            row0_scales,
+                            row0_scale_exp,
                         )
                         v04 = decode_mxfp4_unshuffle_value[
                             USE_VALUE_SWIZZLE=USE_VALUE_SWIZZLE
@@ -622,7 +674,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             k0,
                             K,
                             N,
-                            row1_scales,
+                            row1_scale_exp,
                         )
                         v05 = decode_mxfp4_unshuffle_value[
                             USE_VALUE_SWIZZLE=USE_VALUE_SWIZZLE
@@ -640,7 +692,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             k0,
                             K,
                             N,
-                            row1_scales,
+                            row1_scale_exp,
                         )
                         v06 = decode_mxfp4_unshuffle_value[
                             USE_VALUE_SWIZZLE=USE_VALUE_SWIZZLE
@@ -658,7 +710,7 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             k0,
                             K,
                             N,
-                            row1_scales,
+                            row1_scale_exp,
                         )
                         v07 = decode_mxfp4_unshuffle_value[
                             USE_VALUE_SWIZZLE=USE_VALUE_SWIZZLE
@@ -676,21 +728,21 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                             k0,
                             K,
                             N,
-                            row1_scales,
+                            row1_scale_exp,
                         )
 
                     var idx = m_mma + k_mma * num_m_mmas
                     a_frags[idx, 0] = rebind[type_of(a_frags[idx, 0])](
                         SIMD[BF16, 8](
                             v00,
-                            v01,
-                            v02,
-                            v03,
                             v04,
+                            v01,
                             v05,
-                            v06,
+                            v03,
                             v07,
-                        )
+                            v02,
+                            v06,
+                            )
                     )
 
             warpgroup_fence(c_reg_tile)
@@ -723,10 +775,13 @@ fn grouped_matmul_mxfp4_bf16_wgmma_sm90_pipeline_swload_transpose[
                 @parameter
                 for r_it in range(row_iters):
                     var row_in_warp = lane_row + r_it * 8
+                    var warp_in_wg = (
+                        Int(warp_group_thread_idx) // Int(WARP_SIZE)
+                    )
                     var n_in_cta = (
                         local_wg_idx * (num_m_mmas * WGMMA_M)
                         + m_mma * WGMMA_M
-                        + (Int(warp_id() & UInt(3)) * warp_rows)
+                        + warp_in_wg * warp_rows
                         + row_in_warp
                     )
                     var global_col = n0 + n_in_cta

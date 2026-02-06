@@ -61,7 +61,26 @@
 
 ## Current blockers
 - `MXFP4_GROUPED_TEST_ENABLE=1` grouped correctness tests are still failing:
-  - non-swizzled single expert (`P=32`): max abs diff ~6.11
-  - swizzled single expert (`P=32`): max abs diff ~3.95
+  - non-swizzled single expert (`P=32`): max abs diff ~4.39
+  - swizzled single expert (`P=32`): max abs diff ~3.04
 - Fast decode path is better than the generic helper fallback for swizzled RS:
   - forcing helper fallback increased swizzled max diff to ~6.13, so it was reverted.
+
+## 2026-02-07 Follow-up (RS fragment packing sweep)
+- Verified RS A-fragment ABI from stdlib:
+  - `wgmma_async` RS overload packs 8 BF16 lanes as register pairs `[0,1]`,
+    `[2,3]`, `[4,5]`, `[6,7]`.
+  - See `mojo/stdlib/std/gpu/compute/mma.mojo`.
+- Ran an exhaustive 24-permutation sweep of the 4 BF16-pair groups used to fill
+  `a_frags[idx, 0]` in `grouped_matmul_sm90_wgmma_swload_transpose.mojo`.
+  - objective: minimize `max abs diff` in
+    `test_mxfp4_grouped_matmul_swizzled_matches_reference[32]`.
+  - best pair-group order: `(0, 1, 3, 2)`.
+  - this corresponds to fragment lane order:
+    `[v00, v04, v01, v05, v03, v07, v02, v06]`.
+- This mapping improved grouped correctness materially:
+  - swizzled: ~3.95 -> ~3.04 max abs diff
+  - non-swizzled: ~6.11 -> ~4.39 max abs diff
+- Other validation status remains stable:
+  - `tests/mojo/test_mxfp4_decode_e8m0_shift.mojo` passes.
+  - legacy checkpoint path test (`test_mxfp4_legacy_rs_moe_pipeline.py -k checkpoint`) passes.

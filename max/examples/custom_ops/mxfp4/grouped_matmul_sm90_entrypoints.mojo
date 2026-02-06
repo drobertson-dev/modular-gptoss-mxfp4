@@ -172,7 +172,7 @@ struct MXFP4GroupedMatmulRaggedBF16:
             comptime stage_bytes = a_stage_bytes + b_stage_bytes
             comptime smem_use = stage_bytes * NUM_PIPELINE_STAGES
 
-            gpu_ctx.enqueue_function[kernel, kernel](
+            gpu_ctx.enqueue_function_experimental[kernel](
                 a_dev,
                 a_stride0,
                 a_stride1,
@@ -197,9 +197,6 @@ struct MXFP4GroupedMatmulRaggedBF16:
                 grid_dim=(grid_x, grid_y, grid_z),
                 block_dim=(WARPGROUP_SIZE * (NUM_WARP_GROUPS + 1), 1, 1),
                 shared_mem_bytes=Int(smem_use),
-                func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
-                    smem_use
-                ),
             )
         else:
             # RS path for larger M: decode weights into regs, activations in shared.
@@ -234,7 +231,7 @@ struct MXFP4GroupedMatmulRaggedBF16:
             comptime stage_bytes = a_stage_bytes + b_stage_bytes
             comptime smem_use = stage_bytes * NUM_PIPELINE_STAGES
 
-            gpu_ctx.enqueue_function[kernel, kernel](
+            gpu_ctx.enqueue_function_experimental[kernel](
                 a_dev,
                 a_stride0,
                 a_stride1,
@@ -259,9 +256,6 @@ struct MXFP4GroupedMatmulRaggedBF16:
                 grid_dim=(grid_x, grid_y, grid_z),
                 block_dim=(WARPGROUP_SIZE * (NUM_WARP_GROUPS + 1), 1, 1),
                 shared_mem_bytes=Int(smem_use),
-                func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
-                    smem_use
-                ),
             )
 
 
@@ -431,7 +425,7 @@ struct MXFP4GroupedMatmulRaggedBF16Swizzled:
             comptime stage_bytes = b_stage_bytes
             comptime smem_use = stage_bytes * NUM_PIPELINE_STAGES
 
-            gpu_ctx.enqueue_function[kernel, kernel](
+            gpu_ctx.enqueue_function_experimental[kernel](
                 a_dev,
                 a_stride0,
                 a_stride1,
@@ -456,9 +450,6 @@ struct MXFP4GroupedMatmulRaggedBF16Swizzled:
                 grid_dim=(grid_x, grid_y, grid_z),
                 block_dim=(WARPGROUP_SIZE * (NUM_WARP_GROUPS + 1), 1, 1),
                 shared_mem_bytes=Int(smem_use),
-                func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
-                    smem_use
-                ),
             )
         else:
             # RS path for larger M: decode weights into regs, activations in shared.
@@ -494,7 +485,7 @@ struct MXFP4GroupedMatmulRaggedBF16Swizzled:
             comptime stage_bytes = a_stage_bytes + b_stage_bytes
             comptime smem_use = stage_bytes * NUM_PIPELINE_STAGES
 
-            gpu_ctx.enqueue_function[kernel, kernel](
+            gpu_ctx.enqueue_function_experimental[kernel](
                 a_dev,
                 a_stride0,
                 a_stride1,
@@ -519,9 +510,6 @@ struct MXFP4GroupedMatmulRaggedBF16Swizzled:
                 grid_dim=(grid_x, grid_y, grid_z),
                 block_dim=(WARPGROUP_SIZE * (NUM_WARP_GROUPS + 1), 1, 1),
                 shared_mem_bytes=Int(smem_use),
-                func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
-                    smem_use
-                ),
             )
 
 
@@ -691,7 +679,7 @@ struct MXFP4GroupedMatmulRaggedBF16SwizzledNoSmallM:
             comptime stage_bytes = b_stage_bytes
             comptime smem_use = stage_bytes * NUM_PIPELINE_STAGES
 
-            gpu_ctx.enqueue_function[kernel, kernel](
+            gpu_ctx.enqueue_function_experimental[kernel](
                 a_dev,
                 a_stride0,
                 a_stride1,
@@ -716,9 +704,6 @@ struct MXFP4GroupedMatmulRaggedBF16SwizzledNoSmallM:
                 grid_dim=(grid_x, grid_y, grid_z),
                 block_dim=(WARPGROUP_SIZE * (NUM_WARP_GROUPS + 1), 1, 1),
                 shared_mem_bytes=Int(smem_use),
-                func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
-                    smem_use
-                ),
             )
         else:
             # RS path for larger M: decode weights into regs, activations in shared.
@@ -754,7 +739,7 @@ struct MXFP4GroupedMatmulRaggedBF16SwizzledNoSmallM:
             comptime stage_bytes = a_stage_bytes + b_stage_bytes
             comptime smem_use = stage_bytes * NUM_PIPELINE_STAGES
 
-            gpu_ctx.enqueue_function[kernel, kernel](
+            gpu_ctx.enqueue_function_experimental[kernel](
                 a_dev,
                 a_stride0,
                 a_stride1,
@@ -779,7 +764,4 @@ struct MXFP4GroupedMatmulRaggedBF16SwizzledNoSmallM:
                 grid_dim=(grid_x, grid_y, grid_z),
                 block_dim=(WARPGROUP_SIZE * (NUM_WARP_GROUPS + 1), 1, 1),
                 shared_mem_bytes=Int(smem_use),
-                func_attribute=FuncAttribute.MAX_DYNAMIC_SHARED_SIZE_BYTES(
-                    smem_use
-                ),
             )
