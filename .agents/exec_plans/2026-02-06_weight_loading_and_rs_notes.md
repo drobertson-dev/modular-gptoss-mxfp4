@@ -115,3 +115,29 @@
 - Default grouped test run now focuses on swizzled RS path only:
   - with `MXFP4_GROUPED_TEST_ENABLE=1`, non-swizzled tests skip unless the new
     opt-in flag is set.
+
+## 2026-02-07 Follow-up (no-small-M routing + RS path sanity)
+- Re-verified swizzled grouped baseline:
+  - `test_mxfp4_grouped_matmul_swizzled_matches_reference[32]` remains at
+    `max abs diff ~2.703` with the current tuned RS fragment order.
+- Added `no_small_m` routing control to V3 wrapper:
+  - file: `max/examples/custom-models/gpt_oss_mxfp4_v3/kernels.py`
+  - `mxfp4_grouped_matmul_ragged_bf16_swizzled(..., no_small_m=...)` can now
+    explicitly choose between standard and no-small-M op variants.
+  - default is `no_small_m=False` to preserve current behavior.
+- Tried wiring no-small-M entrypoint to non-transpose grouped kernel:
+  - file: `max/examples/custom_ops/mxfp4/grouped_matmul_sm90_entrypoints.mojo`
+  - result regressed checkpoint fixture accuracy (`max abs diff ~4.32`), so the
+    route was reverted.
+- Current state:
+  - no-small-M path remains available as an opt-in op variant.
+  - default swizzled path remains unchanged at `max abs diff ~2.703`.
+
+## 2026-02-07 Follow-up (reverted failed swizzled-load experiment)
+- Tried replacing swizzled value word loads with explicit 4-byte gathers in:
+  - `max/examples/custom_ops/mxfp4/grouped_matmul_sm90_common.mojo`
+  - `max/examples/custom_ops/mxfp4/grouped_matmul_sm90_wgmma_swload.mojo`
+- Outcome regressed swizzled grouped diff (`~2.703 -> >4`), so the experiment
+  was fully reverted.
+- Current branch keeps prior loader behavior and tuned fragment order while we
+  isolate the remaining RS mapping mismatch.

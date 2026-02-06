@@ -161,6 +161,7 @@ def mxfp4_grouped_matmul_ragged_bf16_swizzled(
     *,
     n_cols: int | None = None,
     target: str = "gpu",
+    no_small_m: bool = False,
     custom_extensions: str | Path | Sequence[str | Path] | None = None,
 ) -> Tensor | TensorValue:
     """Grouped matmul with Hopper swizzled MXFP4 values + scales."""
@@ -237,8 +238,14 @@ def mxfp4_grouped_matmul_ragged_bf16_swizzled(
     if custom_extensions is None:
         custom_extensions = get_mxfp4_kernels_path()
 
+    op_name = (
+        "mxfp4_grouped_matmul_ragged_bf16_swizzled_no_small_m"
+        if no_small_m
+        else "mxfp4_grouped_matmul_ragged_bf16_swizzled"
+    )
+
     return F.custom(
-        "mxfp4_grouped_matmul_ragged_bf16_swizzled",
+        op_name,
         device=a_t.device,
         values=[
             a_t,
