@@ -376,6 +376,49 @@ def convert_safetensor_state_dict(
 
     _ = kwargs
 
+    has_converted = any(
+        key.startswith(
+            (
+                "model.layers.",
+                "model.embed_tokens.",
+                "model.norm.",
+                "lm_head.",
+            )
+        )
+        for key in state_dict
+    )
+    has_original = any(
+        key.startswith(("block.", "embedding.", "unembedding.", "norm."))
+        for key in state_dict
+    )
+    if has_original and not has_converted:
+        raise ValueError(
+            "Detected original GPT-OSS checkpoint layout (`block.*` keys only). "
+            "This architecture expects HF-converted `model.*` safetensors "
+            "with split q/k/v tensors."
+        )
+    has_mxfp4_experts = any(
+        key.endswith(
+            (
+                ".mlp.experts.gate_up_proj_blocks",
+                ".mlp.experts.down_proj_blocks",
+            )
+        )
+        for key in state_dict
+    )
+    if not has_mxfp4_experts:
+        raise ValueError(
+            "Checkpoint does not contain MXFP4 expert blocks. "
+            "This architecture requires OpenAI GPT-OSS MXFP4 weights "
+            "(for example `openai/gpt-oss-20b`), not BF16-only variants."
+        )
+    if has_converted:
+        state_dict = {
+            key: value
+            for key, value in state_dict.items()
+            if not key.startswith(("block.", "embedding.", "unembedding.", "norm."))
+        }
+
     def _to_numpy(arr) -> np.ndarray:  # noqa: ANN001
         if isinstance(arr, np.ndarray):
             return arr

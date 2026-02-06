@@ -7,6 +7,7 @@ by the MAX Module tree under `examples/custom-models/gpt_oss_mxfp4/`.
 from __future__ import annotations
 
 from collections import OrderedDict
+import os
 
 from max.dtype import DType
 from max.graph.weights import WeightData, Weights
@@ -23,11 +24,42 @@ GPT_OSS_SAFETENSOR_MAP: OrderedDict[str, str] = OrderedDict(
     ]
 )
 
+_USE_GROUPED_RS = os.environ.get("MXFP4_LEGACY_GROUPED_RS", "0") == "1"
+
 
 def convert_safetensor_state_dict(
     state_dict: dict[str, Weights], **kwargs
 ) -> dict[str, WeightData]:
     """Convert safetensor state dict to MAX format."""
+
+    if _USE_GROUPED_RS:
+        # Reuse the v3 adapter for Hopper swizzle + packbits preprocessing.
+        from gpt_oss_mxfp4_v3.weight_adapters import (
+            convert_safetensor_state_dict as _convert_v3_state_dict,
+        )
+        has_converted = any(
+            key.startswith(
+                (
+                    "model.layers.",
+                    "model.embed_tokens.",
+                    "model.norm.",
+                    "lm_head.",
+                )
+            )
+            for key in state_dict
+        )
+        filtered_state_dict = (
+            {
+                key: value
+                for key, value in state_dict.items()
+                if not key.startswith(
+                    ("block.", "embedding.", "unembedding.", "norm.")
+                )
+            }
+            if has_converted
+            else state_dict
+        )
+        return _convert_v3_state_dict(filtered_state_dict, **kwargs)
 
     # OpenAI gpt-oss repos contain both:
     #  - "original/" weights with `block.*`/`embedding.*` naming, and
@@ -45,6 +77,31 @@ def convert_safetensor_state_dict(
         )
         for key in state_dict
     )
+    has_original = any(
+        key.startswith(("block.", "embedding.", "unembedding.", "norm."))
+        for key in state_dict
+    )
+    if has_original and not has_converted:
+        raise ValueError(
+            "Detected original GPT-OSS checkpoint layout (`block.*` keys only). "
+            "This architecture expects HF-converted `model.*` safetensors "
+            "with split q/k/v tensors."
+        )
+    has_mxfp4_experts = any(
+        key.endswith(
+            (
+                ".mlp.experts.gate_up_proj_blocks",
+                ".mlp.experts.down_proj_blocks",
+            )
+        )
+        for key in state_dict
+    )
+    if not has_mxfp4_experts:
+        raise ValueError(
+            "Checkpoint does not contain MXFP4 expert blocks. "
+            "This architecture requires OpenAI GPT-OSS MXFP4 weights "
+            "(for example `openai/gpt-oss-20b`), not BF16-only variants."
+        )
 
     new_state_dict: dict[str, WeightData] = {}
     for weight_name, value in state_dict.items():
