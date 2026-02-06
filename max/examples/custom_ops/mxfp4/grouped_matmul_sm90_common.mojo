@@ -51,7 +51,6 @@ from gpu.host.nvidia.tma import TensorMapSwizzle
 from .decode import (
     decode_mxfp4_packbits_u32_to_8xbf16_scaled,
     decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0,
-    e8m0_to_bf16_bits,
 )
 from .layout_hopper import (
     HOPPER_SCALE_NUM_WARPS,
@@ -128,7 +127,7 @@ fn _decode_mxfp4_unshuffle_value[
     k0: Int,
     K: Int,
     N: Int,
-    scales: SIMD[BF16, 4],
+    scales_exp: SIMD[U8, 4],
 ) -> Scalar[BF16]:
     if row_abs >= N:
         return Scalar[BF16](0)
@@ -137,7 +136,7 @@ fn _decode_mxfp4_unshuffle_value[
         return Scalar[BF16](0)
 
     var kb_rel = col_rel >> 5
-    var scale = scales[kb_rel]
+    var scale_exp = scales_exp[kb_rel]
 
     # Inverse of Triton _unshuffle_triton (mma_version=3) for one element.
     var d0 = row_rel & 1
@@ -198,7 +197,9 @@ fn _decode_mxfp4_unshuffle_value[
             w_blocks_ptr[base + 2 * w_blocks_stride2],
             w_blocks_ptr[base + 3 * w_blocks_stride2],
         )
-    var vals = decode_mxfp4_packbits_u32_to_8xbf16_scaled(p, scale)
+    var vals = decode_mxfp4_packbits_u32_to_8xbf16_scaled_e8m0(
+        p, scale_exp
+    )
     return vals[off]
 
 
@@ -219,7 +220,7 @@ fn decode_mxfp4_unshuffle_value[
     k0: Int,
     K: Int,
     N: Int,
-    scales: SIMD[BF16, 4],
+    scales_exp: SIMD[U8, 4],
 ) -> Scalar[BF16]:
     return _decode_mxfp4_unshuffle_value[
         USE_VALUE_SWIZZLE=USE_VALUE_SWIZZLE
@@ -237,7 +238,7 @@ fn decode_mxfp4_unshuffle_value[
         k0,
         K,
         N,
-        scales,
+        scales_exp,
     )
 
 
@@ -326,10 +327,11 @@ fn unshuffle_k_in(row_rel: Int, col_rel: Int) -> Int:
 fn _compute_kbyte_row0_from_col(
     row_rel: Int, col_rel: Int, k0_half: Int
 ) -> Int:
-    # General inverse of Triton unshuffle mapping: kbyte = (k0 + k_in) >> 1.
-    # This handles g0/h0 and avoids row-parity aliasing for partial K tiles.
-    var k_in = unshuffle_k_in(row_rel, col_rel)
-    return k0_half + (k_in >> 1)
+    # For Hopper swizzled value layout, logical packed-byte address is still
+    # linear in K for a fixed row; swizzle is handled in hopper_value_swizzle_index.
+    # Using row-parity unshuffle here aliases odd rows into out-of-range kbytes.
+    _ = row_rel
+    return k0_half + (col_rel >> 1)
 
 
 @always_inline

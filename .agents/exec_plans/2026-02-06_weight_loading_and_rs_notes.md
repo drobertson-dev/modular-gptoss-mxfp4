@@ -42,3 +42,26 @@
   - `MXFP4_RS_ISOLATION_CHECKPOINT=1 pixi run pytest tests/test_mxfp4_legacy_rs_moe_pipeline.py -k checkpoint -q`
 - Legacy custom `generate` with debug graph shows MoE stages executing repeatedly (`routing -> w1 -> w2 -> reduce`) and no immediate gather/OOB assert.
 - End-to-end generation remains very slow in this environment; grouped RS correctness is still not enabled as default.
+
+## 2026-02-06 Follow-up (grouped RS decode debug)
+- Confirmed decode helper parity:
+  - `tests/mojo/test_mxfp4_decode_e8m0_shift.mojo` passes in custom-models Pixi env.
+- Found a concrete grouped RS bug in swizzled value decode path:
+  - odd output columns were all zeros in `test_mxfp4_grouped_matmul_swizzled_matches_reference[32]`.
+  - root cause was `compute_kbyte_row0_from_col` using row-parity unshuffle math that
+    produced out-of-range `kbyte` for odd rows under BK=64.
+- Applied fix in `grouped_matmul_sm90_common.mojo`:
+  - `compute_kbyte_row0_from_col(row_rel, col_rel, k0_half)` now uses linear packed-byte
+    addressing (`k0_half + (col_rel >> 1)`), with swizzle handled only by
+    `hopper_value_swizzle_index`.
+- Result after fix:
+  - odd/even nonzero coverage is restored (no odd-column zero collapse).
+  - grouped swizzled test still fails numerically (`max abs diff ~3.95`), indicating a
+    second-order issue (likely RS A-fragment/register mapping), not the previous OOB alias.
+
+## Current blockers
+- `MXFP4_GROUPED_TEST_ENABLE=1` grouped correctness tests are still failing:
+  - non-swizzled single expert (`P=32`): max abs diff ~6.11
+  - swizzled single expert (`P=32`): max abs diff ~3.95
+- Fast decode path is better than the generic helper fallback for swizzled RS:
+  - forcing helper fallback increased swizzled max diff to ~6.13, so it was reverted.
