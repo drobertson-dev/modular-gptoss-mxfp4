@@ -26,3 +26,19 @@
 - Enumerate key prefixes and QKV style in cached files:
   - `pixi run python - <<'PY' ... safe_open(...).keys() ... PY`
 
+## 2026-02-06 Follow-up (legacy path focus)
+- `decode.mojo` now avoids pre-multiplying `bias * scale` in BF16 for packbits decode.
+  - old behavior could overflow at scale exponent bytes `>=129` (`2**126 * scale` in BF16).
+  - new behavior multiplies in two stages: `(bitcast(y_bits) * bias) * scale`.
+- Grouped matmul test module is now opt-in:
+  - `tests/test_mxfp4_grouped_matmul_ragged.py` is guarded by
+    `MXFP4_GROUPED_TEST_ENABLE=1` and otherwise cleanly skips.
+  - rationale: grouped RS path is not the current default execution path in legacy MoE.
+- Swizzled grouped reference test had a shape-order bug in its CPU reference decode input.
+  - fixed by transposing `w_blocks_raw[0]` to `[K/32, N, 16]` before `_decode_mxfp4_rows`.
+
+## Current behavior snapshot
+- Legacy checkpoint isolation test passes:
+  - `MXFP4_RS_ISOLATION_CHECKPOINT=1 pixi run pytest tests/test_mxfp4_legacy_rs_moe_pipeline.py -k checkpoint -q`
+- Legacy custom `generate` with debug graph shows MoE stages executing repeatedly (`routing -> w1 -> w2 -> reduce`) and no immediate gather/OOB assert.
+- End-to-end generation remains very slow in this environment; grouped RS correctness is still not enabled as default.
