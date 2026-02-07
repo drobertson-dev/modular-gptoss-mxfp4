@@ -19,7 +19,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gpt_oss_mxfp4.kernels import (
     MXFP4_VALUES_PER_BLOCK,
     get_mxfp4_kernels_path,
-    mxfp4_grouped_matmul_ragged_bf16,
     mxfp4_grouped_matmul_ragged_bf16_swizzled,
 )
 from gpt_oss_mxfp4.weight_adapters import (
@@ -156,7 +155,12 @@ def main() -> None:
     ap.add_argument("--iters", type=int, default=50)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--check", action="store_true")
-    ap.add_argument("--value-swizzle", action="store_true")
+    ap.add_argument(
+        "--value-swizzle",
+        action="store_true",
+        default=True,
+        help="Kept for compatibility; active path always uses swizzled values.",
+    )
     ap.add_argument(
         "--skip-bf16",
         action="store_true",
@@ -246,27 +250,16 @@ def main() -> None:
             graph_mxfp4.inputs
         )
         a_bf16 = ops.cast(a_in.tensor, DType.bfloat16)
-        if args.value_swizzle:
-            out = mxfp4_grouped_matmul_ragged_bf16_swizzled(
-                a_bf16,
-                blocks_in.tensor,
-                scales_in.tensor,
-                start_in.tensor,
-                ids_in.tensor,
-                stats_in.tensor,
-                n_cols=args.N,
-                target="gpu",
-            )
-        else:
-            out = mxfp4_grouped_matmul_ragged_bf16(
-                a_bf16,
-                blocks_in.tensor,
-                scales_in.tensor,
-                start_in.tensor,
-                ids_in.tensor,
-                stats_in.tensor,
-                target="gpu",
-            )
+        out = mxfp4_grouped_matmul_ragged_bf16_swizzled(
+            a_bf16,
+            blocks_in.tensor,
+            scales_in.tensor,
+            start_in.tensor,
+            ids_in.tensor,
+            stats_in.tensor,
+            n_cols=args.N,
+            target="gpu",
+        )
         graph_mxfp4.output(ops.cast(out, DType.float32))
 
     graph_bf16 = None
