@@ -150,7 +150,7 @@ def _find_gpt_oss_20b_file() -> Path | None:
     return None
 
 
-@pytest.mark.parametrize("P", [32])
+@pytest.mark.parametrize("P", [32, 512, 1024])
 def test_mxfp4_grouped_matmul_swizzled_matches_reference(P: int) -> None:
     try:
         device = Accelerator()

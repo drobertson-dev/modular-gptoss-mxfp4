@@ -141,8 +141,8 @@ struct MXFP4GroupedMatmulRaggedBF16:
         if max_M <= SMALL_M_TRANSPOSE_THRESHOLD:
             # Transpose path: treat N as WGMMA-M and M as WGMMA-N.
             comptime BM = 256  # N-tile
-            comptime BN = 128  # M-tile (keep >= 128 for SM90 WGMMA)
-            comptime BK = 128
+            comptime BN = 64  # M-tile
+            comptime BK = 64
             comptime NUM_WARP_GROUPS = 1
             comptime NUM_PIPELINE_STAGES = 2
 
@@ -201,8 +201,8 @@ struct MXFP4GroupedMatmulRaggedBF16:
         else:
             # RS path for larger M: decode weights into regs, activations in shared.
             comptime BM = 256  # N-tile
-            comptime BN = 128  # M-tile
-            comptime BK = 128
+            comptime BN = 64  # M-tile
+            comptime BK = 64
             comptime NUM_WARP_GROUPS = 1
             comptime NUM_PIPELINE_STAGES = 2
             var grid_x = ceildiv(N, BM)
@@ -393,8 +393,8 @@ struct MXFP4GroupedMatmulRaggedBF16Swizzled:
 
         if max_M <= SMALL_M_TRANSPOSE_THRESHOLD:
             comptime BM = 256  # N-tile
-            comptime BN = 128  # M-tile (keep >= 128 for SM90 WGMMA)
-            comptime BK = 128
+            comptime BN = 64  # M-tile
+            comptime BK = 64
             comptime NUM_WARP_GROUPS = 1
             comptime NUM_PIPELINE_STAGES = 2
 
@@ -454,8 +454,8 @@ struct MXFP4GroupedMatmulRaggedBF16Swizzled:
         else:
             # RS path for larger M: decode weights into regs, activations in shared.
             comptime BM = 256  # N-tile
-            comptime BN = 128  # M-tile
-            comptime BK = 128
+            comptime BN = 64  # M-tile
+            comptime BK = 64
             comptime NUM_WARP_GROUPS = 1
             comptime NUM_PIPELINE_STAGES = 2
             var grid_x = ceildiv(N, BM)
@@ -647,8 +647,8 @@ struct MXFP4GroupedMatmulRaggedBF16SwizzledNoSmallM:
 
         if max_M <= SMALL_M_TRANSPOSE_THRESHOLD:
             comptime BM = 256  # N-tile
-            comptime BN = 128  # M-tile (keep >= 128 for SM90 WGMMA)
-            comptime BK = 128
+            comptime BN = 64  # M-tile
+            comptime BK = 64
             comptime NUM_WARP_GROUPS = 1
             comptime NUM_PIPELINE_STAGES = 2
 
@@ -708,8 +708,8 @@ struct MXFP4GroupedMatmulRaggedBF16SwizzledNoSmallM:
         else:
             # RS path for larger M: decode weights into regs, activations in shared.
             comptime BM = 256  # N-tile
-            comptime BN = 128  # M-tile
-            comptime BK = 128
+            comptime BN = 64  # M-tile
+            comptime BK = 64
             comptime NUM_WARP_GROUPS = 1
             comptime NUM_PIPELINE_STAGES = 2
             var grid_x = ceildiv(N, BM)

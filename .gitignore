@@ -167,3 +167,4 @@ kgen.trace.*
 # Local Codex/harness scratch artifacts
 .local/
 max/examples/custom-models/profiles/
+max/examples/custom-models/tmp/
