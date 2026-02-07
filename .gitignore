@@ -163,3 +163,7 @@ examples/models/*
 
 # Kgen trace
 kgen.trace.*
+
+# Local Codex/harness scratch artifacts
+.local/
+max/examples/custom-models/profiles/
