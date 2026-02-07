@@ -13,3 +13,4 @@ serve = "python -m max.entrypoints.pipelines serve --custom-architectures qwen2 
 [dependencies]
 python = ">=3.9,<3.14"
 modular = "*"
+pytest = ">=8,<10"
