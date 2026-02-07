@@ -262,3 +262,49 @@ Both now run in about the `0.36-0.39 ms/iter` band.
 - Kernel-level grouped benchmark performance improved substantially.
 - Full model grouped path still has an integration correctness issue even with passing grouped matmul reference tests.
 - Current default legacy serve path (grouped disabled) remains coherent and stable.
+
+## 2026-02-07 Grouped Integration Root Cause + Fix
+
+### Root Cause Found
+- Added side-by-side diff harness:
+  - `max/examples/custom-models/scripts/debug_legacy_moe_grouped_diff.py`
+- Harness compared baseline fused MoE path vs grouped path with the same routed inputs.
+- Key finding:
+  - Grouped branch matched baseline in sorted space (`down_sorted` close),
+  - but diverged after pair restore (`y_pairs`) when using:
+    - `scatter_nd_skip_oob_indices(..., indices=restore_token_order)`.
+
+### Correct Restore Contract
+- `restore_token_order` acts as inverse-permutation for gather restore in this flow.
+- Replaced grouped restore in `layers/moe.py`:
+  - from scatter restore
+  - to gather restore:
+    - `y_pairs = ops.gather(down_output, restore_indices, axis=0)`
+
+### Verification
+- Checkpoint diff harness (tokens=64, route_expert_id=0):
+  - before fix:
+    - `y_pairs_group_vs_base max_abs ~147`
+    - `y_group_vs_base max_abs ~245`
+  - after fix:
+    - `y_pairs_group_vs_base max_abs ~1`
+    - `y_group_vs_base max_abs ~2`
+- Grouped generate probe remains fast and now returns coherent text (still with known template `analysis` leakage).
+
+### Files Updated for the Fix
+- `max/examples/custom-models/gpt_oss_mxfp4/layers/moe.py`
+  - grouped path now restores pair order with:
+    - `ops.gather(down_output, restore_token_order, axis=0)`
+  - removed the scatter-based restore in this path.
+
+### Post-Fix Generate Snapshot
+- Grouped env:
+  - `MXFP4_LEGACY_GROUPED_RS=1 MXFP4_LEGACY_NO_SMALL_M=1`
+- Observed:
+  - decode throughput around `~44.7 tok/s`
+  - output stayed coherent (not garbled)
+  - known template `analysis` prefix leak still present (separate issue).
+
+### Validation Note
+- `tests/test_mxfp4_legacy_rs_moe_pipeline.py::test_legacy_rs_moe_pipeline_checkpoint_matches_dense_reference`
+  had one transient `.mojopkg` parser/load failure, then passed on immediate rerun.

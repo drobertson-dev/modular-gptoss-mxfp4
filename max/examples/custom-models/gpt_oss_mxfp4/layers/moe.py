@@ -15,7 +15,7 @@ import os
 
 from max.dtype import DType
 from max.graph import DeviceRef, ShardingStrategy, TensorValue, Weight, ops
-from max.nn.legacy.kernels import moe_create_indices, scatter_nd_skip_oob_indices
+from max.nn.legacy.kernels import moe_create_indices
 from max.nn.legacy.layer import LayerList, Shardable
 from max.nn.legacy.linear import Linear
 from max.nn.legacy.moe import MoE, MoEGate
@@ -354,21 +354,10 @@ class GptOssMoE(MoE, Shardable):
             down_output = down_output * ops.unsqueeze(gate_weights_sorted, -1)
 
             restore_indices = ops.cast(restore_token_order, DType.int32)
-            restore_indices_2d = ops.unsqueeze(restore_indices, -1)
-            restored_shape0 = x_bf16.shape[0] * self.num_experts_per_token
-            zeros = ops.broadcast_to(
-                ops.constant(
-                    0,
-                    dtype=down_output.dtype,
-                    device=down_output.device,
-                ),
-                [restored_shape0, down_output.shape[1]],
-            )
-            y_pairs = scatter_nd_skip_oob_indices(
-                input=zeros,
-                updates=down_output,
-                indices=restore_indices_2d,
-            )
+            # `restore_token_order` is the inverse permutation of
+            # `token_expert_order`. Gather restores pair order directly and
+            # avoids the extra scatter staging path.
+            y_pairs = ops.gather(down_output, restore_indices, axis=0)
 
             if debug_graph:
                 ops.print("mxfp4_moe: grouped reduce")
