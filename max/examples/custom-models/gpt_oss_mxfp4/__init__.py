@@ -34,15 +34,8 @@ try:
 except Exception:
     gpt_oss_arch = None
 
-try:
-    from .arch_module_v3 import gpt_oss_module_v3_arch
-except Exception:
-    gpt_oss_module_v3_arch = None
-
 ARCHITECTURES = []
 if gpt_oss_arch is not None:
     ARCHITECTURES.append(gpt_oss_arch)
-if gpt_oss_module_v3_arch is not None:
-    ARCHITECTURES.append(gpt_oss_module_v3_arch)
 
-__all__ = ["ARCHITECTURES", "gpt_oss_arch", "gpt_oss_module_v3_arch"]
+__all__ = ["ARCHITECTURES", "gpt_oss_arch"]

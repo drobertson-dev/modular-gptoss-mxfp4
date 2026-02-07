@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from gpt_oss_mxfp4_v3.weight_adapters import (
+from gpt_oss_mxfp4.weight_adapters import (
     _mxfp4_swizzle_scales_hopper,
     _mxfp4_swizzle_values_hopper,
     _mxfp4_unpack_bits_u8,
@@ -191,4 +191,3 @@ def test_hopper_swizzled_fast_decode_contract_matches_reference() -> None:
     assert np.array_equal(got, ref), (
         f"decode contract mismatch: max abs diff {np.max(np.abs(got - ref))}"
     )
-

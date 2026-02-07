@@ -1,6 +1,6 @@
 import numpy as np
 
-from gpt_oss_mxfp4_v3.weight_adapters import (
+from gpt_oss_mxfp4.weight_adapters import (
     _mxfp4_swizzle_values_hopper,
     _mxfp4_unswizzle_values_hopper,
 )

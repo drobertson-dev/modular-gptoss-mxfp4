@@ -13,7 +13,7 @@ from gpt_oss_mxfp4.kernels import (
     mxfp4_grouped_matmul_ragged_bf16_swizzled,
     mxfp4_moe_topk_reduce_bf16,
 )
-from gpt_oss_mxfp4_v3.weight_adapters import (
+from gpt_oss_mxfp4.weight_adapters import (
     _mxfp4_swizzle_scales_hopper,
     _mxfp4_swizzle_values_hopper,
     _mxfp4_unswizzle_scales_hopper,

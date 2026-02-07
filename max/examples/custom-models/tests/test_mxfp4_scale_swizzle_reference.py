@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from gpt_oss_mxfp4_v3.weight_adapters import _mxfp4_swizzle_scales_hopper
+from gpt_oss_mxfp4.weight_adapters import _mxfp4_swizzle_scales_hopper
 
 
 def _ref_swizzle_index(m: int, k: int, num_warps: int) -> tuple[int, int]:

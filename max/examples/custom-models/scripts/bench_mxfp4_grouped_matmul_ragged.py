@@ -16,13 +16,13 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from gpt_oss_mxfp4_v3.kernels import (
+from gpt_oss_mxfp4.kernels import (
     MXFP4_VALUES_PER_BLOCK,
     get_mxfp4_kernels_path,
     mxfp4_grouped_matmul_ragged_bf16,
     mxfp4_grouped_matmul_ragged_bf16_swizzled,
 )
-from gpt_oss_mxfp4_v3.weight_adapters import (
+from gpt_oss_mxfp4.weight_adapters import (
     _mxfp4_pack_bits_u8,
     _mxfp4_swizzle_scales_hopper,
     _mxfp4_swizzle_values_hopper,
